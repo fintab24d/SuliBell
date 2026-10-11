@@ -149,12 +149,17 @@ function Panel() {
 
   // Értesítés küldése a feliratkozott eszközökre (Supabase Edge Function, csak admin hívhatja)
   const sendPush = async (title: string, body: string) => {
-    const { data, error } = await supabase.functions.invoke('send-push', { body: { school_id: d.id, title, body, url: '/' } })
+    // A feliratkozók listáját az oldal olvassa (ugyanúgy, mint a számlálót), és átadja a küldő függvénynek
+    const { data: subRows, error: se } = await supabase.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('school_id', d.id)
+    if (se) return setMsg('Feliratkozók lekérése nem sikerült: ' + se.message)
+    if (!subRows?.length) return setMsg('Nincs feliratkozott eszköz. Nyisd meg az oldalt a telefonon, és nyomd meg az Értesítések gombot.')
+    const { data, error } = await supabase.functions.invoke('send-push', { body: { school_id: d.id, title, body, url: '/', subs: subRows } })
     let detail = error?.message ?? ''
     if (error) { try { const b = await (error as any).context?.json?.(); if (b?.error) detail = b.error } catch { /* marad az általános üzenet */ } }
+    const r: any = data ?? {}
     setMsg(error ? 'Értesítés hiba: ' + detail
-      : !data?.total ? 'Nincs feliratkozott eszköz. Nyisd meg az oldalt a telefonon, és nyomd meg az Értesítések gombot.'
-      : `Értesítés elküldve: ${data.sent} / ${data.total} eszközre.` + (data.failed ? ` Sikertelen: ${data.failed} (kód: ${data.codes.join(', ')}), ellenőrizd a VAPID kulcsokat.` : ''))
+      : r.v !== 3 && !r.sent ? 'A Supabase függvény régi verziója fut. Másold be újra a supabase/functions/send-push/index.ts tartalmát, és nyomj Deploy-t.'
+      : `Értesítés elküldve: ${r.sent} / ${r.total} eszközre.` + (r.failed ? ` Sikertelen: ${r.failed} (kód: ${(r.codes ?? []).join(', ')}), ellenőrizd a VAPID kulcsokat.` : ''))
   }
 
   // ---- Biztonsági mentés: az iskola összes adata egy JSON fájlban ----
