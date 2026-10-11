@@ -37,16 +37,18 @@ Deno.serve(async (req) => {
 
     let sent = 0
     const dead: string[] = []
+    const failed: (number | string)[] = []
     await Promise.all((subs ?? []).map(async (s) => {
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600 })
         sent++
       } catch (err: any) {
         if (err?.statusCode === 404 || err?.statusCode === 410) dead.push(s.id)   // lejárt feliratkozás: törölni kell
+        else failed.push(err?.statusCode ?? 'hiba')                                // pl. 401/403: nem egyező VAPID kulcsok
       }
     }))
     if (dead.length) await admin.from('push_subscriptions').delete().in('id', dead)
-    return reply({ sent, removed: dead.length, total: subs?.length ?? 0 })
+    return reply({ sent, removed: dead.length, failed: failed.length, codes: [...new Set(failed)], total: subs?.length ?? 0 })
   } catch (e) {
     return reply({ error: String(e) }, 500)
   }
