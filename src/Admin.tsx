@@ -150,7 +150,9 @@ function Panel() {
   // Értesítés küldése a feliratkozott eszközökre (Supabase Edge Function, csak admin hívhatja)
   const sendPush = async (title: string, body: string) => {
     const { data, error } = await supabase.functions.invoke('send-push', { body: { school_id: d.id, title, body, url: '/' } })
-    setMsg(error ? 'Értesítés hiba: ' + error.message
+    let detail = error?.message ?? ''
+    if (error) { try { const b = await (error as any).context?.json?.(); if (b?.error) detail = b.error } catch { /* marad az általános üzenet */ } }
+    setMsg(error ? 'Értesítés hiba: ' + detail
       : !data?.total ? 'Nincs feliratkozott eszköz. Nyisd meg az oldalt a telefonon, és nyomd meg az Értesítések gombot.'
       : `Értesítés elküldve: ${data.sent} / ${data.total} eszközre.` + (data.failed ? ` Sikertelen: ${data.failed} (kód: ${data.codes.join(', ')}), ellenőrizd a VAPID kulcsokat.` : ''))
   }

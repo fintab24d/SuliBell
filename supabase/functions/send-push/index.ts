@@ -24,9 +24,9 @@ Deno.serve(async (req) => {
     const { data: isAdmin, error: authErr } = await userClient.rpc('is_school_admin', { sid: school_id })
     if (authErr || isAdmin !== true) return reply({ error: 'Nincs jogosultság' }, 403)
 
-    // 2) Feliratkozók lekérése (service role: a táblát az RLS miatt csak így lehet törölni)
-    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-    const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('school_id', school_id)
+    // 2) Feliratkozók lekérése a hívó admin jogosultságával (ugyanaz az út, amin az admin oldal is látja őket)
+    const { data: subs, error: subErr } = await userClient.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('school_id', school_id)
+    if (subErr) return reply({ error: 'Feliratkozók lekérése nem sikerült: ' + subErr.message }, 500)
 
     webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!)
     const payload = JSON.stringify({
@@ -47,7 +47,9 @@ Deno.serve(async (req) => {
         else failed.push(err?.statusCode ?? 'hiba')                                // pl. 401/403: nem egyező VAPID kulcsok
       }
     }))
-    if (dead.length) await admin.from('push_subscriptions').delete().in('id', dead)
+    if (dead.length) {   // lejárt feliratkozások törlése (ehhez service role kell; ha nincs, nem baj, a következő küldésnél újra próbálja)
+      try { await createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!).from('push_subscriptions').delete().in('id', dead) } catch { /* nem kritikus */ }
+    }
     return reply({ sent, removed: dead.length, failed: failed.length, codes: [...new Set(failed)], total: subs?.length ?? 0 })
   } catch (e) {
     return reply({ error: String(e) }, 500)
