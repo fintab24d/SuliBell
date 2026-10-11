@@ -69,6 +69,9 @@ function Panel() {
   const [sd, setSd] = useState({ day: '', schedule_id: '' })
   const [chg, setChg] = useState({ day: todayStr, kind: 'cancel', lesson_label: '', text: '' })
   const [mn, setMn] = useState({ day: todayStr, text: '' })
+  const [pm, setPm] = useState({ title: '', body: '' })
+  const [chgNotify, setChgNotify] = useState(true)
+  const [subs, setSubs] = useState<number | null>(null)
   const [wq, setWq] = useState('')
   const [wres, setWres] = useState<any[]>([])
 
@@ -82,6 +85,11 @@ function Panel() {
     setD({ ...r, settings: Array.isArray(r.settings) ? r.settings[0] : r.settings })
   }, [])
   useEffect(() => { load() }, [load])
+  useEffect(() => {   // hány eszköz iratkozott fel az értesítésekre
+    if (!d) return
+    supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }).eq('school_id', d.id)
+      .then(({ count, error }) => setSubs(error ? null : count ?? 0))
+  }, [d])
   // Módosítási napló: minden mentés után újratöltődik (a d állapot ilyenkor frissül)
   const [log, setLog] = useState<any[] | null | undefined>(undefined)
   useEffect(() => {
@@ -137,6 +145,55 @@ function Panel() {
     if (error) return setMsg('Hiba: ' + error.message)
     dropOldSound()
     await setS({ bell_sound_url: supabase.storage.from('sounds').getPublicUrl(path).data.publicUrl })
+  }
+
+  // Értesítés küldése a feliratkozott eszközökre (Supabase Edge Function, csak admin hívhatja)
+  const sendPush = async (title: string, body: string) => {
+    const { data, error } = await supabase.functions.invoke('send-push', { body: { school_id: d.id, title, body, url: '/' } })
+    setMsg(error ? 'Értesítés hiba: ' + error.message : `Értesítés elküldve: ${data?.sent ?? 0} eszközre.`)
+  }
+
+  // ---- Biztonsági mentés: az iskola összes adata egy JSON fájlban ----
+  const downloadBackup = () => {
+    const { schedules, closed_days, countdowns, announcements, schedule_dates, changes, menus, settings } = d
+    const out = {
+      app: 'SuliBell', version: 1, saved_at: new Date().toISOString(), school: { id: d.id, name: d.name }, settings,
+      schedules: schedules.map(({ lessons: _l, ...r }: any) => r), lessons: schedules.flatMap((s: any) => s.lessons),
+      closed_days, countdowns, announcements, schedule_dates, changes, menus,
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }))
+    const a = document.createElement('a'); a.href = url; a.download = `sulibell-mentes-${todayStr}.json`; a.click(); URL.revokeObjectURL(url)
+    setMsg('A mentés letöltődött.')
+  }
+  // Visszaállítás: a mentésben lévő elemeket visszaírja/felülírja; a mentés után létrehozott elemeket NEM törli.
+  const restoreBackup = async (f: File) => {
+    try {
+      if (f.size > 5 * 1024 * 1024) return setMsg('A mentés fájl túl nagy.')
+      const b = JSON.parse(await f.text())
+      if (b?.app !== 'SuliBell' || b.version !== 1 || !Array.isArray(b.schedules)) return setMsg('Ez nem SuliBell mentés.')
+      if (b.school?.id !== d.id) return setMsg('Ez a mentés egy másik iskolához tartozik.')
+      if (!confirm(`Visszaállítod a ${b.saved_at?.slice(0, 16).replace('T', ' ')} körüli mentést? A mentésben lévő adatok felülíródnak.`)) return
+      const own = (rows: any[] = []) => rows.map(r => ({ ...r, school_id: d.id }))
+      const byDay = (rows: any[] = []) => own(rows).map(({ id: _i, ...r }: any) => r)     // egyedi (iskola, nap) kulcs: az azonosító újra generálódik
+      const steps: [string, any[], string][] = [
+        ['schedules', own(b.schedules).map(({ lessons: _l, ...r }: any) => r), 'id'],
+        ['lessons', b.lessons ?? [], 'id'], ['closed_days', byDay(b.closed_days), 'school_id,day'],
+        ['countdowns', own(b.countdowns), 'id'], ['announcements', own(b.announcements), 'id'],
+        ['schedule_dates', byDay(b.schedule_dates), 'school_id,day'], ['changes', own(b.changes), 'id'], ['menus', byDay(b.menus), 'school_id,day'],
+      ]
+      if (b.settings) {
+        const { error } = await supabase.from('settings').upsert({ ...b.settings, school_id: d.id }, { onConflict: 'school_id' })
+        if (error) return setMsg('Hiba (settings): ' + error.message)
+      }
+      if (b.school?.name) await supabase.from('schools').update({ name: b.school.name }).eq('id', d.id)
+      if (b.schedules.some((s: any) => s.is_default)) await supabase.from('schedules').update({ is_default: false }).eq('school_id', d.id)   // csak egy alapértelmezett lehet
+      for (const [table, rows, conflict] of steps) {
+        if (!rows.length) continue
+        const { error } = await supabase.from(table).upsert(rows, { onConflict: conflict })
+        if (error) return setMsg(`Hiba (${table}): ${error.message}`)
+      }
+      setMsg('A mentés visszaállítva.'); await load()
+    } catch { setMsg('A fájl nem olvasható.') }
   }
 
   const searchCity = async () => {
@@ -242,7 +299,12 @@ function Panel() {
         <select value={chg.kind} onChange={e => setChg({ ...chg, kind: e.target.value })}>{Object.entries(CHG).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         <input size={8} placeholder="pl. 7. óra" value={chg.lesson_label} onChange={e => setChg({ ...chg, lesson_label: e.target.value })} />
         <input style={{ minWidth: '14rem' }} placeholder="pl. terem 12 → 15" value={chg.text} onChange={e => setChg({ ...chg, text: e.target.value })} />
-        <button disabled={!chg.day || !(chg.lesson_label || chg.text)} onClick={async () => { await run(supabase.from('changes').insert({ school_id: d.id, ...chg })); setChg({ ...chg, lesson_label: '', text: '' }) }}>Hozzáadás</button></div>
+        <label title="Csak a mai napra szóló változásnál megy ki"><input type="checkbox" checked={chgNotify} onChange={e => setChgNotify(e.target.checked)} /> Értesítés is</label>
+        <button disabled={!chg.day || !(chg.lesson_label || chg.text)} onClick={async () => {
+          await run(supabase.from('changes').insert({ school_id: d.id, ...chg }))
+          if (chgNotify && chg.day === todayStr) await sendPush(`${CHG[chg.kind]}: ${chg.lesson_label}`.replace(/: $/, ''), chg.text || chg.lesson_label)
+          setChg({ ...chg, lesson_label: '', text: '' })
+        }}>Hozzáadás</button></div>
     </section>
 
     <section><h2>Étlap (a kijelzőn az adott napon látszik)</h2>
@@ -257,7 +319,8 @@ function Panel() {
 
     <section><h2>Kiemelt közlemény (teljes képernyős) és tanév</h2>
       <div className="row"><input style={{ minWidth: '22rem' }} placeholder="pl. Tűzriadó-gyakorlat 10:00-kor" defaultValue={d.settings.alert_text} key={'a' + d.settings.alert_text} onBlur={e => e.target.value !== d.settings.alert_text && setS({ alert_text: e.target.value })} />
-        <label><input type="checkbox" checked={d.settings.alert_active} onChange={e => setS({ alert_active: e.target.checked })} /> Megjelenítés az egész képernyőn</label></div>
+        <label><input type="checkbox" checked={d.settings.alert_active} onChange={e => setS({ alert_active: e.target.checked })} /> Megjelenítés az egész képernyőn</label>
+        <button disabled={!d.settings.alert_text} onClick={() => sendPush('Fontos közlemény', d.settings.alert_text)}>Értesítés küldése</button></div>
       <div className="row">Tanév kezdete <input type="date" value={d.settings.year_start ?? ''} onChange={e => setS({ year_start: e.target.value || null })} />
         vége <input type="date" value={d.settings.year_end ?? ''} onChange={e => setS({ year_end: e.target.value || null })} /></div>
     </section>
@@ -267,6 +330,19 @@ function Panel() {
       <div className="row"><input placeholder="Város keresése (pl. Szekszárd)" value={wq} onChange={e => setWq(e.target.value)} />
         <button disabled={!wq.trim()} onClick={searchCity}>Keresés</button></div>
       <div className="row">{wres.map((r, i) => <button key={i} onClick={() => { setS({ weather_city: r.name, weather_lat: r.latitude, weather_lon: r.longitude }); setWres([]); setWq('') }}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} ({r.country})</button>)}</div>
+    </section>
+
+    <section><h2>Értesítések (telepített alkalmazás)</h2>
+      <p>Feliratkozott eszközök: <b>{subs ?? '–'}</b>{subs === null && ' (futtasd le a supabase/update10.sql fájlt)'}</p>
+      <div className="row"><input placeholder="Cím (pl. Fontos)" value={pm.title} onChange={e => setPm({ ...pm, title: e.target.value })} />
+        <input style={{ minWidth: '18rem' }} placeholder="Szöveg" value={pm.body} onChange={e => setPm({ ...pm, body: e.target.value })} />
+        <button disabled={!pm.title} onClick={async () => { await sendPush(pm.title, pm.body); setPm({ title: '', body: '' }) }}>Küldés mindenkinek</button></div>
+    </section>
+
+    <section><h2>Biztonsági mentés</h2>
+      <p>Az iskola összes adata (rendek, órák, ünnepnapok, visszaszámlálók, közlemények, étlap, beállítások) egy fájlban. Az adminok fiókjai és a feltöltött logó/hang nem kerülnek bele.</p>
+      <div className="row"><button onClick={downloadBackup}>Mentés letöltése</button>
+        <label className="btn">Visszaállítás fájlból<input type="file" accept="application/json,.json" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) restoreBackup(f) }} /></label></div>
     </section>
 
     <section><h2>Módosítási napló (utolsó 100)</h2>

@@ -4,6 +4,7 @@ import type { Schedule } from './engine'
 import type { Countdown } from './kinds'
 
 export interface SchoolData {
+  id?: string
   name: string
   settings: { timezone: string; theme: 'dark' | 'light'; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null }
   schedules: Schedule[]
@@ -30,11 +31,11 @@ export function useSchool() {
     const load = async () => {
       const { data: row, error: err } = await supabase
         .from('schools')
-        .select('name, settings(*), schedules(*, lessons(*)), closed_days(day, reason), countdowns(*), announcements(*), schedule_dates(*), changes(*), menus(*)')
+        .select('id, name, settings(*), schedules(*, lessons(*)), closed_days(day, reason), countdowns(*), announcements(*), schedule_dates(*), changes(*), menus(*)')
         .eq('slug', SCHOOL_SLUG).single()
       if (!alive) return
       if (err || !row) { setOffline(true); setError(err?.message ?? 'Nincs adat'); return }
-      const d: SchoolData = { name: row.name, settings: one(row.settings as any), schedules: row.schedules as any, closed: row.closed_days as any, countdowns: (row as any).countdowns ?? [], announcements: (row as any).announcements ?? [], schedule_dates: (row as any).schedule_dates ?? [], changes: (row as any).changes ?? [], menus: (row as any).menus ?? [] }
+      const d: SchoolData = { id: (row as any).id, name: row.name, settings: one(row.settings as any), schedules: row.schedules as any, closed: row.closed_days as any, countdowns: (row as any).countdowns ?? [], announcements: (row as any).announcements ?? [], schedule_dates: (row as any).schedule_dates ?? [], changes: (row as any).changes ?? [], menus: (row as any).menus ?? [] }
       localStorage.setItem(KEY, JSON.stringify(d))
       setData(d); setOffline(false); setError(null)
     }

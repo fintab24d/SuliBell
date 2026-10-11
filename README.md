@@ -39,6 +39,9 @@ Az oldalt telepítheted a telefonodra vagy a számítógépedre, és onnantól k
 - **Android, Chrome, Edge (számítógép):** ha megjelenik a **Telepítés** gomb az oldal tetején, nyomd meg. Ha nem, a böngésző menüjében keresd a "Telepítés" vagy az "Alkalmazás telepítése" pontot.
 - **iPhone, iPad (Safari):** koppints a Megosztás ikonra, majd a **Főképernyőhöz adás** pontra.
 
+## Értesítések
+Ha az iskola bekapcsolta, az oldal tetején megjelenik az **Értesítések** gomb. Engedélyezd, és a telefonod értesít a fontos közleményekről és a mai változásokról (például elmaradó óra). Bármikor kikapcsolhatod ugyanazzal a gombbal. iPhone-on előbb telepítsd az alkalmazást a főképernyőre.
+
 ## Gyakori kérdések
 
 **Miért nem látom azonnal, ha az iskola megváltoztatta a csengetési rendet?**

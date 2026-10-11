@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { audioReady, enableAudio, preload, ring } from './lib/sound'
 import QRCode from 'qrcode'
+import NotifyButton from './Notify'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -256,6 +257,7 @@ export default function App() {
         {offline && <span className="pill">Offline mód</span>}
         {data.settings.sound_enabled && !audioOn && <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>}
         {!tv && !standalone && (installEv ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button> : <button onClick={() => location.assign('/telepites')}>Telepítés</button>)}
+        {!tv && <NotifyButton schoolId={data.id} />}
         {!tv && <div className="styles" role="group" aria-label="Stílus">{STYLES.map(([k, n]) => <button key={k} className={style === k ? 'on' : ''} aria-pressed={style === k} onClick={() => setStyle(k)}>{n}</button>)}</div>}
         {!tv && <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>}
       </div>

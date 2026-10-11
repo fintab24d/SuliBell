@@ -271,3 +271,5 @@ html:is([data-style=school],[data-style=minimal])::after,
 .install ol{text-align:left;margin:0;padding-left:1.3rem;display:grid;gap:8px}
 a.btn{display:inline-block;padding:8px 18px;border:1px solid var(--edge);border-radius:12px;background:var(--key);color:var(--fg);text-decoration:none;font-weight:600}
 a.btn:hover{border-color:var(--brand)}
+label.btn{display:inline-block;padding:8px 16px;border:1px solid var(--edge);border-radius:12px;background:var(--key);color:var(--fg);font-weight:600;cursor:pointer}
+label.btn:hover{border-color:var(--brand)}
