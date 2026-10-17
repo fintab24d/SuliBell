@@ -9,7 +9,7 @@ Oldalak: `/` irányítópult (teljes napi rend), `/display` TV-mód.
    Végül futtasd a `supabase/update2.sql`-t is (visszaszámlálók: szünetek, ünnepek; példa adatokkal).
    Majd futtasd a `supabase/update3.sql`-t is (közlemények).
    Végül futtasd a `supabase/update4.sql`-t is (oldal verziója).
-   Majd sorban az `update5.sql` (módosítási napló), `update6.sql` (különleges napok, változások, étlap, kiemelt közlemény, tanév), `update7.sql` (időjárás), `update8.sql` (QR-kód) `update9.sql` (saját csengőhang) és `update10.sql` (értesítések).
+   Majd sorban az `update5.sql` (módosítási napló), `update6.sql` (különleges napok, változások, étlap, kiemelt közlemény, tanév), `update7.sql` (időjárás), `update8.sql` (QR-kód) `update9.sql` (saját csengőhang) `update10.sql` (értesítések) és `update11.sql` (szavazás).
 3. **URL és kulcs:** *Project Settings → API*: ott van a **Project URL** és az **anon / publishable key** (a service_role kulcsot SOHA ne tedd a frontendbe).
 4. **Env:** másold a `.env.example`-t `.env` néven, töltsd ki a két értéket.
 5. **Helyi indítás:** `npm install` majd `npm run dev` → http://localhost:5173 és /display

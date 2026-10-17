@@ -34,6 +34,11 @@ Hétvégén, ünnepnapon és tanítási idő után az oldal kiírja, hogy ma nin
 - **Téma:** átváltás sötét és világos megjelenés között. Az oldal megjegyzi a választásodat.
 - **Hang engedélyezése:** ha az iskola bekapcsolta a csengetési hangot, a böngésző biztonsági okból csak akkor engedi lejátszani, ha egyszer rákattintasz erre a gombra.
 
+## Effektek és szavazás
+
+- A **Neon** stílusban mozgó fényfoltok, kattintásra szikrák, csengetéskor fényhullám és felirat, az utolsó 10 másodpercben nagy számlálás látszik. A fejléc ✨ gombjával eszközönként kikapcsolható.
+- Ha az iskola szavazást indít, az eredmény élőben látszik, a TV-n QR-kóddal. Telefonról egyszer lehet szavazni.
+
 ## Telepítés alkalmazásként
 Az oldalt telepítheted a telefonodra vagy a számítógépedre, és onnantól külön ikonról indul, internet nélkül is megnyílik (az utoljára betöltött adatokkal). A folyosói kijelzőn lévő QR-kód közvetlenül a telepítési oldalra visz, ott lépésről lépésre végigvezet az oldal.
 - **Android, Chrome, Edge (számítógép):** ha megjelenik a **Telepítés** gomb az oldal tetején, nyomd meg. Ha nem, a böngésző menüjében keresd a "Telepítés" vagy az "Alkalmazás telepítése" pontot.

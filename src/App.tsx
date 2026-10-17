@@ -2,6 +2,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } fr
 import { audioReady, enableAudio, preload, ring } from './lib/sound'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
+import Fx, { BellFlash, FinalCount } from './Fx'
+import { PollCard, usePoll } from './Poll'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -132,6 +134,11 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme || data?.settings.theme || 'dark' }, [theme, data])
   useEffect(() => { document.documentElement.dataset.phase = state?.phase ?? '' }, [state?.phase])
   useEffect(() => { document.title = APP_NAME }, [])
+  // ✨ Effektek (részecskék, csengetési villanás): eszközönként kikapcsolhatók, a Neon stílusban élnek
+  const [fxOn, setFxOn] = useState(() => { try { return localStorage.getItem('fx') !== '0' } catch { return true } })
+  const fx = fxOn && style === 'neon'
+  const { poll, counts } = usePoll(data?.id)
+  const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
 
   // Csengetési hang: állapotváltáskor szól, ha az admin bekapcsolta és a hang engedélyezve van.
   const [audioOn, setAudioOn] = useState(audioReady())
@@ -244,7 +251,9 @@ export default function App() {
   const overlay = sett.alert_active && sett.alert_text && dismissed !== sett.alert_text && <div className="alertfs" role="alertdialog" aria-live="assertive">
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
-  return <main className={tv ? 'tv' : ''}>
+  const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
+
+  return <><main className={tv ? 'tv' : ''}>
     <header>
       {tv && qr && <div className="qrbox"><img src={qr} alt="QR-kód az oldal megnyitásához" /><span>Telepítsd a telefonodra</span></div>}
       <span className="brand"><img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />{APP_NAME}</span>
@@ -259,11 +268,13 @@ export default function App() {
         {!tv && !standalone && (installEv ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button> : <button onClick={() => location.assign('/telepites')}>Telepítés</button>)}
         {!tv && <NotifyButton schoolId={data.id} />}
         {!tv && <div className="styles" role="group" aria-label="Stílus">{STYLES.map(([k, n]) => <button key={k} className={style === k ? 'on' : ''} aria-pressed={style === k} onClick={() => setStyle(k)}>{n}</button>)}</div>}
+        {!tv && style === 'neon' && <button className={fxOn ? 'on' : ''} aria-pressed={fxOn} title="Effektek be/ki" onClick={() => { const v = !fxOn; try { localStorage.setItem('fx', v ? '1' : '0') } catch { /* nem baj */ } setFxOn(v) }}>✨</button>}
         {!tv && <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>}
       </div>
     </header>
 
     {changesBox}
+    {!tv && pollCard}
     {!tv && stats && <section className="panel overview full"><div className="tag">A nap egy pillantásra</div>{stats}{strip}</section>}
 
     <section className={`panel now ${s.phase}`}>
@@ -273,7 +284,7 @@ export default function App() {
       {!tv && bells}
     </section>
 
-    {tv && <section className="tvside">{T.length > 0 ? <>{bells}{stats}{lunchBox}</> : <>{events[0] && evCard(events[0], 0)}{offCard}</>}</section>}
+    {tv && <section className="tvside">{T.length > 0 ? <>{bells}{pollCard || stats}{lunchBox}</> : <>{pollCard}{events[0] && evCard(events[0], 0)}{offCard}</>}</section>}
 
     {!tv && L.length > 0 && <section className="panel board">
       <div className="tag">{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
@@ -310,4 +321,8 @@ export default function App() {
     {!tv && data.settings.site_version && <footer className="foot"><span className="ver">Verzió {data.settings.site_version}</span>{data.settings.version_note && <span>{data.settings.version_note}</span>}</footer>}
     {overlay}
   </main>
+  {fx && <Fx phase={s.phase} bellKey={key} tv={tv} />}
+  {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
+  {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
+  </>
 }

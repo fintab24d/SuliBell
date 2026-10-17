@@ -16,7 +16,7 @@ const ZONES = ['Europe/Budapest', 'Europe/Bratislava', 'Europe/Vienna', 'Europe/
 const p2 = (n: number) => String(n).padStart(2, '0')
 const plus = (t: string, m: number) => { const s = Math.min(86340, toSec(t) + m * 60); return `${p2(Math.floor(s / 3600))}:${p2(Math.floor(s / 60) % 60)}` }
 
-const TABLE: Record<string, string> = { schools: 'Iskola', settings: 'Beállítások', schedules: 'Csengetési rend', lessons: 'Óra', closed_days: 'Tanítás nélküli nap', countdowns: 'Visszaszámláló', announcements: 'Közlemény', school_members: 'Admin jogosultság', schedule_dates: 'Különleges nap', changes: 'Változás', menus: 'Étlap' }
+const TABLE: Record<string, string> = { schools: 'Iskola', settings: 'Beállítások', schedules: 'Csengetési rend', lessons: 'Óra', closed_days: 'Tanítás nélküli nap', countdowns: 'Visszaszámláló', announcements: 'Közlemény', school_members: 'Admin jogosultság', schedule_dates: 'Különleges nap', changes: 'Változás', menus: 'Étlap', polls: 'Szavazás' }
 const ACT: Record<string, string> = { INSERT: 'létrehozott', UPDATE: 'módosított', DELETE: 'törölt' }
 const FIELD: Record<string, string> = { name: 'név', label: 'megnevezés', start_time: 'kezdés', end_time: 'vége', title: 'cím', text: 'szöveg', day: 'nap', reason: 'indok', target_date: 'dátum', target_time: 'időpont', weekdays: 'napok', is_default: 'alapértelmezett', timezone: 'időzóna', theme: 'téma', sound_enabled: 'hang', logo_url: 'logó', tv_show_seconds: 'TV másodperc', tv_show_next: 'TV következő', tv_scale: 'TV méret', site_version: 'verzió', version_note: 'verzió megjegyzés', kind: 'fajta', active_until: 'eddig', position: 'sorrend', bell_sound_url: 'csengőhang' }
 const show = (v: unknown) => (v === null || v === undefined || v === '' ? '(üres)' : typeof v === 'boolean' ? (v ? 'be' : 'ki') : String(v).slice(0, 40))
@@ -72,6 +72,9 @@ function Panel() {
   const [pm, setPm] = useState({ title: '', body: '' })
   const [chgNotify, setChgNotify] = useState(true)
   const [subs, setSubs] = useState<number | null>(null)
+  const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
+  const [polls, setPolls] = useState<any[] | null>(null)   // null: az update11.sql még nem futott le
+  const [pcounts, setPcounts] = useState<Record<string, number[]>>({})
   const [wq, setWq] = useState('')
   const [wres, setWres] = useState<any[]>([])
 
@@ -89,6 +92,16 @@ function Panel() {
     if (!d) return
     supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }).eq('school_id', d.id)
       .then(({ count, error }) => setSubs(error ? null : count ?? 0))
+  }, [d])
+  useEffect(() => {   // szavazások és állásuk
+    if (!d) return
+    supabase.from('polls').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(10).then(async ({ data, error }) => {
+      if (error) return setPolls(null)
+      setPolls(data ?? [])
+      const c: Record<string, number[]> = {}
+      for (const p of data ?? []) { const r = await supabase.rpc('poll_counts', { p_poll: p.id }); c[p.id] = (r.data as number[]) ?? [] }
+      setPcounts(c)
+    })
   }, [d])
   // Módosítási napló: minden mentés után újratöltődik (a d állapot ilyenkor frissül)
   const [log, setLog] = useState<any[] | null | undefined>(undefined)
@@ -339,6 +352,22 @@ function Panel() {
       <div className="row"><input placeholder="Város keresése (pl. Szekszárd)" value={wq} onChange={e => setWq(e.target.value)} />
         <button disabled={!wq.trim()} onClick={searchCity}>Keresés</button></div>
       <div className="row">{wres.map((r, i) => <button key={i} onClick={() => { setS({ weather_city: r.name, weather_lat: r.latitude, weather_lon: r.longitude }); setWres([]); setWq('') }}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} ({r.country})</button>)}</div>
+    </section>
+
+    <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>
+      {polls === null && <p>A szavazás még nincs bekapcsolva: futtasd le a <code>supabase/update11.sql</code> fájlt.</p>}
+      {(polls ?? []).map(p => <div className="polladm" key={p.id}>
+        <b>{p.question}</b> {p.active ? '(aktív)' : '(lezárt)'}
+        <ul>{p.options.map((o: string, i: number) => <li key={i}>{o}: {pcounts[p.id]?.[i] ?? 0} szavazat</li>)}</ul>
+        <div className="row">{p.active && <button onClick={() => run(supabase.from('polls').update({ active: false }).eq('id', p.id))}>Lezárás</button>}
+          <button onClick={() => run(supabase.from('polls').delete().eq('id', p.id))}>Törlés</button></div></div>)}
+      {polls !== null && <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Kérdés (pl. Mi legyen a pénteki szünetben?)" value={pl.q} onChange={e => setPl({ ...pl, q: e.target.value })} />
+        {pl.opts.map((o, i) => <input key={i} placeholder={`${i + 1}. válasz${i < 2 ? '' : ' (nem kötelező)'}`} value={o} onChange={e => setPl({ ...pl, opts: pl.opts.map((x, j) => j === i ? e.target.value : x) })} />)}
+        <button disabled={!pl.q.trim() || pl.opts.filter(o => o.trim()).length < 2} onClick={async () => {
+          await supabase.from('polls').update({ active: false }).eq('school_id', d.id).eq('active', true)   // egyszerre egy szavazás él
+          await run(supabase.from('polls').insert({ school_id: d.id, question: pl.q.trim(), options: pl.opts.map(o => o.trim()).filter(Boolean) }))
+          setPl({ q: '', opts: ['', '', '', ''] })
+        }}>Új szavazás indítása</button></div>}
     </section>
 
     <section><h2>Értesítések (telepített alkalmazás)</h2>
