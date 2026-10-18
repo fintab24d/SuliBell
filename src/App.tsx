@@ -4,6 +4,7 @@ import QRCode from 'qrcode'
 import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
 import { PollCard, usePoll } from './Poll'
+import BreakVideo, { useVideos } from './BreakVideo'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -137,6 +138,7 @@ export default function App() {
   const [fxOn, setFxOn] = useState(() => { try { return localStorage.getItem('fx') !== '0' } catch { return true } })
   const fx = fxOn && style === 'neon'
   const { poll, counts } = usePoll(data?.id)
+  const videos = useVideos(data?.id)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
 
   // Csengetési hang: állapotváltáskor szól, ha az admin bekapcsolta és a hang engedélyezve van.
@@ -250,6 +252,7 @@ export default function App() {
   const overlay = sett.alert_active && sett.alert_text && dismissed !== sett.alert_text && <div className="alertfs" role="alertdialog" aria-live="assertive">
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
+  const vid = s.phase === 'break' && data.settings.break_videos !== false && videos.length > 0 && <BreakVideo list={videos} breakKey={s.next?.id ?? key} />
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
 
   return <><main className={tv ? 'tv' : ''}>
@@ -272,6 +275,7 @@ export default function App() {
     </header>
 
     {changesBox}
+    {!tv && vid}
     {!tv && pollCard}
     {!tv && stats && <section className="panel overview full"><div className="tag">A nap egy pillantásra</div>{stats}{strip}</section>}
 
@@ -282,7 +286,7 @@ export default function App() {
       {!tv && bells}
     </section>
 
-    {tv && <section className="tvside">{T.length > 0 ? <>{bells}{pollCard || stats}{lunchBox}</> : <>{pollCard}{events[0] && evCard(events[0], 0)}{offCard}</>}</section>}
+    {tv && <section className="tvside">{T.length > 0 ? <>{vid}{bells}{vid ? pollCard : pollCard || stats}{!vid && lunchBox}</> : <>{pollCard}{events[0] && evCard(events[0], 0)}{offCard}</>}</section>}
 
     {!tv && L.length > 0 && <section className="panel board">
       <div className="tag">{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
@@ -319,8 +323,8 @@ export default function App() {
     {!tv && data.settings.site_version && <footer className="foot"><span className="ver">Verzió {data.settings.site_version}</span>{data.settings.version_note && <span>{data.settings.version_note}</span>}</footer>}
     {overlay}
   </main>
-  {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} />}
-  <Celebrate enabled={fx} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
+  {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
+  <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
   {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
   {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
   </>

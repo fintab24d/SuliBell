@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { FxEngine } from './lib/fx'
+import { fxSound } from './lib/sound'
 
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Neon háttér-réteg: részecskék, kattintás-szikrák, fényfolt a paneleken, csengetéskor robbanás. Csak a Neon stílusban él. */
-export default function Fx({ phase, bellKey, tv, wx }: { phase: string; bellKey: string; tv: boolean; wx?: number | null }) {
+export default function Fx({ phase, bellKey, tv, wx, sound }: { phase: string; bellKey: string; tv: boolean; wx?: number | null; sound?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const eng = useRef<FxEngine | null>(null)
   const off = reduced()
@@ -20,6 +21,7 @@ export default function Fx({ phase, bellKey, tv, wx }: { phase: string; bellKey:
   }, [off, tv])
 
   useEffect(() => { eng.current?.setPhase(phase) }, [phase])
+  useEffect(() => { if (eng.current) eng.current.onSound = sound ? fxSound : undefined }, [sound, off, tv])
   useEffect(() => { eng.current?.setWeather(wx) }, [wx, off, tv])      // valódi időjárás: eső, hó, vihar
   useEffect(() => {                                                    // tűzijáték / konfetti a nagy pillanatokra
     const on = (e: Event) => { const d = (e as CustomEvent).detail ?? {}; eng.current?.celebrate(d.kind ?? 'both', d.power ?? 1) }
@@ -87,9 +89,10 @@ export function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: s
 
 /** Nagy pillanatok: egy visszaszámláló nullára ér, hétvége / ünnep előtt vége a tanításnak, vagy a logóra 5-ször kattintanak (parti mód).
  *  Tűzijátékot és konfettit indít, és feliratot mutat. Az effektek a Fx rétegen át jelennek meg. */
-export function Celebrate({ phase, awayDays, events, enabled }: { phase: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean }) {
+export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean }) {
   const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
   const fire = (title: string, sub: string, kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) => {
+    if (enabled && sound) fxSound('fanfare', 0)
     if (enabled) window.dispatchEvent(new CustomEvent('sulibell:celebrate', { detail: { kind, power } }))
     setMsg({ id: Date.now(), title, sub })
   }
@@ -126,7 +129,7 @@ export function Celebrate({ phase, awayDays, events, enabled }: { phase: string;
     window.addEventListener('click', on)
     if (/[?&]party\b/.test(location.search)) setTimeout(() => fire('Parti!', 'SuliBell', 'both', 1.2), 1200)
     return () => window.removeEventListener('click', on)
-  }, [enabled])
+  }, [enabled, sound])
 
   return msg ? <div key={msg.id} className="bellbanner after party" role="status"><b>{msg.title}</b><span>{msg.sub}</span></div> : null
 }

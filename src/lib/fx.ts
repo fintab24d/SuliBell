@@ -81,6 +81,8 @@ export class FxEngine {
   private flash = 0
   private nextBolt = 0
   private snowSprite!: HTMLCanvasElement
+  /** Hangjelzés a tűzijáték / konfetti eseményeire (pan: -1…1). */
+  onSound?: (kind: 'launch' | 'boom' | 'pop', pan: number) => void
   private readonly maxFps: number
 
   constructor(private canvas: HTMLCanvasElement, private tv = false) {
@@ -150,12 +152,15 @@ export class FxEngine {
     if (kind !== 'fireworks') {
       const n = Math.round(150 * power * k)
       for (let i = 0; i < n; i++) this.queue.push({ t: this.time + rnd(0, 2.2), fn: () => this.papers.push(this.newPaper()) })
+      for (const at of [0, 0.35, 0.8]) this.queue.push({ t: this.time + at, fn: () => this.onSound?.('pop', rnd(-0.8, 0.8)) })
     }
   }
   private launch(fx: number) {
+    this.onSound?.('launch', fx * 2 - 1)
     this.rockets.push({ x: this.w * fx, y: this.h + 10, vy: -rnd(this.h * 0.75, this.h * 1.0), ty: rnd(this.h * 0.14, this.h * 0.45), ci: (Math.random() * this.pal.length) | 0 })
   }
   private explode(x: number, y: number, ci: number) {
+    this.onSound?.('boom', (x / this.w) * 2 - 1)
     const n = this.tv ? 60 : 85, sp0 = rnd(190, 330) * this.sc, two = (ci + 1 + ((Math.random() * 3) | 0)) % this.pal.length
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + rnd(-0.05, 0.05), sp = sp0 * (i % 2 ? 1 : 0.62) * rnd(0.92, 1.05)

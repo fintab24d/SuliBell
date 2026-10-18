@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { enableAudio, ring } from './lib/sound'
 import { fmtHM, toSec, type Schedule } from './lib/engine'
+import { parseVideo } from './lib/video'
 import { KIND, type Countdown } from './lib/kinds'
 
 interface Full {
@@ -16,7 +17,7 @@ const ZONES = ['Europe/Budapest', 'Europe/Bratislava', 'Europe/Vienna', 'Europe/
 const p2 = (n: number) => String(n).padStart(2, '0')
 const plus = (t: string, m: number) => { const s = Math.min(86340, toSec(t) + m * 60); return `${p2(Math.floor(s / 3600))}:${p2(Math.floor(s / 60) % 60)}` }
 
-const TABLE: Record<string, string> = { schools: 'Iskola', settings: 'Beállítások', schedules: 'Csengetési rend', lessons: 'Óra', closed_days: 'Tanítás nélküli nap', countdowns: 'Visszaszámláló', announcements: 'Közlemény', school_members: 'Admin jogosultság', schedule_dates: 'Különleges nap', changes: 'Változás', menus: 'Étlap', polls: 'Szavazás' }
+const TABLE: Record<string, string> = { schools: 'Iskola', settings: 'Beállítások', schedules: 'Csengetési rend', lessons: 'Óra', closed_days: 'Tanítás nélküli nap', countdowns: 'Visszaszámláló', announcements: 'Közlemény', school_members: 'Admin jogosultság', schedule_dates: 'Különleges nap', changes: 'Változás', menus: 'Étlap', polls: 'Szavazás', break_videos: 'Szünet-videó' }
 const ACT: Record<string, string> = { INSERT: 'létrehozott', UPDATE: 'módosított', DELETE: 'törölt' }
 const FIELD: Record<string, string> = { name: 'név', label: 'megnevezés', start_time: 'kezdés', end_time: 'vége', title: 'cím', text: 'szöveg', day: 'nap', reason: 'indok', target_date: 'dátum', target_time: 'időpont', weekdays: 'napok', is_default: 'alapértelmezett', timezone: 'időzóna', theme: 'téma', sound_enabled: 'hang', logo_url: 'logó', tv_show_seconds: 'TV másodperc', tv_show_next: 'TV következő', tv_scale: 'TV méret', site_version: 'verzió', version_note: 'verzió megjegyzés', kind: 'fajta', active_until: 'eddig', position: 'sorrend', bell_sound_url: 'csengőhang' }
 const show = (v: unknown) => (v === null || v === undefined || v === '' ? '(üres)' : typeof v === 'boolean' ? (v ? 'be' : 'ki') : String(v).slice(0, 40))
@@ -72,6 +73,8 @@ function Panel() {
   const [pm, setPm] = useState({ title: '', body: '' })
   const [chgNotify, setChgNotify] = useState(true)
   const [subs, setSubs] = useState<number | null>(null)
+  const [vids, setVids] = useState<any[] | null>(null)   // null: az update12.sql még nem futott le
+  const [vf, setVf] = useState({ url: '', title: '' })
   const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
   const [polls, setPolls] = useState<any[] | null>(null)   // null: az update11.sql még nem futott le
   const [pcounts, setPcounts] = useState<Record<string, number[]>>({})
@@ -92,6 +95,10 @@ function Panel() {
     if (!d) return
     supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }).eq('school_id', d.id)
       .then(({ count, error }) => setSubs(error ? null : count ?? 0))
+  }, [d])
+  useEffect(() => {   // szünet-videók
+    if (!d) return
+    supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at').then(({ data, error }) => setVids(error ? null : data ?? []))
   }, [d])
   useEffect(() => {   // szavazások és állásuk
     if (!d) return
@@ -352,6 +359,21 @@ function Panel() {
       <div className="row"><input placeholder="Város keresése (pl. Szekszárd)" value={wq} onChange={e => setWq(e.target.value)} />
         <button disabled={!wq.trim()} onClick={searchCity}>Keresés</button></div>
       <div className="row">{wres.map((r, i) => <button key={i} onClick={() => { setS({ weather_city: r.name, weather_lat: r.latitude, weather_lon: r.longitude }); setWres([]); setWq('') }}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} ({r.country})</button>)}</div>
+    </section>
+
+    <section><h2>Szünet-videók (szünetben ezek játszódnak, hang nélkül)</h2>
+      {vids === null && <p>A videók még nincsenek bekapcsolva: futtasd le a <code>supabase/update12.sql</code> fájlt.</p>}
+      {vids !== null && <>
+        <div className="row"><label><input type="checkbox" checked={d.settings.break_videos !== false} onChange={e => setS({ break_videos: e.target.checked })} /> Videó mutatása szünetben</label></div>
+        <p>YouTube-link (watch, youtu.be, shorts) vagy közvetlen .mp4 / .webm link. Több videó esetén szünetenként váltakoznak.</p>
+        {vids.map(v => <div className="row" key={v.id}>{v.title || v.url}{v.title ? ` (${v.url})` : ''}
+          <button onClick={() => run(supabase.from('break_videos').delete().eq('id', v.id))}>Törlés</button></div>)}
+        <div className="row"><input style={{ minWidth: '20rem' }} placeholder="Videó linkje (https://…)" value={vf.url} onChange={e => setVf({ ...vf, url: e.target.value })} />
+          <input placeholder="Név (nem kötelező)" value={vf.title} onChange={e => setVf({ ...vf, title: e.target.value })} />
+          <button disabled={!vf.url.trim()} onClick={async () => {
+            if (!parseVideo(vf.url)) return setMsg('Hiba: csak YouTube-link vagy .mp4 / .webm fájl adható meg (https-sel).')
+            await run(supabase.from('break_videos').insert({ school_id: d.id, url: vf.url.trim(), title: vf.title.trim() })); setVf({ url: '', title: '' })
+          }}>Hozzáadás</button></div></>}
     </section>
 
     <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>

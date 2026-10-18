@@ -39,6 +39,8 @@ Hétvégén, ünnepnapon és tanítási idő után az oldal kiírja, hogy ma nin
 - A **Neon** stílusban mozgó fényfoltok, kattintásra szikrák, csengetéskor fényhullám és felirat, az utolsó 10 másodpercben nagy számlálás látszik. A fejléc ✨ gombjával eszközönként kikapcsolható.
 - Ha be van kapcsolva az időjárás, a háttérben a valódi idő látszik: eső, hó vagy vihar villámlással.
 - Nagy pillanatokon tűzijáték és konfetti jön: amikor egy visszaszámláló nullára ér, és amikor hétvége vagy ünnep előtt véget ér az utolsó óra. A logóra ötször kattintva kipróbálható (parti mód).
+- Szünetben (ha az iskola megadott videókat) néma videó játszódik a főoldalon és a TV-n.
+- A tűzijátéknak és a konfettinek hangja van, ha a **Hang engedélyezése** gombot megnyomtad.
 - Ha az iskola szavazást indít, az eredmény élőben látszik, a TV-n QR-kóddal. Telefonról egyszer lehet szavazni.
 
 ## Telepítés alkalmazásként

@@ -315,3 +315,9 @@ label.btn:hover{border-color:var(--brand)}
 .tv .poll h2{font-size:4vh}.tv .popt,.tv .pbar{font-size:2.8vh}.tv .pbar b{font-size:3.4vh}.tv .pollqr img{width:12vh;height:12vh}.tv .pollqr{font-size:2.2vh}
 .install .pollopts{width:100%}.install .poll h2{text-align:center}
 @media(prefers-reduced-motion:reduce){.final::before,.final b,.final i{animation:none}.bellbanner{animation:none}.bellbanner::after{animation:none}.pbar i{transition:none}}
+
+/* Szünet-videó */
+.vid{padding-bottom:16px}
+.vframe{position:relative;aspect-ratio:16/9;margin-top:10px;border-radius:14px;overflow:hidden;background:#000;border:1px solid var(--line);box-shadow:0 0 34px -10px var(--break)}
+.vframe iframe,.vframe video{position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover}
+.tv .vid .tag{font-size:2vh}
