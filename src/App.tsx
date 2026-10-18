@@ -12,7 +12,6 @@ import { computeState, fmtCount, fmtHM, addDays, instantOf, nextSchoolDay, pickS
 const pad = (n: number) => String(n).padStart(2, '0')
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`
 const TITLE: Record<BellState['phase'], string> = { closed: '', before: 'Tanítás előtt', lesson: '', break: 'Szünet', after: 'Vége a tanításnak' }
-const STYLES = [['neon', 'Neon'], ['school', 'Iskolai'], ['minimal', 'Minimál']] as const
 const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő' }
 
 /** Számjegyek "menetrend-tábla" csempékben (ez az oldal vizuális aláírása). */
@@ -129,8 +128,8 @@ export default function App() {
   const tv = location.pathname.startsWith('/display')
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
   // Stílus: a fejlécben váltható; a /display?style=school alakú cím a TV-nek is beállítja
-  const [style, setStyle] = useState(() => { const v = new URLSearchParams(location.search).get('style') ?? localStorage.getItem('style') ?? 'neon'; return STYLES.some(s => s[0] === v) ? v : 'neon' })
-  useEffect(() => { document.documentElement.dataset.style = style; localStorage.setItem('style', style) }, [style])
+  const style = 'neon'
+  useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
   useEffect(() => { document.documentElement.dataset.theme = theme || data?.settings.theme || 'dark' }, [theme, data])
   useEffect(() => { document.documentElement.dataset.phase = state?.phase ?? '' }, [state?.phase])
   useEffect(() => { document.title = APP_NAME }, [])
@@ -267,9 +266,8 @@ export default function App() {
         {data.settings.sound_enabled && !audioOn && <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>}
         {!tv && !standalone && (installEv ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button> : <button onClick={() => location.assign('/telepites')}>Telepítés</button>)}
         {!tv && <NotifyButton schoolId={data.id} />}
-        {!tv && <div className="styles" role="group" aria-label="Stílus">{STYLES.map(([k, n]) => <button key={k} className={style === k ? 'on' : ''} aria-pressed={style === k} onClick={() => setStyle(k)}>{n}</button>)}</div>}
-        {!tv && style === 'neon' && <button className={fxOn ? 'on' : ''} aria-pressed={fxOn} title="Effektek be/ki" onClick={() => { const v = !fxOn; try { localStorage.setItem('fx', v ? '1' : '0') } catch { /* nem baj */ } setFxOn(v) }}>✨</button>}
         {!tv && <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>}
+        {!tv && style === 'neon' && <button className={fxOn ? 'on' : ''} aria-pressed={fxOn} title="Effektek be/ki" onClick={() => { const v = !fxOn; try { localStorage.setItem('fx', v ? '1' : '0') } catch { /* nem baj */ } setFxOn(v) }}>✨</button>}
       </div>
     </header>
 
