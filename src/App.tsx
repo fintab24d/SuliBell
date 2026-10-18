@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } fr
 import { audioReady, enableAudio, preload, ring } from './lib/sound'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
-import Fx, { BellFlash, FinalCount } from './Fx'
+import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
 import { PollCard, usePoll } from './Poll'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
@@ -319,7 +319,8 @@ export default function App() {
     {!tv && data.settings.site_version && <footer className="foot"><span className="ver">Verzió {data.settings.site_version}</span>{data.settings.version_note && <span>{data.settings.version_note}</span>}</footer>}
     {overlay}
   </main>
-  {fx && <Fx phase={s.phase} bellKey={key} tv={tv} />}
+  {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} />}
+  <Celebrate enabled={fx} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
   {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
   {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
   </>

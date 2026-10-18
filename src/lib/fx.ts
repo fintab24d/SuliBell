@@ -37,6 +37,19 @@ function makeSprite([r, g, b]: RGB) {
 interface Orb { x: number; y: number; vx: number; vy: number; r: number; a: number; ci: number; cj: number; t: number; ph: number }
 interface Dust { x: number; y: number; vx: number; vy: number; r: number; a: number; ci: number; ph: number; sp: number }
 interface Spark { x: number; y: number; vx: number; vy: number; r: number; life: number; max: number; ci: number }
+interface Drop { x: number; y: number; v: number; len: number; a: number; ph: number; r: number }
+interface Rocket { x: number; y: number; vy: number; ty: number; ci: number }
+interface Paper { x: number; y: number; vx: number; vy: number; rot: number; vr: number; w: number; h: number; col: RGB; ph: number }
+/** WMO időjárási kód → effekt: eső, hó, vihar vagy semmi (a második szám az erősség). */
+export function weatherKind(code: number | null | undefined): ['none' | 'rain' | 'snow' | 'storm', number] {
+  if (code == null) return ['none', 0]
+  if (code >= 95) return ['storm', 1.3]
+  if (code >= 71 && code <= 77) return ['snow', 1]
+  if (code === 85 || code === 86) return ['snow', 1.3]
+  if (code >= 51 && code <= 57) return ['rain', 0.5]
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return ['rain', code === 65 || code === 67 || code === 82 ? 1.5 : 1]
+  return ['none', 0]
+}
 interface Wave { x: number; y: number; r0: number; r1: number; t: number; max: number; ci: number }
 
 export class FxEngine {
@@ -59,6 +72,15 @@ export class FxEngine {
   private time = 0
   private running = false
   private lastTrail = 0
+  private wkind: 'none' | 'rain' | 'snow' | 'storm' = 'none'
+  private wpow = 0
+  private drops: Drop[] = []
+  private rockets: Rocket[] = []
+  private papers: Paper[] = []
+  private queue: { t: number; fn: () => void }[] = []
+  private flash = 0
+  private nextBolt = 0
+  private snowSprite!: HTMLCanvasElement
   private readonly maxFps: number
 
   constructor(private canvas: HTMLCanvasElement, private tv = false) {
@@ -69,6 +91,7 @@ export class FxEngine {
     const cs = getComputedStyle(document.documentElement)
     this.pal = VARS.map((v, i) => parseColor(cs.getPropertyValue(v)) ?? FALLBACK[i])
     this.sprites = this.pal.map(makeSprite)
+    this.snowSprite = makeSprite([235, 245, 255])
   }
 
   start() {
@@ -110,6 +133,51 @@ export class FxEngine {
     }
     this.capSparks()
   }
+  /** Valódi időjárás a háttérben: eső, hó, vihar (villámlással). */
+  setWeather(code: number | null | undefined) {
+    const [k, p] = weatherKind(code)
+    this.wkind = k; this.wpow = p
+    this.nextBolt = this.time + rnd(3, 7)
+    this.fitDrops()
+  }
+  /** Nagy pillanat: tűzijáték és/vagy konfetti (kitűzött időpontokban indulnak a rakéták). */
+  celebrate(kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) {
+    const k = this.tv ? 0.7 : 1
+    if (kind !== 'confetti') {
+      const n = Math.round(9 * power)
+      for (let i = 0; i < n; i++) this.queue.push({ t: this.time + 0.2 + i * 0.55 + rnd(0, 0.25), fn: () => this.launch(rnd(0.12, 0.88)) })
+    }
+    if (kind !== 'fireworks') {
+      const n = Math.round(150 * power * k)
+      for (let i = 0; i < n; i++) this.queue.push({ t: this.time + rnd(0, 2.2), fn: () => this.papers.push(this.newPaper()) })
+    }
+  }
+  private launch(fx: number) {
+    this.rockets.push({ x: this.w * fx, y: this.h + 10, vy: -rnd(this.h * 0.75, this.h * 1.0), ty: rnd(this.h * 0.14, this.h * 0.45), ci: (Math.random() * this.pal.length) | 0 })
+  }
+  private explode(x: number, y: number, ci: number) {
+    const n = this.tv ? 60 : 85, sp0 = rnd(190, 330) * this.sc, two = (ci + 1 + ((Math.random() * 3) | 0)) % this.pal.length
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rnd(-0.05, 0.05), sp = sp0 * (i % 2 ? 1 : 0.62) * rnd(0.92, 1.05)
+      this.sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rnd(3, 6), life: rnd(1.1, 1.8), max: 1.8, ci: i % 2 ? ci : two })
+    }
+    this.waves.push({ x, y, r0: 4, r1: sp0 * 0.45, t: 0, max: 0.5, ci })
+    this.capSparks()
+  }
+  private newPaper(): Paper {
+    const cols: RGB[] = [...this.pal, [138, 92, 255], [255, 255, 255]]
+    return { x: rnd(0, this.w), y: rnd(-40, -8), vx: rnd(-40, 40), vy: rnd(130, 260), rot: rnd(0, TAU), vr: rnd(-6, 6), w: rnd(7, 13) * this.sc, h: rnd(4, 8) * this.sc, col: cols[(Math.random() * cols.length) | 0], ph: rnd(0, TAU) }
+  }
+  private fitDrops() {
+    const area = Math.min(1.4, Math.max(0.5, (this.w * this.h) / (1920 * 1080))) * (this.tv ? 0.6 : 1)
+    const want = this.wkind === 'none' ? 0 : Math.round((this.wkind === 'snow' ? 140 : 220) * this.wpow * area)
+    while (this.drops.length < want) this.drops.push(this.newDrop(true))
+    this.drops.length = Math.min(this.drops.length, want)
+  }
+  private newDrop(anywhere: boolean): Drop {
+    const snow = this.wkind === 'snow'
+    return { x: rnd(-40, this.w + 40), y: anywhere ? rnd(0, this.h) : rnd(-60, -5), v: snow ? rnd(40, 90) : rnd(620, 980), len: rnd(14, 30) * this.sc, a: rnd(0.45, 0.95), ph: rnd(0, TAU), r: rnd(3.5, 8) }
+  }
   burst(x: number, y: number, n = 16, power = 1) {
     for (let i = 0; i < n; i++) {
       const a = rnd(0, TAU), sp = rnd(60, 260) * power
@@ -134,7 +202,7 @@ export class FxEngine {
     this.capSparks()
   }
   private pick(focusWeight: number) { return Math.random() < focusWeight ? this.focus : (Math.random() * this.pal.length) | 0 }
-  private capSparks() { if (this.sparks.length > 420) this.sparks.splice(0, this.sparks.length - 420) }
+  private capSparks() { if (this.sparks.length > 800) this.sparks.splice(0, this.sparks.length - 800) }
 
   private resize() {
     const w = window.innerWidth, h = window.innerHeight
@@ -149,6 +217,7 @@ export class FxEngine {
     this.orbs.length = Math.min(this.orbs.length, no)
     while (this.dust.length < nd) this.dust.push(this.newDust())
     this.dust.length = Math.min(this.dust.length, nd)
+    this.fitDrops()
   }
   private newOrb(): Orb {
     const c = this.pick(0.5)
@@ -183,6 +252,27 @@ export class FxEngine {
       if (d.y < -10) { d.y = h + 10; d.x = rnd(0, w) }
       if (d.x < -10) d.x = w + 10; else if (d.x > w + 10) d.x = -10
     }
+    for (let i = this.queue.length - 1; i >= 0; i--) if (this.queue[i].t <= this.time) { const q = this.queue.splice(i, 1)[0]; q.fn() }
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i]
+      r.y += r.vy * dt; r.vy *= 1 - 0.6 * dt
+      if (Math.random() < 0.8) this.sparks.push({ x: r.x + rnd(-2, 2), y: r.y, vx: rnd(-14, 14), vy: rnd(10, 50), r: rnd(2, 3.5), life: rnd(0.25, 0.5), max: 0.5, ci: r.ci })
+      if (r.y <= r.ty || r.vy > -60) { this.explode(r.x, r.y, r.ci); this.rockets.splice(i, 1) }
+    }
+    for (let i = this.papers.length - 1; i >= 0; i--) {
+      const q = this.papers[i]
+      q.y += q.vy * dt; q.x += (q.vx + Math.sin(this.time * 2.4 + q.ph) * 55) * dt; q.rot += q.vr * dt
+      if (q.y > h + 20) this.papers.splice(i, 1)
+    }
+    if (this.wkind !== 'none') {
+      const snow = this.wkind === 'snow', slant = snow ? 0 : 0.16
+      for (const d of this.drops) {
+        d.y += d.v * dt; d.x += (snow ? Math.sin(this.time * 0.9 + d.ph) * 22 : -d.v * slant) * dt
+        if (d.y > h + 20 || d.x < -60 || d.x > w + 60) Object.assign(d, this.newDrop(false))
+      }
+      if (this.wkind === 'storm' && this.time > this.nextBolt) { this.flash = 1; this.nextBolt = this.time + rnd(5, 12); this.queue.push({ t: this.time + 0.18, fn: () => { this.flash = 0.8 } }) }
+    }
+    this.flash = Math.max(0, this.flash - dt * 3.2)
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const s = this.sparks[i]
       s.life -= dt
@@ -214,6 +304,18 @@ export class FxEngine {
       else { this.spr(o.ci, o.x, o.y, o.r, a * (1 - o.t)); this.spr(o.cj, o.x, o.y, o.r, a * o.t) }
     }
     for (const d of this.dust) this.spr(d.ci, d.x, d.y, d.r * 2.2, d.a * (0.55 + 0.45 * Math.sin(t * d.sp + d.ph)) * k)
+    if (this.drops.length) {
+      const dark = this.additive, snow = this.wkind === 'snow'
+      c.globalCompositeOperation = 'source-over'
+      if (snow) for (const d of this.drops) { c.globalAlpha = Math.min(1, d.a * 1.1); c.drawImage(dark ? this.snowSprite : this.sprites[1], d.x - d.r * 1.6, d.y - d.r * 1.6, d.r * 3.2, d.r * 3.2) }
+      else {
+        const [r, g, b] = dark ? this.pal[1] : [40, 90, 190]
+        c.lineCap = 'round'; c.lineWidth = 2.2 * this.sc + 0.5
+        for (const d of this.drops) { c.strokeStyle = `rgba(${r},${g},${b},${Math.min(1, d.a * 1.1)})`; c.beginPath(); c.moveTo(d.x, d.y); c.lineTo(d.x + d.len * 0.16, d.y - d.len); c.stroke() }
+      }
+      c.globalAlpha = 1
+      c.globalCompositeOperation = this.additive ? 'lighter' : 'source-over'
+    }
     for (const s of this.sparks) {
       const f = s.life / s.max
       const al = Math.pow(Math.max(0, Math.min(1, f)), 1.4) * k
@@ -232,5 +334,15 @@ export class FxEngine {
       c.stroke()
     }
     c.globalCompositeOperation = 'source-over'
+    for (const r of this.rockets) this.spr(this.focus, r.x, r.y, 12, 1)
+    c.globalAlpha = 1
+    for (const q of this.papers) {
+      c.save(); c.translate(q.x, q.y); c.rotate(q.rot)
+      c.scale(1, Math.cos(this.time * 5 + q.ph))   // forgó papírdarab
+      c.fillStyle = `rgb(${q.col[0]},${q.col[1]},${q.col[2]})`
+      c.fillRect(-q.w / 2, -q.h / 2, q.w, q.h)
+      c.restore()
+    }
+    if (this.flash > 0.02) { c.globalAlpha = this.flash * (this.additive ? 0.22 : 0.4); c.fillStyle = '#e8f0ff'; c.fillRect(0, 0, this.w, this.h); c.globalAlpha = 1 }
   }
 }

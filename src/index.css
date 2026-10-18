@@ -298,6 +298,8 @@ label.btn:hover{border-color:var(--brand)}
 .bellbanner::after{content:"";width:min(70vw,900px);height:.55vmin;border-radius:9px;background:var(--ledgrad);background-size:200% 100%;animation:ledflow 1.4s linear infinite}
 @keyframes bannerlife{0%{opacity:0;transform:scale(.7) translateY(2vh);filter:blur(14px)}12%{opacity:1;transform:none;filter:none}78%{opacity:1}100%{opacity:0;transform:translateY(-2vh) scale(1.04)}}
 
+.bellbanner.party{animation-duration:4s}
+
 /* Szavazás */
 .poll h2{margin:0 0 6px;font:600 1.6rem var(--f)}
 .pollopts{display:grid;gap:10px;margin-top:14px}

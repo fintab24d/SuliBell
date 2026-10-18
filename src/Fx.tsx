@@ -4,7 +4,7 @@ import { FxEngine } from './lib/fx'
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Neon háttér-réteg: részecskék, kattintás-szikrák, fényfolt a paneleken, csengetéskor robbanás. Csak a Neon stílusban él. */
-export default function Fx({ phase, bellKey, tv }: { phase: string; bellKey: string; tv: boolean }) {
+export default function Fx({ phase, bellKey, tv, wx }: { phase: string; bellKey: string; tv: boolean; wx?: number | null }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const eng = useRef<FxEngine | null>(null)
   const off = reduced()
@@ -20,6 +20,12 @@ export default function Fx({ phase, bellKey, tv }: { phase: string; bellKey: str
   }, [off, tv])
 
   useEffect(() => { eng.current?.setPhase(phase) }, [phase])
+  useEffect(() => { eng.current?.setWeather(wx) }, [wx, off, tv])      // valódi időjárás: eső, hó, vihar
+  useEffect(() => {                                                    // tűzijáték / konfetti a nagy pillanatokra
+    const on = (e: Event) => { const d = (e as CustomEvent).detail ?? {}; eng.current?.celebrate(d.kind ?? 'both', d.power ?? 1) }
+    window.addEventListener('sulibell:celebrate', on)
+    return () => window.removeEventListener('sulibell:celebrate', on)
+  }, [])
 
   // Állapotváltáskor (csengetés) szikra-robbanás a számlap körül; betöltéskor nem.
   const prev = useRef('')
@@ -77,4 +83,50 @@ export function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: s
     return () => clearTimeout(t)
   }, [bellKey])
   return msg ? <div key={msg.id} className={`bellbanner ${msg.phase}`} role="status"><b>{msg.title}</b>{msg.sub && <span>{msg.sub}</span>}</div> : null
+}
+
+/** Nagy pillanatok: egy visszaszámláló nullára ér, hétvége / ünnep előtt vége a tanításnak, vagy a logóra 5-ször kattintanak (parti mód).
+ *  Tűzijátékot és konfettit indít, és feliratot mutat. Az effektek a Fx rétegen át jelennek meg. */
+export function Celebrate({ phase, awayDays, events, enabled }: { phase: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean }) {
+  const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
+  const fire = (title: string, sub: string, kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) => {
+    if (enabled) window.dispatchEvent(new CustomEvent('sulibell:celebrate', { detail: { kind, power } }))
+    setMsg({ id: Date.now(), title, sub })
+  }
+  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4200); return () => clearTimeout(t) }, [msg?.id])
+
+  // 1) Visszaszámláló nullára ér
+  const seen = useRef<Map<string, number>>(new Map())
+  const first = useRef(true)
+  const key = events.map(e => `${e.id}:${e.left > 0 ? 1 : 0}`).join()
+  useEffect(() => {
+    for (const e of events) {
+      const was = seen.current.get(e.id)
+      if (!first.current && was != null && was > 0 && e.left <= 0 && e.left > -120) fire(e.title, 'Megérkeztünk!', 'both', 1.4)
+      seen.current.set(e.id, e.left)
+    }
+    first.current = false
+  }, [key])
+
+  // 2) Vége az utolsó tanítási órának hétvége / ünnep előtt
+  const prevPhase = useRef('')
+  useEffect(() => {
+    if (prevPhase.current === 'lesson' && phase === 'after' && awayDays >= 2) fire('Jó hétvégét!', awayDays > 3 ? 'Pihenjetek jól!' : 'Szép pihenést!', 'both', 1.3)
+    prevPhase.current = phase
+  }, [phase])
+
+  // 3) Parti mód: a logóra 5 kattintás 3 mp-en belül (vagy a címben ?party)
+  useEffect(() => {
+    let n = 0, t = 0
+    const on = (e: Event) => {
+      if (!(e.target as HTMLElement | null)?.closest?.('.brand')) return
+      const now = Date.now(); n = now - t > 3000 ? 1 : n + 1; t = now
+      if (n >= 5) { n = 0; fire('Parti!', 'Szuper rejtett funkciót találtál', 'both', 1.6) }
+    }
+    window.addEventListener('click', on)
+    if (/[?&]party\b/.test(location.search)) setTimeout(() => fire('Parti!', 'SuliBell', 'both', 1.2), 1200)
+    return () => window.removeEventListener('click', on)
+  }, [enabled])
+
+  return msg ? <div key={msg.id} className="bellbanner after party" role="status"><b>{msg.title}</b><span>{msg.sub}</span></div> : null
 }
