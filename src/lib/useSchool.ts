@@ -6,7 +6,7 @@ import type { Countdown } from './kinds'
 export interface SchoolData {
   id?: string
   name: string
-  settings: { timezone: string; theme: 'dark' | 'light'; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null; break_videos?: boolean }
+  settings: { timezone: string; theme: 'dark' | 'light'; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null; break_videos?: boolean; rest_mode?: boolean }
   schedules: Schedule[]
   closed: { day: string; reason: string }[]
   countdowns: Countdown[]

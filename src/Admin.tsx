@@ -8,7 +8,7 @@ import { KIND, type Countdown } from './lib/kinds'
 
 interface Full {
   id: string; name: string
-  settings: { timezone: string; theme: string; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null; break_videos?: boolean }
+  settings: { timezone: string; theme: string; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null; break_videos?: boolean; rest_mode?: boolean }
   countdowns: Countdown[]; announcements: { id: string; text: string; active_until: string | null }[]; schedule_dates: { id: string; day: string; schedule_id: string }[]; changes: { id: string; day: string; kind: string; lesson_label: string; text: string }[]; menus: { id: string; day: string; text: string }[]; schedules: Schedule[]; closed_days: { id: string; day: string; reason: string }[]
 }
 type Res = PromiseLike<{ error: { message: string } | null }>
@@ -248,6 +248,7 @@ function Panel() {
       <div className="row">Időzóna <select value={d.settings.timezone} onChange={e => setS({ timezone: e.target.value })}>{ZONES.map(z => <option key={z}>{z}</option>)}</select>
         Téma <select value={d.settings.theme} onChange={e => setS({ theme: e.target.value })}><option value="dark">Sötét</option><option value="light">Világos</option></select></div>
       <div className="row"><label><input type="checkbox" checked={d.settings.sound_enabled} onChange={e => setS({ sound_enabled: e.target.checked })} /> Csengetési hang</label>
+        <label><input type="checkbox" checked={d.settings.rest_mode !== false} onChange={e => setS({ rest_mode: e.target.checked })} /> Pihenő mód (játék és visszaszámláló, ha nincs tanítás)</label>
         <button onClick={async () => { await enableAudio(); ring(d.settings.bell_sound_url) }}>Hang kipróbálása</button></div>
       <div className="row">Csengőhang: <b>{d.settings.bell_sound_url ? 'saját fájl' : 'alapértelmezett'}</b>
         <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm,.mp3,.ogg,.wav,.m4a" onChange={e => e.target.files?.[0] && uploadSound(e.target.files[0])} />

@@ -5,6 +5,7 @@ import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
 import { PollCard, usePoll } from './Poll'
 import BreakVideo, { useVideos } from './BreakVideo'
+import RestMode from './Rest'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -253,6 +254,9 @@ export default function App() {
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
   const vid = s.phase === 'break' && data.settings.break_videos !== false && videos.length > 0 && <BreakVideo list={videos} breakKey={s.next?.id ?? key} />
+  const e0 = events[0]
+  const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}
+    ev={e0 ? { title: e0.title, icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), school: schoolDaysBetween(addDays(z.date, 1), e0.target_date, data.schedules, data.closed, ovMap) } : undefined} />
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
 
   return <><main className={tv ? 'tv' : ''}>
@@ -276,6 +280,7 @@ export default function App() {
 
     {changesBox}
     {!tv && vid}
+    {!tv && restBox}
     {!tv && pollCard}
     {!tv && stats && <section className="panel overview full"><div className="tag">A nap egy pillantásra</div>{stats}{strip}</section>}
 
@@ -286,7 +291,7 @@ export default function App() {
       {!tv && bells}
     </section>
 
-    {tv && <section className="tvside">{T.length > 0 ? <>{vid}{bells}{vid ? pollCard : pollCard || stats}{!vid && lunchBox}</> : <>{pollCard}{events[0] && evCard(events[0], 0)}{offCard}</>}</section>}
+    {tv && <section className="tvside">{T.length > 0 ? <>{vid}{bells}{vid ? pollCard : pollCard || stats}{!vid && lunchBox}</> : <>{pollCard}{restBox || (events[0] && evCard(events[0], 0))}{offCard}</>}</section>}
 
     {!tv && L.length > 0 && <section className="panel board">
       <div className="tag">{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>

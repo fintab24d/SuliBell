@@ -41,6 +41,7 @@ Hétvégén, ünnepnapon és tanítási idő után az oldal kiírja, hogy ma nin
 - Nagy pillanatokon tűzijáték és konfetti jön: amikor egy visszaszámláló nullára ér, és amikor hétvége vagy ünnep előtt véget ér az utolsó óra. A logóra ötször kattintva kipróbálható (parti mód).
 - Szünetben (ha az iskola megadott videókat) néma videó játszódik a főoldalon és a TV-n.
 - A tűzijátéknak és a konfettinek hangja van, ha a **Hang engedélyezése** gombot megnyomtad.
+- Ha nincs tanítás (hétvége, ünnep, szünet), az oldal Pihenő módra vált: vicces üzenet, hátralévő idő a következő szünetig és egy Snake-játék. A TV-n a gép játszik, a főoldalon te is kipróbálhatod (nyilak, WASD vagy ujjal húzás).
 - Ha az iskola szavazást indít, az eredmény élőben látszik, a TV-n QR-kóddal. Telefonról egyszer lehet szavazni.
 
 ## Telepítés alkalmazásként
