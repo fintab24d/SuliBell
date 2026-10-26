@@ -101,7 +101,7 @@ function Snake({ tv }: { tv: boolean }) {
 const QUIPS = ['Pihenj egy nagyot!', 'Ma nincs csengő, csak nyugi.', 'Tölts fel, jön az új hét!', 'Az ágy ma erősebb, mint a csengő.', 'Játsz egyet, a házi úgyis ráér.', 'Szünet van, a csengő is alszik.']
 
 /** Pihenő mód: ha nincs tanítás (hétvége, ünnep, szünet), vicces üzenet, a következő szünetig hátralévő idő és egy Snake-játék. */
-export default function RestMode({ tv, reason, day, ev }: { tv: boolean; reason?: string; day: string; ev?: { title: string; icon: string; days: number; hours: number; mins: number; school: number } }) {
+export default function RestMode({ tv, reason, day, ev }: { tv: boolean; reason?: string; day: string; ev?: { icon: string; days: number; hours: number; mins: number; note: string } }) {
   const h = [...day].reduce((a, c) => a + c.charCodeAt(0), 0)
   return <section className="panel full rest">
     <div className="tag">Pihenő mód{reason ? `: ${reason}` : ''}</div>
@@ -111,7 +111,7 @@ export default function RestMode({ tv, reason, day, ev }: { tv: boolean; reason?
         {ev && <div className="restcount">
           <span className="ico" aria-hidden="true">{ev.icon}</span>
           <b>{ev.days}</b><span>nap<small>{ev.hours} óra {ev.mins} perc</small></span>
-          <em>{ev.title}{ev.school > 0 ? `, még ${ev.school} tanítási nap` : ''}</em>
+          <em>{ev.note}</em>
         </div>}
       </div>
       <Snake tv={tv} />
