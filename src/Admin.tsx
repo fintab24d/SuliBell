@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { enableAudio, ring } from './lib/sound'
-import { fmtHM, toSec, type Schedule } from './lib/engine'
+import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
 import { parseVideo } from './lib/video'
 import { KIND, type Countdown } from './lib/kinds'
 
@@ -65,6 +65,7 @@ function Panel() {
   const [sel, setSel] = useState('')
   const [msg, setMsg] = useState('')
   const [cd, setCd] = useState({ day: '', reason: '' })
+  const [cdTo, setCdTo] = useState('')   // ha meg van adva, az egész időszak (tól–ig) felvételre kerül
   const [ev, setEv] = useState({ title: '', kind: 'other', date: '', time: '00:00' })
   const [an, setAn] = useState({ text: '', until: '' })
   const [sd, setSd] = useState({ day: '', schedule_id: '' })
@@ -292,7 +293,14 @@ function Panel() {
         <button onClick={() => run(supabase.from('closed_days').delete().eq('id', c.id))}>Törlés</button></div>)}
       <div className="row"><input type="date" value={cd.day} onChange={e => setCd({ ...cd, day: e.target.value })} />
         <input placeholder="Megnevezés" value={cd.reason} onChange={e => setCd({ ...cd, reason: e.target.value })} />
-        <button disabled={!cd.day || !cd.reason} onClick={async () => { await run(supabase.from('closed_days').insert({ school_id: d.id, ...cd })); setCd({ day: '', reason: '' }) }}>Hozzáadás</button></div>
+        <label>Ig (nem kötelező) <input type="date" value={cdTo} min={cd.day} onChange={e => setCdTo(e.target.value)} /></label>
+        <button disabled={!cd.day || !cd.reason} onClick={async () => {
+          const rows: { school_id: string; day: string; reason: string }[] = []
+          for (let x = cd.day, i = 0; x <= (cdTo || cd.day) && i < 120; x = addDays(x, 1), i++) rows.push({ school_id: d.id, day: x, reason: cd.reason })
+          await run(supabase.from('closed_days').upsert(rows, { onConflict: 'school_id,day' }))
+          setCd({ day: '', reason: '' }); setCdTo('')
+        }}>{cdTo && cdTo > cd.day ? 'Időszak hozzáadása' : 'Hozzáadás'}</button></div>
+      <p>Szünethez add meg az első napot, az "Ig" mezőben az utolsót (pl. őszi szünet: első nap – utolsó nap, megnevezés: Őszi szünet).</p>
     </section>
 
     <section><h2>Visszaszámlálók (szünetek, ünnepek)</h2>
