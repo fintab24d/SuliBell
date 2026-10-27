@@ -338,3 +338,30 @@ label.btn:hover{border-color:var(--brand)}
 .snakeover{position:absolute;inset:auto 0 0 0;display:grid;justify-items:center;gap:6px;padding:14px;background:linear-gradient(transparent,rgba(8,10,28,.88) 45%);color:#fff}
 .snakeover b{font:700 1.5rem var(--f)}.snakeover small{opacity:.7}
 .tv .rest h2{font-size:4.4vh}.tv .restcount b{font-size:11vh}.tv .restcount span{font-size:3vh}.tv .restcount small{font-size:2vh}.tv .restcount em{font-size:2.4vh}.tv .snakehud{font-size:2vh}
+
+/* Egyedi neon kurzor (Cursor.tsx): csak egérrel, finom mutatóval; a billentyűzetes fókuszkeret marad */
+html.cursor-on,html.cursor-on *{cursor:none!important}
+.cur{--ca:var(--n-cyan,#2de2ff);--cb:var(--n-pink,#ff4fc3);position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none;opacity:0;transition:opacity .2s}
+:root[data-theme=light] .cur{--ca:#0a78d1;--cb:#d11a93}
+.cur.on{opacity:1}
+.cur>*{position:absolute;left:0;top:0;width:0;height:0;will-change:transform;pointer-events:none}
+.cur i{position:absolute;display:block}
+.cur-dot i{inset:-3px;border-radius:50%;background:var(--ca);box-shadow:0 0 10px 2px var(--ca),0 0 0 1px rgba(8,10,28,.35);transition:inset .15s,background .2s,box-shadow .2s,border-radius .2s,transform .15s}
+.cur-ring i{inset:-15px;border:1.5px solid color-mix(in srgb,var(--ca) 75%,transparent);border-radius:50%;box-shadow:0 0 14px -3px var(--ca),inset 0 0 10px -5px var(--ca);transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .2s,box-shadow .2s,opacity .2s}
+.cur-t i{inset:-2px;border-radius:50%;background:var(--ca);opacity:calc(.32 - var(--k) * .055);filter:blur(.4px)}
+/* kattintható elem: nagyobb, rózsaszín, lüktető gyűrű */
+.cur.link .cur-ring i{border-color:var(--cb);box-shadow:0 0 18px -2px var(--cb),inset 0 0 12px -5px var(--cb);animation:curpulse 1.3s ease-in-out infinite}
+.cur.link .cur-dot i{background:var(--cb);box-shadow:0 0 10px 2px var(--cb),0 0 0 1px rgba(8,10,28,.35)}
+@keyframes curpulse{0%,100%{transform:scale(1.45)}50%{transform:scale(1.75)}}
+/* szövegmező: vékony függőleges neon vonal (I-beam) */
+.cur.text .cur-dot i{inset:-10px -1.25px;border-radius:2px;background:var(--cb);box-shadow:0 0 8px 1px var(--cb)}
+.cur.text .cur-ring i{opacity:0;transform:scale(.3);animation:none}
+.cur.text .cur-t i{opacity:0}
+/* lenyomás: összehúzódás */
+.cur.down .cur-ring i{animation:none;transform:scale(.6)}
+.cur.down .cur-dot i{transform:scale(.7)}
+/* kattintáskor kitáguló szikra-kör */
+.cur-pop{position:fixed;width:0;height:0}
+.cur-pop i{inset:-14px;border:2px solid var(--cb);border-radius:50%;box-shadow:0 0 14px var(--cb);animation:curpop .55s ease-out forwards}
+@keyframes curpop{from{transform:scale(.3);opacity:.95}to{transform:scale(2.6);opacity:0}}
+@media(hover:none),(prefers-reduced-motion:reduce){.cur{display:none}}
