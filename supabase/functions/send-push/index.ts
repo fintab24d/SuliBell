@@ -1,10 +1,10 @@
-// Web Push küldő (Supabase Edge Function, v3). Csak az iskola adminja hívhatja.
+// Web Push küldő (Supabase Edge Function, v4). Csak az hívhatja, akinek van joga értesítést küldeni (update15.sql: 'push' terület).
 // A feliratkozók listáját az admin oldal adja át (ő amúgy is látja őket), a függvény csak ellenőrzi a jogosultságot és elküldi az üzenetet.
 // Titkok (Supabase → Edge Functions → Secrets): VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (pl. mailto:te@pelda.hu)
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 
-const V = 3
+const V = 4
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
     })
-    const { data: isAdmin, error: authErr } = await userClient.rpc('is_school_admin', { sid: school_id })
+    const { data: isAdmin, error: authErr } = await userClient.rpc('can_edit', { sid: school_id, area: 'push' })
     if (authErr || isAdmin !== true) return reply({ error: 'Nincs jogosultság' }, 403)
 
     // 2) Feliratkozók: az admin oldal adja át; ha nem, a hívó jogosultságával olvassuk

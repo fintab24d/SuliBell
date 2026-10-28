@@ -4,6 +4,7 @@ import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
 import { parseVideo } from './lib/video'
+import Members from './Members'
 import { KIND, type Countdown } from './lib/kinds'
 
 interface Full {
@@ -74,6 +75,7 @@ function Panel() {
   const [pm, setPm] = useState({ title: '', body: '' })
   const [chgNotify, setChgNotify] = useState(true)
   const [subs, setSubs] = useState<number | null>(null)
+  const [perms, setPerms] = useState<string[] | null | undefined>(undefined)   // null = teljes jogú; undefined = még töltődik
   const [vids, setVids] = useState<any[] | null>(null)   // null: az update12.sql még nem futott le
   const [vf, setVf] = useState({ url: '', title: '' })
   const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
@@ -92,6 +94,10 @@ function Panel() {
     setD({ ...r, settings: Array.isArray(r.settings) ? r.settings[0] : r.settings })
   }, [])
   useEffect(() => { load() }, [load])
+  useEffect(() => {   // saját jogosultságok (ha az update15.sql még nem futott le, teljes jogúként kezeljük)
+    if (!d) return
+    supabase.from('school_members').select('perms').eq('school_id', d.id).maybeSingle().then(({ data, error }) => setPerms(error ? null : (data?.perms ?? null)))
+  }, [d?.id])
   useEffect(() => {   // hány eszköz iratkozott fel az értesítésekre
     if (!d) return
     supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }).eq('school_id', d.id)
@@ -123,6 +129,7 @@ function Panel() {
   if (!admin) return <main className="admin"><p>Ehhez a fiókhoz nincs admin jogosultság rendelve (lásd README 6. lépés).</p>
     <button onClick={() => supabase.auth.signOut()}>Kilépés</button></main>
 
+  const can = (area: string) => perms === undefined || perms === null || (area !== 'full' && perms.includes(area))
   const run = async (p: Res) => { const { error } = await p; setMsg(error ? 'Hiba: ' + error.message : 'Mentve'); await load() }
   const setS = (patch: object) => run(supabase.from('settings').update(patch).eq('school_id', d.id))
   const cur = d.schedules.find(s => s.id === (sel || d.schedules[0]?.id))
@@ -179,7 +186,7 @@ function Panel() {
     if (error) { try { const b = await (error as any).context?.json?.(); if (b?.error) detail = b.error } catch { /* marad az általános üzenet */ } }
     const r: any = data ?? {}
     setMsg(error ? 'Értesítés hiba: ' + detail
-      : r.v !== 3 && !r.sent ? 'A Supabase függvény régi verziója fut. Másold be újra a supabase/functions/send-push/index.ts tartalmát, és nyomj Deploy-t.'
+      : r.v !== 4 && !r.sent ? 'A Supabase függvény régi verziója fut. Másold be újra a supabase/functions/send-push/index.ts tartalmát, és nyomj Deploy-t.'
       : `Értesítés elküldve: ${r.sent} / ${r.total} eszközre.` + (r.failed ? ` Sikertelen: ${r.failed} (kód: ${(r.codes ?? []).join(', ')}), ellenőrizd a VAPID kulcsokat.` : ''))
   }
 
@@ -243,8 +250,9 @@ function Panel() {
   return <main className="admin">
     <header><h1>Admin – {d.name}</h1><button onClick={() => supabase.auth.signOut()}>Kilépés</button></header>
     <p className="msg" role="status">{msg}</p>
+    {perms && <p>Korlátozott jogosultságod van: csak a megengedett részeket látod és szerkesztheted.</p>}
 
-    <section><h2>Beállítások</h2>
+    {can('settings') && <section><h2>Beállítások</h2>
       <div className="row">Iskola neve (csak az adminban látszik) <input defaultValue={d.name} key={d.name} onBlur={e => e.target.value !== d.name && run(supabase.from('schools').update({ name: e.target.value }).eq('id', d.id))} /></div>
       <div className="row">Időzóna <select value={d.settings.timezone} onChange={e => setS({ timezone: e.target.value })}>{ZONES.map(z => <option key={z}>{z}</option>)}</select>
         Téma <select value={d.settings.theme} onChange={e => setS({ theme: e.target.value })}><option value="dark">Sötét</option><option value="light">Világos</option></select></div>
@@ -267,9 +275,9 @@ function Panel() {
           onBlur={e => e.target.value !== (d.settings.site_version ?? '') && setS({ site_version: e.target.value })} />
         Megjegyzés <input style={{ minWidth: '16rem' }} placeholder="pl. Új közlemények" defaultValue={d.settings.version_note ?? ''} key={'n' + d.settings.version_note}
           onBlur={e => e.target.value !== (d.settings.version_note ?? '') && setS({ version_note: e.target.value })} /></div>
-    </section>
+    </section>}
 
-    <section><h2>Csengetési rendek</h2>
+    {can('schedules') && <section><h2>Csengetési rendek</h2>
       <div className="row">{d.schedules.map(s => <button key={s.id} className={s.id === cur?.id ? 'on' : ''} onClick={() => setSel(s.id)}>{s.name}{s.is_default ? ' ★' : ''}</button>)}
         <button onClick={addSchedule}>+ Új rend</button></div>
       {cur && <>
@@ -287,9 +295,9 @@ function Panel() {
           {lessons[i + 1] && <em>szünet: {Math.round((toSec(lessons[i + 1].start_time) - toSec(l.end_time)) / 60)} perc</em>}</div>)}
         <button onClick={addLesson}>+ Új óra</button> <button onClick={makeShort} disabled={!lessons.length}>Rövidített rend készítése ebből</button>
       </>}
-    </section>
+    </section>}
 
-    <section><h2>Ünnepnapok, tanítás nélküli napok</h2>
+    {can('calendar') && <section><h2>Ünnepnapok, tanítás nélküli napok</h2>
       {d.closed_days.sort((a, b) => a.day.localeCompare(b.day)).map(c => <div className="row" key={c.id}>{c.day} – {c.reason}
         <button onClick={() => run(supabase.from('closed_days').delete().eq('id', c.id))}>Törlés</button></div>)}
       <div className="row"><input type="date" value={cd.day} onChange={e => setCd({ ...cd, day: e.target.value })} />
@@ -302,9 +310,9 @@ function Panel() {
           setCd({ day: '', reason: '' }); setCdTo('')
         }}>{cdTo && cdTo > cd.day ? 'Időszak hozzáadása' : 'Hozzáadás'}</button></div>
       <p>Szünethez add meg az első napot, az "Ig" mezőben az utolsót (pl. őszi szünet: első nap – utolsó nap, megnevezés: Őszi szünet).</p>
-    </section>
+    </section>}
 
-    <section><h2>Visszaszámlálók (szünetek, ünnepek)</h2>
+    {can('calendar') && <section><h2>Visszaszámlálók (szünetek, ünnepek)</h2>
       {[...(d.countdowns ?? [])].sort((a, b) => (a.target_date + a.target_time).localeCompare(b.target_date + b.target_time)).map(c =>
         <div className="row" key={c.id}>{KIND[c.kind]?.icon} {c.title} – {c.target_date} {c.target_time.slice(0, 5)}
           <button onClick={() => run(supabase.from('countdowns').delete().eq('id', c.id))}>Törlés</button></div>)}
@@ -313,25 +321,25 @@ function Panel() {
         <input type="date" value={ev.date} onChange={e => setEv({ ...ev, date: e.target.value })} />
         <input type="time" value={ev.time} onChange={e => setEv({ ...ev, time: e.target.value })} />
         <button disabled={!ev.title || !ev.date} onClick={async () => { await run(supabase.from('countdowns').insert({ school_id: d.id, title: ev.title, kind: ev.kind, target_date: ev.date, target_time: ev.time })); setEv({ title: '', kind: 'other', date: '', time: '00:00' }) }}>Hozzáadás</button></div>
-    </section>
+    </section>}
 
-    <section><h2>Közlemények (főoldal és TV)</h2>
+    {can('announcements') && <section><h2>Közlemények (főoldal és TV)</h2>
       {(d.announcements ?? []).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />
         <input type="date" title="Meddig látszódjon (üres = amíg törlöd)" value={an.until} onChange={e => setAn({ ...an, until: e.target.value })} />
         <button disabled={!an.text} onClick={async () => { await run(supabase.from('announcements').insert({ school_id: d.id, text: an.text, active_until: an.until || null })); setAn({ text: '', until: '' }) }}>Hozzáadás</button></div>
-    </section>
+    </section>}
 
-    <section><h2>Különleges napok (adott napra más csengetési rend)</h2>
+    {can('calendar') && <section><h2>Különleges napok (adott napra más csengetési rend)</h2>
       {[...(d.schedule_dates ?? [])].sort((a, b) => a.day.localeCompare(b.day)).map(x => <div className="row" key={x.id}>{x.day}: {d.schedules.find(s => s.id === x.schedule_id)?.name ?? '?'}
         <button onClick={() => run(supabase.from('schedule_dates').delete().eq('id', x.id))}>Törlés</button></div>)}
       <div className="row"><input type="date" value={sd.day} onChange={e => setSd({ ...sd, day: e.target.value })} />
         <select value={sd.schedule_id} onChange={e => setSd({ ...sd, schedule_id: e.target.value })}><option value="">Válassz rendet…</option>{d.schedules.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         <button disabled={!sd.day || !sd.schedule_id} onClick={async () => { await run(supabase.from('schedule_dates').insert({ school_id: d.id, ...sd })); setSd({ day: '', schedule_id: '' }) }}>Hozzáadás</button></div>
-    </section>
+    </section>}
 
-    <section><h2>Mai változások (elmaradó órák, helyettesítés, teremváltás)</h2>
+    {can('changes') && <section><h2>Mai változások (elmaradó órák, helyettesítés, teremváltás)</h2>
       {[...(d.changes ?? [])].sort((a, b) => b.day.localeCompare(a.day)).slice(0, 20).map(c => <div className="row" key={c.id}>{c.day}: {c.lesson_label} – {CHG[c.kind]} {c.text}
         <button onClick={() => run(supabase.from('changes').delete().eq('id', c.id))}>Törlés</button></div>)}
       <div className="row"><input type="date" value={chg.day} onChange={e => setChg({ ...chg, day: e.target.value })} />
@@ -344,9 +352,9 @@ function Panel() {
           if (chgNotify && chg.day === todayStr) await sendPush(`${CHG[chg.kind]}: ${chg.lesson_label}`.replace(/: $/, ''), chg.text || chg.lesson_label)
           setChg({ ...chg, lesson_label: '', text: '' })
         }}>Hozzáadás</button></div>
-    </section>
+    </section>}
 
-    <section><h2>Étlap (a kijelzőn az adott napon látszik)</h2>
+    {can('menu') && <section><h2>Étlap (a kijelzőn az adott napon látszik)</h2>
       {[...(d.menus ?? [])].sort((a, b) => b.day.localeCompare(a.day)).slice(0, 14).map(m => <div className="row" key={m.id}>{m.day}: {m.text}
         <button onClick={() => run(supabase.from('menus').delete().eq('id', m.id))}>Törlés</button></div>)}
       <div className="row"><input type="date" value={mn.day} onChange={e => setMn({ ...mn, day: e.target.value })} />
@@ -354,24 +362,24 @@ function Panel() {
         <button disabled={!mn.day || !mn.text} onClick={async () => { await run(supabase.from('menus').upsert({ school_id: d.id, ...mn }, { onConflict: 'school_id,day' })); setMn({ ...mn, text: '' }) }}>Mentés</button></div>
       <div className="row">Ebédszünet: a(z) <input type="number" min={1} max={12} style={{ width: '4rem' }} defaultValue={d.settings.lunch_after ?? ''} key={'l' + d.settings.lunch_after}
         onBlur={e => setS({ lunch_after: e.target.value ? Number(e.target.value) : null })} />. óra után</div>
-    </section>
+    </section>}
 
-    <section><h2>Kiemelt közlemény (teljes képernyős) és tanév</h2>
+    {can('settings') && <section><h2>Kiemelt közlemény (teljes képernyős) és tanév</h2>
       <div className="row"><input style={{ minWidth: '22rem' }} placeholder="pl. Tűzriadó-gyakorlat 10:00-kor" defaultValue={d.settings.alert_text} key={'a' + d.settings.alert_text} onBlur={e => e.target.value !== d.settings.alert_text && setS({ alert_text: e.target.value })} />
         <label><input type="checkbox" checked={d.settings.alert_active} onChange={e => setS({ alert_active: e.target.checked })} /> Megjelenítés az egész képernyőn</label>
         <button disabled={!d.settings.alert_text} onClick={() => sendPush('Fontos közlemény', d.settings.alert_text)}>Értesítés küldése</button></div>
       <div className="row">Tanév kezdete <input type="date" value={d.settings.year_start ?? ''} onChange={e => setS({ year_start: e.target.value || null })} />
         vége <input type="date" value={d.settings.year_end ?? ''} onChange={e => setS({ year_end: e.target.value || null })} /></div>
-    </section>
+    </section>}
 
-    <section><h2>Időjárás a kijelzőn</h2>
+    {can('settings') && <section><h2>Időjárás a kijelzőn</h2>
       <div className="row"><label><input type="checkbox" checked={d.settings.weather_enabled} onChange={e => setS({ weather_enabled: e.target.checked })} /> Megjelenítés</label> Jelenlegi hely: <b>{d.settings.weather_city}</b></div>
       <div className="row"><input placeholder="Város keresése (pl. Szekszárd)" value={wq} onChange={e => setWq(e.target.value)} />
         <button disabled={!wq.trim()} onClick={searchCity}>Keresés</button></div>
       <div className="row">{wres.map((r, i) => <button key={i} onClick={() => { setS({ weather_city: r.name, weather_lat: r.latitude, weather_lon: r.longitude }); setWres([]); setWq('') }}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} ({r.country})</button>)}</div>
-    </section>
+    </section>}
 
-    <section><h2>Szünet-videók (szünetben ezek játszódnak, hang nélkül)</h2>
+    {can('videos') && <section><h2>Szünet-videók (szünetben ezek játszódnak, hang nélkül)</h2>
       {vids === null && <p>A videók még nincsenek bekapcsolva: futtasd le a <code>supabase/update12.sql</code> fájlt.</p>}
       {vids !== null && <>
         <div className="row"><label><input type="checkbox" checked={d.settings.break_videos !== false} onChange={e => setS({ break_videos: e.target.checked })} /> Videó mutatása szünetben</label></div>
@@ -384,9 +392,9 @@ function Panel() {
             if (!parseVideo(vf.url)) return setMsg('Hiba: csak YouTube-link vagy .mp4 / .webm fájl adható meg (https-sel).')
             await run(supabase.from('break_videos').insert({ school_id: d.id, url: vf.url.trim(), title: vf.title.trim() })); setVf({ url: '', title: '' })
           }}>Hozzáadás</button></div></>}
-    </section>
+    </section>}
 
-    <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>
+    {can('polls') && <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>
       {polls === null && <p>A szavazás még nincs bekapcsolva: futtasd le a <code>supabase/update11.sql</code> fájlt.</p>}
       {(polls ?? []).map(p => <div className="polladm" key={p.id}>
         <b>{p.question}</b> {p.active ? '(aktív)' : '(lezárt)'}
@@ -400,27 +408,28 @@ function Panel() {
           await run(supabase.from('polls').insert({ school_id: d.id, question: pl.q.trim(), options: pl.opts.map(o => o.trim()).filter(Boolean) }))
           setPl({ q: '', opts: ['', '', '', ''] })
         }}>Új szavazás indítása</button></div>}
-    </section>
+    </section>}
 
-    <section><h2>Értesítések (telepített alkalmazás)</h2>
+    {can('push') && <section><h2>Értesítések (telepített alkalmazás)</h2>
       <p>Feliratkozott eszközök: <b>{subs ?? '–'}</b>{subs === null && ' (futtasd le a supabase/update10.sql fájlt)'}</p>
       <div className="row"><input placeholder="Cím (pl. Fontos)" value={pm.title} onChange={e => setPm({ ...pm, title: e.target.value })} />
         <input style={{ minWidth: '18rem' }} placeholder="Szöveg" value={pm.body} onChange={e => setPm({ ...pm, body: e.target.value })} />
         <button disabled={!pm.title} onClick={async () => { await sendPush(pm.title, pm.body); setPm({ title: '', body: '' }) }}>Küldés mindenkinek</button></div>
-    </section>
+    </section>}
 
-    <section><h2>Biztonsági mentés</h2>
+    {can('full') && <Members sid={d.id} />}
+    {can('full') && <section><h2>Biztonsági mentés</h2>
       <p>Az iskola összes adata (rendek, órák, ünnepnapok, visszaszámlálók, közlemények, étlap, beállítások) egy fájlban. Az adminok fiókjai és a feltöltött logó/hang nem kerülnek bele.</p>
       <div className="row"><button onClick={downloadBackup}>Mentés letöltése</button>
         <label className="btn">Visszaállítás fájlból<input type="file" accept="application/json,.json" hidden onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) restoreBackup(f) }} /></label></div>
-    </section>
+    </section>}
 
-    <section><h2>Módosítási napló (utolsó 100)</h2>
+    {can('full') && <section><h2>Módosítási napló (utolsó 100)</h2>
       {log === null && <p>A napló még nincs bekapcsolva: futtasd le a <code>supabase/update5.sql</code> fájlt.</p>}
       {log && log.length === 0 && <p>Még nincs bejegyzés.</p>}
       <ul className="audit">{(log ?? []).map(r => <li key={r.id}>
         <time>{new Date(r.created_at).toLocaleString('hu-HU', { timeZone: 'Europe/Budapest', dateStyle: 'short', timeStyle: 'medium' })}</time>
         <b>{r.user_email ?? 'SQL / rendszer'}</b><span>{ACT[r.action]} ({TABLE[r.table_name] ?? r.table_name})</span><em>{describe(r)}</em></li>)}</ul>
-    </section>
+    </section>}
   </main>
 }
