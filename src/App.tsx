@@ -6,6 +6,7 @@ import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
 import { PollCard, usePoll } from './Poll'
 import BreakVideo, { useVideos } from './BreakVideo'
 import RestMode from './Rest'
+import Ask from './Ask'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -330,6 +331,7 @@ export default function App() {
     {tv && strip && <div className="stripbox">{strip}</div>}
     {tv && note && <section className="ticker"><span>Közlemény</span><p key={note.id} className="flash">{note.text}</p></section>}
     {!tv && data.settings.site_version && <footer className="foot"><span className="ver">Verzió {data.settings.site_version}</span>{data.settings.version_note && <span>{data.settings.version_note}</span>}</footer>}
+    {!tv && data.settings.ask_enabled && <Ask />}
     {overlay}
   </main>
   {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}

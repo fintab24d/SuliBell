@@ -42,6 +42,7 @@ Hétvégén, ünnepnapon és tanítási idő után az oldal kiírja, hogy ma nin
 - Szünetben (ha az iskola megadott videókat) néma videó játszódik a főoldalon és a TV-n.
 - A tűzijátéknak és a konfettinek hangja van, ha a **Hang engedélyezése** gombot megnyomtad.
 - Ha nincs tanítás (hétvége, ünnep, szünet), az oldal Pihenő módra vált: vicces üzenet, hátralévő idő a következő szünetig és egy Snake-játék. A játék a szünethez igazodik: őszi szünetben Halloween-os édességfogó, télen karácsonyi ajándékfogó, tavasszal húsvéti tojásvadászat, nyáron nincs játék, egyébkor (hétvége, ünnep) Snake. A TV-n a gép játszik, a főoldalon te is kipróbálhatod.
+- Ha be van kapcsolva, a jobb alsó **Kérdezz** gombbal az AI-asszisztenst kérdezheted a csengetésről, szünetekről, ebédről. Egy gép válaszol, ezért fontos dolgot ellenőrizz.
 - Ha az iskola szavazást indít, az eredmény élőben látszik, a TV-n QR-kóddal. Telefonról egyszer lehet szavazni.
 
 ## Telepítés alkalmazásként

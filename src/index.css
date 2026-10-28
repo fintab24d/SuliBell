@@ -372,3 +372,18 @@ html.cursor-on,html.cursor-on *{cursor:none!important}
 /* TV: felhívás a játékhoz */
 .tvplay{position:absolute;inset:auto 0 0 0;padding:1.4vh 1.2vw;text-align:center;font:600 2.1vh var(--f);color:#fff;background:linear-gradient(transparent,rgba(8,10,28,.9) 55%);pointer-events:none}
 .tvplay b{color:var(--n-cyan,var(--break))}
+
+/* AI-asszisztens */
+.askfab{position:fixed;right:16px;bottom:16px;z-index:50;padding:12px 18px;font-weight:600;border-radius:999px;box-shadow:0 0 24px -4px var(--n-cyan,var(--break))}
+.askbox{position:fixed;right:16px;bottom:72px;z-index:50;width:min(400px,calc(100vw - 32px));height:min(540px,calc(100vh - 100px));display:grid;grid-template-rows:auto 1fr auto;border:1px solid var(--edge);border-radius:18px;background:var(--panel);backdrop-filter:blur(16px);box-shadow:0 20px 60px -10px rgba(0,0,0,.6),0 0 30px -10px var(--n-cyan,var(--break));overflow:hidden}
+.askbox header{display:flex!important;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;margin:0;padding:12px 16px;border-bottom:1px solid var(--line)}.askbox header small{color:var(--mut)}
+.askmsgs{overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.askm{margin:0;padding:9px 13px;border-radius:14px;max-width:88%;line-height:1.4;white-space:pre-wrap}
+.askm.user{align-self:flex-end;background:color-mix(in srgb,var(--n-pink,var(--lesson)) 28%,transparent);border:1px solid color-mix(in srgb,var(--n-pink,var(--lesson)) 55%,transparent)}
+.askm.model{align-self:flex-start;border:1px solid var(--line);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.askhint{display:grid;gap:8px;color:var(--mut)}.askhint p{margin:0 0 4px}.askhint button{text-align:left;padding:9px 12px}
+.askbox form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}.askbox form input{flex:1;min-width:0}
+.askdots{display:flex;gap:5px;padding:12px 14px}.askdots i{width:7px;height:7px;border-radius:50%;background:var(--n-cyan,var(--break));animation:askdot 1s ease-in-out infinite}
+.askdots i:nth-child(2){animation-delay:.15s}.askdots i:nth-child(3){animation-delay:.3s}
+@keyframes askdot{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}}
+@media(prefers-reduced-motion:reduce){.askdots i{animation:none}}
