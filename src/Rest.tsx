@@ -91,6 +91,7 @@ function Snake({ tv }: { tv: boolean }) {
     <div className="snakehud"><span>Snake</span><span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{score}</b></span><span>Rekord: <b>{best}</b></span></div>
     <div className="snakescreen">
       <canvas ref={cv} onPointerDown={down} onPointerUp={up} aria-label="Snake játék" />
+      {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
       {!tv && mode !== 'play' && <div className="snakeover">
         {mode === 'over' && <b>Vége! {score} pont</b>}
         <button className="cta" onClick={start}>{mode === 'over' ? 'Újra' : '▶ Játssz te is'}</button>
@@ -189,6 +190,7 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
     <div className="snakehud"><span>{T.title}</span><span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{hud.score}</b></span><span>{'❤️'.repeat(Math.max(0, hud.lives))}</span><span>Rekord: <b>{best}</b></span></div>
     <div className="snakescreen">
       <canvas ref={cv} onPointerMove={aim} onPointerDown={e => { if (m.current !== 'play' && !tv) start(); else aim(e) }} aria-label={T.title} />
+      {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
       {!tv && mode !== 'play' && <div className="snakeover">
         {mode === 'over' && <b>Vége! {hud.score} pont</b>}
         <button className="cta" onClick={start}>{mode === 'over' ? 'Újra' : '▶ Játssz te is'}</button>

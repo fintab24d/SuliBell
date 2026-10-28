@@ -368,3 +368,7 @@ html.cursor-on,html.cursor-on *{cursor:none!important}
 
 .restgrid.solo{grid-template-columns:1fr}
 .snakehud{flex-wrap:wrap}
+
+/* TV: felhívás a játékhoz */
+.tvplay{position:absolute;inset:auto 0 0 0;padding:1.4vh 1.2vw;text-align:center;font:600 2.1vh var(--f);color:#fff;background:linear-gradient(transparent,rgba(8,10,28,.9) 55%);pointer-events:none}
+.tvplay b{color:var(--n-cyan,var(--break))}
