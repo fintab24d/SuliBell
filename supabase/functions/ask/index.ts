@@ -119,12 +119,23 @@ Deno.serve(async (req) => {
     }
     if (model.includes('2.5')) body.generationConfig.thinkingConfig = { thinkingBudget: 0 }   // gyorsabb, olcsóbb válasz
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body),
+    const call = (b: unknown) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(b),
     })
+    let r = await call(body)
+    if (r.status === 400 && body.generationConfig.thinkingConfig) {          // van olyan modell, amelyik nem fogadja a gondolkodás-kikapcsolást
+      delete body.generationConfig.thinkingConfig
+      r = await call(body)
+    }
     if (!r.ok) {
-      console.error('Gemini hiba', r.status, (await r.text()).slice(0, 300))
-      return reply({ error: r.status === 429 ? 'Az asszisztens most túlterhelt, próbáld később.' : 'Most nem tudok válaszolni, próbáld később.' }, 502)
+      const raw = (await r.text()).slice(0, 600)
+      console.error('Gemini hiba', r.status, model, raw)
+      let msg = ''
+      try { msg = JSON.parse(raw)?.error?.message ?? '' } catch { /* nem JSON */ }
+      return reply({
+        error: r.status === 429 ? 'Az asszisztens most túlterhelt, próbáld később.' : 'Most nem tudok válaszolni, próbáld később.',
+        detail: `Gemini ${r.status} (${model}): ${String(msg).slice(0, 200)}`,
+      }, 502)
     }
     const j = await r.json()
     const answer = (j?.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? '').join('').trim()

@@ -24,7 +24,7 @@ export default function Ask() {
       if (data?.answer) answer = data.answer
       else if (data?.error) answer = data.error
       else if (error) {
-        try { const j = await (error as any).context?.json?.(); if (j?.error) answer = j.error } catch { /* marad az általános üzenet */ }
+        try { const j = await (error as any).context?.json?.(); if (j?.error) answer = j.error + (j.detail ? `\n(${j.detail})` : '') } catch { /* marad az általános üzenet */ }
       }
     } catch { /* hálózati hiba: marad az általános üzenet */ }
     setMsgs(m => [...m, { role: 'model', text: answer }]); setBusy(false)
