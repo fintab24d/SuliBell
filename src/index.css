@@ -365,3 +365,6 @@ html.cursor-on,html.cursor-on *{cursor:none!important}
 .cur-pop i{inset:-14px;border:2px solid var(--cb);border-radius:50%;box-shadow:0 0 14px var(--cb);animation:curpop .55s ease-out forwards}
 @keyframes curpop{from{transform:scale(.3);opacity:.95}to{transform:scale(2.6);opacity:0}}
 @media(hover:none),(prefers-reduced-motion:reduce){.cur{display:none}}
+
+.restgrid.solo{grid-template-columns:1fr}
+.snakehud{flex-wrap:wrap}
