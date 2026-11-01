@@ -5,6 +5,7 @@ import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
 import { parseVideo } from './lib/video'
 import Members from './Members'
+import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
 
 interface Full {
@@ -251,6 +252,7 @@ function Panel() {
     <header><h1>Admin – {d.name}</h1><button onClick={() => supabase.auth.signOut()}>Kilépés</button></header>
     <p className="msg" role="status">{msg}</p>
     {perms && <p>Korlátozott jogosultságod van: csak a megengedett részeket látod és szerkesztheted.</p>}
+    <AdminAi schoolId={d.id} onDone={load} />
 
     {can('settings') && <section><h2>Beállítások</h2>
       <div className="row">Iskola neve (csak az adminban látszik) <input defaultValue={d.name} key={d.name} onBlur={e => e.target.value !== d.name && run(supabase.from('schools').update({ name: e.target.value }).eq('id', d.id))} /></div>
