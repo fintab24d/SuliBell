@@ -44,6 +44,9 @@ Hétvégén, ünnepnapon és tanítási idő után az oldal kiírja, hogy ma nin
 - Ha nincs tanítás (hétvége, ünnep, szünet), az oldal Pihenő módra vált: vicces üzenet, hátralévő idő a következő szünetig és egy Snake-játék. A játék a szünethez igazodik: őszi szünetben Halloween-os édességfogó, télen karácsonyi ajándékfogó, tavasszal húsvéti tojásvadászat, nyáron nincs játék, egyébkor (hétvége, ünnep) Snake. A TV-n a gép játszik, a főoldalon te is kipróbálhatod.
 - Ha be van kapcsolva, a jobb alsó **Kérdezz** gombbal az AI-asszisztenst kérdezheted a csengetésről, szünetekről, ebédről. Egy gép válaszol, ezért fontos dolgot ellenőrizz.
 - Ha az iskola szavazást indít, az eredmény élőben látszik, a TV-n QR-kóddal. Telefonról egyszer lehet szavazni.
+- **Személyes órarend (📚 Saját óráim):** a diákok napokra bontva beállíthatják saját tantárgyaikat és termeiket (gyorsválasztó gombokkal is). A számlap, a következő óra jelzője és a mai napirend ezután a saját órájukat és termüket (pl. 📍 204) mutatja.
+- **Élő Hangulat- és Reakciófal (Emoji-eső):** egy gombnyomással küldhetők élő reakciók (🔥, 🎉, 😴, 🤯, ☕, ❤️), amelyek valós időben felúsznak minden megnyitott oldalon és a folyosói TV-n is, miközben a hangulatsáv mutatja az iskola aktuális hangulatát.
+- **Szüneti Mini-Aréna & Napi Toplista:** két gyors, 20–30 másodperces kihívás (**⚡ Neon Reflex** és **🧠 Napi Villám-Kvíz**, ahol mindenki ugyanazt a napi kérdéssort kapja), élőben frissülő napi iskolai toplistával. Tanóra közben automatikusan összecsukódik, hogy ne vonja el a figyelmet.
 
 ## Telepítés alkalmazásként
 Az oldalt telepítheted a telefonodra vagy a számítógépedre, és onnantól külön ikonról indul, internet nélkül is megnyílik (az utoljára betöltött adatokkal). A folyosói kijelzőn lévő QR-kód közvetlenül a telepítési oldalra visz, ott lépésről lépésre végigvezet az oldal.

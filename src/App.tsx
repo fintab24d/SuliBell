@@ -7,6 +7,9 @@ import { PollCard, usePoll } from './Poll'
 import BreakVideo, { useVideos } from './BreakVideo'
 import RestMode from './Rest'
 import Ask from './Ask'
+import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } from './MySchedule'
+import { VibeOverlay, VibePanel, useVibe } from './Vibe'
+import Arena from './Arena'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -40,10 +43,11 @@ function useBell() {
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
-function Ring({ s }: { s: BellState }) {
+function Ring({ s, my }: { s: BellState; my?: MyLessonEntry }) {
   const R = 86, C = 2 * Math.PI * R
   const live = s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before'
-  const title = s.phase === 'lesson' ? s.current!.label : s.phase === 'closed' ? s.reason : TITLE[s.phase]
+  const custom = s.phase === 'lesson' ? formatMyLesson(s.current, my) : null
+  const title = s.phase === 'lesson' ? (custom?.title || s.current!.label) : s.phase === 'closed' ? s.reason : TITLE[s.phase]
   return <div className={`ring ${s.phase}`}>
     <svg viewBox="0 0 200 200" aria-hidden="true">
       <defs><linearGradient id="ledg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ff3fb8" /><stop offset=".3" stopColor="#ffb02e" /><stop offset=".5" stopColor="#39ff7a" /><stop offset=".75" stopColor="#2de2ff" /><stop offset="1" stopColor="#8a5cff" /></linearGradient></defs>
@@ -54,6 +58,12 @@ function Ring({ s }: { s: BellState }) {
     <span key={`${s.phase}-${s.current?.id ?? s.next?.id}`} className="bell-fx" aria-hidden="true" />
     <div className="inner">
       <div className="title">{title}</div>
+      {custom && (custom.sub || custom.room) && (
+        <div className="ring-my">
+          {custom.sub && <span>{custom.sub}</span>}
+          {custom.room && <b>📍 {custom.room}</b>}
+        </div>
+      )}
       {live && <>
         <div key={`${s.phase}-${s.current?.id ?? s.next?.id}`} className={`count flash ${s.soon ? 'soon' : ''} ${s.remaining >= 3600 ? 'long' : ''}`}><Digits text={fmtCount(s.remaining)} /></div>
         <div className="sub">{s.soon ? 'Hamarosan csengetés' : s.phase === 'before' ? 'az első csengetésig' : 'a csengetésig'}</div>
@@ -63,10 +73,13 @@ function Ring({ s }: { s: BellState }) {
   </div>
 }
 
-function Next({ s, secs }: { s: BellState; secs: number }) {
+function Next({ s, secs, my }: { s: BellState; secs: number; my?: MyLessonEntry }) {
   if (!s.next) return null
   const m = Math.ceil((toSec(s.next.start_time) - secs) / 60)
-  return <div className="next"><span>Következő</span><b>{s.next.label}</b>
+  const custom = formatMyLesson(s.next, my)
+  return <div className="next"><span>Következő</span><b>{custom.title}</b>
+    {custom.sub && <span className="my-sub">({custom.sub})</span>}
+    {custom.room && <span className="room-pill">📍 {custom.room}</span>}
     <span>{fmtHM(s.next.start_time)}{m > 0 && m < 120 ? `, ${m} perc múlva` : ''}</span></div>
 }
 
@@ -142,9 +155,16 @@ export default function App() {
   const { poll, counts } = usePoll(data?.id)
   const videos = useVideos(data?.id)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
+  const { map: myMap, update: updateMyMap, getEntry, hasAny: hasMySchedule } = useMySchedule()
+  const [myModalOpen, setMyModalOpen] = useState(false)
 
   // Csengetési hang: állapotváltáskor szól, ha az admin bekapcsolta és a hang engedélyezve van.
   const [audioOn, setAudioOn] = useState(audioReady())
+  const { counts: vibeCounts, floats: vibeFloats, sendVibe, cooldown: vibeCooldown } = useVibe(
+    data?.id,
+    z?.date ?? '',
+    !!data?.settings.sound_enabled && audioOn
+  )
   const [dismissed, setDismissed] = useState('')   // a kiemelt közleményt a látogató bezárhatja (a TV-n nem)
   useEffect(() => { if (audioOn) preload(data?.settings.bell_sound_url) }, [audioOn, data?.settings.bell_sound_url])   // saját csengőhang előtöltése
   // Telepítés gomb (Chrome, Edge, Android): a böngésző jelzi, ha az oldal telepíthető
@@ -173,6 +193,9 @@ export default function App() {
   const pv = s.phase === 'closed' || s.phase === 'after' ? nextSchoolDay(z.date, data.schedules, data.closed, ovMap) : undefined
   const tl = s.phase === 'closed' ? pv?.schedule : schedule            // zárva: a következő tanítási nap rendje látszik
   const L = tl ? byPos(tl.lessons) : []
+  const boardWeekday = s.phase === 'closed' && pv ? (new Date(pv.date + 'T12:00:00Z').getUTCDay() || 7) : z.weekday
+  const myCur = !tv ? getEntry(z.weekday, s.current?.position) : undefined
+  const myNext = !tv ? getEntry(z.weekday, s.next?.position) : undefined
   const first = pv && byPos(pv.schedule.lessons)[0]
   const until = pv && first ? Math.round((instantOf(pv.date, toSec(first.start_time), data.settings.timezone) - now.getTime()) / 1000) : 0
   const dayName = (d: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('hu-HU', { timeZone: 'UTC', ...o }).format(new Date(d + 'T12:00:00Z'))
@@ -188,7 +211,11 @@ export default function App() {
   const T = schedule && s.phase !== 'closed' ? byPos(schedule.lessons) : []
   const hm = (t: number) => `${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}`
   const away = (t: number) => { const m = Math.ceil((t - z.secs) / 60); return m < 120 ? `${m} perc múlva` : `${Math.floor(m / 60)} óra ${m % 60} perc múlva` }
-  const bellList = T.flatMap((l: any) => [{ t: toSec(l.start_time), txt: `${l.label} kezdete` }, { t: toSec(l.end_time), txt: `${l.label} vége` }])
+  const bellList = T.flatMap((l: any) => {
+    const custom = !tv ? formatMyLesson(l, getEntry(z.weekday, l.position)) : { title: l.label }
+    const lbl = custom.sub ? `${custom.title} (${custom.sub})` : custom.title
+    return [{ t: toSec(l.start_time), txt: `${lbl} kezdete` }, { t: toSec(l.end_time), txt: `${lbl} vége` }]
+  })
     .filter((b: any) => b.t > z.secs).sort((x: any, y: any) => x.t - y.t).slice(0, 4)
   const leftSecs = T.reduce((n: number, l: any) => n + Math.max(0, toSec(l.end_time) - Math.max(toSec(l.start_time), z.secs)), 0)
   const dayPct = T.length ? Math.round(Math.min(1, Math.max(0, (z.secs - toSec(T[0].start_time)) / (toSec(T[T.length - 1].end_time) - toSec(T[0].start_time)))) * 100) : 0
@@ -277,6 +304,7 @@ export default function App() {
         {offline && <span className="pill">Offline mód</span>}
         {data.settings.sound_enabled && !audioOn && <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>}
         {!tv && !standalone && (installEv ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button> : <button onClick={() => location.assign('/telepites')}>Telepítés</button>)}
+        {!tv && <button className={hasMySchedule ? 'on' : ''} onClick={() => setMyModalOpen(true)} title="Saját tantárgyak és termek beállítása">📚 Saját óráim</button>}
         {!tv && <NotifyButton schoolId={data.id} />}
         {!tv && <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>}
         {!tv && style === 'neon' && <button className={fxOn ? 'on' : ''} aria-pressed={fxOn} title="Effektek be/ki" onClick={() => { const v = !fxOn; try { localStorage.setItem('fx', v ? '1' : '0') } catch { /* nem baj */ } setFxOn(v) }}>✨</button>}
@@ -287,19 +315,25 @@ export default function App() {
     {!tv && vid}
     {!tv && restBox}
     {!tv && pollCard}
+    {!tv && <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />}
     {!tv && stats && <section className="panel overview full"><div className="tag">A nap egy pillantásra</div>{stats}{strip}</section>}
 
     <section className={`panel now ${s.phase}`}>
       <div className="tag">Most</div>
-      <Ring s={s} />
-      {(!tv || data.settings.tv_show_next) && (pv && first ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} /> : <Next s={s} secs={z.secs} />)}
+      <Ring s={s} my={myCur} />
+      {(!tv || data.settings.tv_show_next) && (pv && first ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} /> : <Next s={s} secs={z.secs} my={myNext} />)}
       {!tv && bells}
     </section>
 
-    {tv && <section className="tvside">{T.length > 0 ? <>{vid}{bells}{vid ? pollCard : pollCard || stats}{!vid && lunchBox}</> : <>{pollCard}{restBox || (events[0] && evCard(events[0], 0))}{offCard}</>}</section>}
+    {tv && <section className="tvside">{T.length > 0 ? <>{vid}{bells}{vid ? pollCard : pollCard || stats}{!vid && lunchBox}</> : <>{pollCard}{restBox || (events[0] && evCard(events[0], 0))}{offCard}</>}<VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv /><Arena schoolId={data.id} day={z.date} phase={s.phase} tv /></section>}
 
     {!tv && L.length > 0 && <section className="panel board">
-      <div className="tag">{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
+      <div className="board-top">
+        <div className="tag" style={{ marginBottom: 0 }}>{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
+        <button type="button" className="my-btn" onClick={() => setMyModalOpen(true)}>
+          ✏️ {hasMySchedule ? 'Saját óráim szerkesztése' : 'Saját óráim beírása'}
+        </button>
+      </div>
       <h2>{tl.name}</h2>
       <p className="meta">{s.phase === 'closed' && pv ? `${dayName(pv.date, { weekday: 'long', month: 'long', day: 'numeric' })}, ` : ''}{L.length} óra, {fmtHM(L[0].start_time)} – {fmtHM(L[L.length - 1].end_time)}</p>
       <ol>{L.map((l: any, i: number) => {
@@ -307,13 +341,23 @@ export default function App() {
         const cls = s.current?.id === l.id ? 'now' : s.next?.id === l.id ? 'upnext' : s.phase !== 'closed' && z.secs >= toSec(l.end_time) ? 'past' : ''
         const gap = nx ? Math.round((toSec(nx.start_time) - toSec(l.end_time)) / 60) : 0
         const inBreak = s.phase === 'break' && s.next?.id === nx?.id
+        const custom = formatMyLesson(l, getEntry(boardWeekday, l.position))
         return <Fragment key={l.id}>
-          <li className={`l ${cls}`} style={p(cls === 'now')}><b>{l.label}</b><span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span><span className="chip">{CHIP[cls] ?? ''}</span></li>
+          <li className={`l ${cls} ${custom.isFree ? 'free' : ''}`} style={p(cls === 'now')}>
+            <div className="l-main">
+              <b>{custom.title}</b>
+              {custom.sub && <small className="l-orig">{custom.sub}</small>}
+              {custom.room && <span className="room-pill">📍 {custom.room}</span>}
+            </div>
+            <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
+            <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'szabad' : '')}</span>
+          </li>
           {gap > 0 && <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)}>{gap} perc szünet</li>}
         </Fragment>
       })}</ol>
     </section>}
 
+    {!tv && <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />}
     {!tv && lunchBox}
     {!tv && notes.length > 0 && <section className="panel full"><div className="tag">Közlemények</div>
       {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}</section>}
@@ -332,8 +376,19 @@ export default function App() {
     {tv && note && <section className="ticker"><span>Közlemény</span><p key={note.id} className="flash">{note.text}</p></section>}
     {!tv && data.settings.site_version && <footer className="foot"><span className="ver">Verzió {data.settings.site_version}</span>{data.settings.version_note && <span>{data.settings.version_note}</span>}</footer>}
     {!tv && data.settings.ask_enabled && <Ask />}
+    {!tv && (
+      <MyScheduleModal
+        open={myModalOpen}
+        onClose={() => setMyModalOpen(false)}
+        lessons={L}
+        defaultWeekday={boardWeekday}
+        map={myMap}
+        onSave={updateMyMap}
+      />
+    )}
     {overlay}
   </main>
+  <VibeOverlay floats={vibeFloats} />
   {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
   <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
   {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
