@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 
-const AREAS: [string, string][] = [['menu', 'Étlap'], ['changes', 'Mai változások'], ['announcements', 'Közlemények'], ['calendar', 'Naptár (ünnepnapok, visszaszámlálók, különleges napok)'],
+const AREAS: [string, string][] = [['ai', '✨ AI Asszisztens használata'], ['menu', 'Étlap'], ['changes', 'Mai változások'], ['announcements', 'Közlemények'], ['calendar', 'Naptár (ünnepnapok, visszaszámlálók, különleges napok)'],
   ['schedules', 'Csengetési rendek'], ['polls', 'Szavazás'], ['videos', 'Szünet-videók'], ['push', 'Értesítések küldése'], ['settings', 'Beállítások (logó, hang, időjárás, kiemelt közlemény, verzió)']]
 type M = { user_id: string; email: string; perms: string[] | null }
 

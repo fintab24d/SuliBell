@@ -137,6 +137,7 @@ Deno.serve(async (req) => {
 
       const done: string[] = []
       const can = async (area: string) => (await userClient.rpc('can_edit', { sid: school_id, area })).data === true
+      if (!(await can('ai'))) return reply({ error: 'Nincs jogosultságod az AI Asszisztens használatához!' }, 403)
 
       if (Array.isArray(parsed.menus) && parsed.menus.length) {
         if (!(await can('menu'))) return reply({ error: 'Nincs jogosultságod az étlap szerkesztéséhez!' }, 403)
