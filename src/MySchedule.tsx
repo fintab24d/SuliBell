@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Lesson } from './lib/engine'
+import { supabase } from './lib/supabase'
 
 export interface MyLessonEntry {
   subject: string
@@ -23,6 +24,29 @@ const QUICK_SUBJECTS = [
   'Matek', 'Magyar', 'Töri', 'Angol', 'Német', 'Info',
   'Fizika', 'Kémia', 'Biosz', 'Föci', 'Tesi', 'Lyukasóra',
 ]
+
+/** Kép átméretezése és tömörítése base64 formátumba az AI felismeréshez (mint az AdminAi-ban). */
+function compressImage(file: File): Promise<{ mime: string; data: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const max = 1400
+      let w = img.width, h = img.height
+      if (w > max || h > max) {
+        if (w > h) { h = Math.round((h * max) / w); w = max }
+        else { w = Math.round((w * max) / h); h = max }
+      }
+      const cv = document.createElement('canvas')
+      cv.width = w; cv.height = h
+      cv.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      const dataUrl = cv.toDataURL('image/jpeg', 0.82)
+      resolve({ mime: 'image/jpeg', data: dataUrl.split(',')[1] })
+      URL.revokeObjectURL(img.src)
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export function loadMySchedule(): MyScheduleMap {
   try {
@@ -111,12 +135,20 @@ export function MyScheduleModal({
   const [draft, setDraft] = useState<MyScheduleMap>(map)
   const [activePos, setActivePos] = useState<number>(1)
 
+  // AI Kép / Kréta képernyőkép importáló állapotok
+  const [aiFiles, setAiFiles] = useState<File[]>([])
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiMsg, setAiMsg] = useState('')
+
   useEffect(() => {
     if (open) {
       setDraft(map)
       const d = defaultWeekday >= 1 && defaultWeekday <= 5 ? defaultWeekday : 1
       setDay(d)
       setActivePos(lessons[0]?.position ?? 1)
+      setAiMsg('')
+      setAiFiles([])
     }
   }, [open, map, defaultWeekday])
 
@@ -136,10 +168,65 @@ export function MyScheduleModal({
 
   const pickQuick = (subj: string) => {
     setSlot(activePos, 'subject', subj)
-    // Automatikusan lépjen a következő órára a villámgyors kitöltéshez
     const idx = slots.findIndex(s => s.position === activePos)
     if (idx >= 0 && idx + 1 < slots.length) {
       setActivePos(slots[idx + 1].position)
+    }
+  }
+
+  const runAiImport = async () => {
+    if ((!aiFiles.length && !aiPrompt.trim()) || aiBusy) return
+    setAiBusy(true)
+    setAiMsg('⏳ Kép elemzése és órák kiolvasása...')
+    try {
+      const images = await Promise.all(aiFiles.slice(0, 5).map(compressImage))
+      const { data, error } = await supabase.functions.invoke('ask', {
+        body: {
+          mode: 'timetable',
+          images,
+          prompt: aiPrompt.trim(),
+          default_weekday: day,
+        },
+      })
+      if (error || data?.error) {
+        let msg = data?.error || error?.message || 'Ismeretlen hiba'
+        try {
+          const j = await (error as any)?.context?.json?.()
+          if (j?.error) msg = j.error
+        } catch { /* ignore */ }
+        setAiMsg('❌ ' + msg)
+      } else if (Array.isArray(data?.days) && data.days.length > 0) {
+        const next: MyScheduleMap = { ...draft }
+        let total = 0
+        for (const dItem of data.days) {
+          const w = Number(dItem.weekday)
+          if (w < 1 || w > 5 || !Array.isArray(dItem.lessons)) continue
+          const dMap: Record<number, MyLessonEntry> = { ...(next[String(w)] ?? {}) }
+          for (const lItem of dItem.lessons) {
+            const pos = Number(lItem.position)
+            const subject = String(lItem.subject ?? '').trim().slice(0, 32)
+            const room = String(lItem.room ?? '').trim().slice(0, 16)
+            if (pos >= 1 && pos <= 12 && (subject || room)) {
+              dMap[pos] = { subject, room }
+              total++
+            }
+          }
+          next[String(w)] = dMap
+        }
+        setDraft(next)
+        onSave(next)
+        setAiFiles([])
+        setAiPrompt('')
+        const firstDay = Number(data.days[0]?.weekday)
+        if (firstDay >= 1 && firstDay <= 5) setDay(firstDay)
+        setAiMsg(`✅ ${data.summary || `${total} óra sikeresen beolvasva és elmentve!`}`)
+      } else {
+        setAiMsg('⚠️ Nem sikerült órákat találni a képen. Próbálj élesebb képernyőképet!')
+      }
+    } catch (err) {
+      setAiMsg('❌ Hiba történt: ' + String(err))
+    } finally {
+      setAiBusy(false)
     }
   }
 
@@ -164,9 +251,45 @@ export function MyScheduleModal({
           </div>
           <button onClick={saveAndClose} title="Mentés és bezárás">✕</button>
         </div>
-        <p className="meta">
-          Írd be vagy válaszd ki egy érintéssel az óráidat! Csak a saját eszközödön tároljuk, és a számláló automatikusan a te tantárgyadat és termedet mutatja.
-        </p>
+
+        {/* AI Kép / Kréta képernyőkép importáló doboz */}
+        <div className="my-ai-box">
+          <div className="my-ai-top">
+            <b>✨ Importálás Kréta képernyőképből vagy fotóból</b>
+            <small>Tölts fel 1–5 képernyőképet az e-Kréta / Filc órarendedről (vagy írd le szövegesen), és az AI magától kitölti a napokat!</small>
+          </div>
+          <div className="my-ai-row">
+            <label className="btn">
+              📷 {aiFiles.length ? `${aiFiles.length} kép kiválasztva` : 'Kréta képernyőkép / fotó'}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={e => setAiFiles(Array.from(e.target.files ?? []).slice(0, 5))}
+              />
+            </label>
+            {aiFiles.length > 0 && (
+              <button type="button" onClick={() => setAiFiles([])} title="Képek törlése">✕</button>
+            )}
+            <input
+              type="text"
+              className="my-ai-inp"
+              placeholder="Vagy írd le (pl. Hétfő 1. Matek 204, 2. Töri 108)..."
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+            />
+            <button
+              type="button"
+              className="cta"
+              disabled={aiBusy || (!aiFiles.length && !aiPrompt.trim())}
+              onClick={runAiImport}
+            >
+              {aiBusy ? 'Beolvasás...' : '✨ Beolvasás'}
+            </button>
+          </div>
+          {aiMsg && <p className="my-ai-msg" role="status">{aiMsg}</p>}
+        </div>
 
         <div className="mydays" role="tablist">
           {DAYS.map(d => {

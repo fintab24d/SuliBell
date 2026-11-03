@@ -407,6 +407,13 @@ html.cursor-on,html.cursor-on *{cursor:none!important}
 .mymodal{width:min(680px,100%);max-height:calc(100svh - 32px);overflow:auto;display:grid;gap:14px;box-shadow:0 24px 64px rgba(0,0,0,.65),0 0 36px -10px var(--lesson)}
 .mymodal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .mymodal-head h2{margin:0;font-size:1.45rem}
+.my-ai-box{display:grid;gap:10px;padding:12px 14px;border-radius:14px;border:1px solid color-mix(in srgb,var(--brand) 60%,var(--line));background:color-mix(in srgb,var(--brand) 9%,transparent);box-shadow:0 0 22px -10px var(--brand)}
+.my-ai-top{display:grid;gap:3px}
+.my-ai-top b{color:var(--brand);font-size:1rem}
+.my-ai-top small{color:var(--mut);line-height:1.35}
+.my-ai-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.my-ai-inp{flex:1;min-width:190px;padding:8px 11px;border-radius:10px;border:1px solid var(--edge);background:var(--key);color:var(--fg);font:inherit}
+.my-ai-msg{margin:0;font-weight:600;font-size:.92rem}
 .mydays{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 @media(max-width:560px){.mydays{grid-template-columns:repeat(3,1fr)}}
 .mydays button{display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 10px}

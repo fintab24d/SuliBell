@@ -83,6 +83,25 @@ Szabályok:
 - Ha egy képen csak napok nevei szerepelnek (pl. Hétfő, Kedd...) dátum nélkül, a "Ma" dátumhoz viszonyítva számold ki az aktuális hét (vagy ha már elmúlt a hét közepe és jövő heti étlapnak tűnik, a megfelelő hét) pontos YYYY-MM-DD dátumait!
 - Csak azokat a tömböket töltsd ki, amire a kérés vagy a kép vonatkozik.`
 
+const TIMETABLE_SYSTEM = `Te a SuliBell diák-órarend felismerő AI-ja vagy. A diák által feltöltött e-Kréta / Filc képernyőképről, papír órarend fotójáról vagy szöveges leírásból kinyered az órákat és termeket.
+KIZÁRÓLAG érvényes JSON-t adj vissza (markdown kódblokk nélkül), az alábbi formátumban:
+{
+  "summary": "Rövid magyar visszajelzés (pl. Hétfőtől péntekig 28 óra beolvasva).",
+  "days": [
+    {
+      "weekday": 1,
+      "lessons": [
+        { "position": 1, "subject": "Matek", "room": "204" }
+      ]
+    }
+  ]
+}
+Szabályok:
+- "weekday": 1 = Hétfő, 2 = Kedd, 3 = Szerda, 4 = Csütörtök, 5 = Péntek. Ha a képen csak egyetlen nap látszik (pl. mobil Kréta napi nézet) és nem derül ki melyik nap, használd a felhasználó által megadott "default_weekday" értéket!
+- "position": az óra sorszáma (1, 2, 3... 10). Ha az óra sorszáma nincs kiírva, de az időpontok igen (pl. 8:00 = 1. óra, 8:55 = 2. óra stb.), számozd be sorrendben 1-től!
+- "subject": rövid, közérthető magyar tantárgynév (pl. "matematika" -> "Matek", "magyar nyelv és irodalom" -> "Magyar", "történelem" -> "Töri", "angol nyelv" -> "Angol", "német nyelv" -> "Német", "testnevelés" -> "Tesi", "informatika / digitális kultúra" -> "Info", "biológia" -> "Biosz", "földrajz" -> "Föci", egyébként a tantárgy rövid neve max 22 karakterben).
+- "room": a terem száma vagy rövid jele (pl. "204", "Tornaterem", "Infó 1"), ha nincs a képen, akkor "".`
+
 async function sha(s: string) {
   const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
   return [...new Uint8Array(b)].slice(0, 12).map(x => x.toString(16).padStart(2, '0')).join('')
@@ -190,6 +209,49 @@ Deno.serve(async (req) => {
       return reply({
         summary: (parsed.summary || 'Kész!') + (done.length ? ` (Mentve: ${done.join(', ')})` : ' (Nem találtam menthető adatot.)'),
       })
+    }
+
+    // ==================== DIÁK ÓRAREND KÉP-IMPORTÁLÓ MÓD ====================
+    if (bodyReq.mode === 'timetable') {
+      const { prompt, image, images, default_weekday } = bodyReq
+      const imgList: { mime: string; data: string }[] = Array.isArray(images)
+        ? images.slice(0, 5)
+        : image?.data && image?.mime
+        ? [image]
+        : []
+      if (!prompt && !imgList.length) return reply({ error: 'Tölts fel egy képernyőképet az órarendedről, vagy írd le az óráidat!' }, 400)
+
+      const parts: any[] = [
+        {
+          text: `Alapértelmezett nap (ha a képről nem derül ki melyik nap): ${default_weekday || 1}.\nMegjegyzés a diáktól: ${prompt || 'Olvasd ki a tantárgyakat és termeket a képről!'}`,
+        },
+      ]
+      for (const im of imgList) {
+        if (im?.data && im?.mime) parts.push({ inlineData: { mimeType: im.mime, data: im.data } })
+      }
+
+      const gBody: any = {
+        systemInstruction: { parts: [{ text: TIMETABLE_SYSTEM }] },
+        contents: [{ role: 'user', parts }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2000, responseMimeType: 'application/json' },
+      }
+
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(gBody),
+      })
+
+      if (!r.ok) {
+        return reply({ error: 'Nem sikerült beolvasni a képet, próbáld újra kicsit később.' }, 502)
+      }
+
+      const j = await r.json()
+      const text = (j?.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? '').join('').trim()
+      try {
+        const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ''))
+        return reply(parsed)
+      } catch {
+        return reply({ error: 'Nem sikerült értelmezni a képen lévő órarendet.' }, 500)
+      }
     }
 
     // ==================== LÁTOGATÓI KÉRDEZŐ MÓD ====================
