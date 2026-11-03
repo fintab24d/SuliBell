@@ -212,7 +212,7 @@ export default function App() {
   const hm = (t: number) => `${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}`
   const away = (t: number) => { const m = Math.ceil((t - z.secs) / 60); return m < 120 ? `${m} perc múlva` : `${Math.floor(m / 60)} óra ${m % 60} perc múlva` }
   const bellList = T.flatMap((l: any) => {
-    const custom = !tv ? formatMyLesson(l, getEntry(z.weekday, l.position)) : { title: l.label }
+    const custom = formatMyLesson(l, !tv ? getEntry(z.weekday, l.position) : undefined)
     const lbl = custom.sub ? `${custom.title} (${custom.sub})` : custom.title
     return [{ t: toSec(l.start_time), txt: `${lbl} kezdete` }, { t: toSec(l.end_time), txt: `${lbl} vége` }]
   })

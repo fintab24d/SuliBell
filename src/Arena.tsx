@@ -160,7 +160,8 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
     const ch = supabase.channel(`sulibell-arena-${schoolId}`, {
       config: { broadcast: { self: false } },
     })
-    ch.on('broadcast', { event: 'score' }, ({ payload }) => {
+    ch.on('broadcast', { event: 'score' }, (msg: any) => {
+      const payload = msg?.payload
       if (!alive || !payload?.entry) return
       setBoard(prev => {
         const next = mergeLeaderboard(prev, payload.entry)

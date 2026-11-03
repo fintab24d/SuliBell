@@ -105,7 +105,8 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
     const ch = supabase.channel(`sulibell-vibe-${schoolId}`, {
       config: { broadcast: { self: false } },
     })
-    ch.on('broadcast', { event: 'react' }, ({ payload }) => {
+    ch.on('broadcast', { event: 'react' }, (msg: any) => {
+      const payload = msg?.payload
       if (!alive || !payload?.vibe) return
       spawnEmoji(payload.vibe, 2)
       setCounts(prev => {
