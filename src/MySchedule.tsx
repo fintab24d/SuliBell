@@ -22,7 +22,7 @@ const DAYS: { id: number; name: string; short: string }[] = [
 
 const QUICK_SUBJECTS = [
   'Matek', 'Magyar', 'Töri', 'Angol', 'Német', 'Info',
-  'Fizika', 'Kémia', 'Biosz', 'Föci', 'Tesi', 'Lyukasóra',
+  'Fizika', 'Kémia', 'Biosz', 'Föci', 'Tesi', '☕ Lyukasóra',
 ]
 
 /** Kép átméretezése és tömörítése base64 formátumba az AI felismeréshez (mint az AdminAi-ban). */
@@ -194,7 +194,7 @@ export function MyScheduleModal({
           const j = await (error as any)?.context?.json?.()
           if (j?.error) msg = j.error
         } catch { /* ignore */ }
-        setAiMsg('❌ ' + msg)
+        setAiMsg('❌ Hiba: ' + msg)
       } else if (Array.isArray(data?.days) && data.days.length > 0) {
         const next: MyScheduleMap = { ...draft }
         let total = 0
@@ -252,15 +252,14 @@ export function MyScheduleModal({
           <button onClick={saveAndClose} title="Mentés és bezárás">✕</button>
         </div>
 
-        {/* AI Kép / Kréta képernyőkép importáló doboz */}
         <div className="my-ai-box">
           <div className="my-ai-top">
-            <b>✨ Importálás Kréta képernyőképből vagy fotóból</b>
-            <small>Tölts fel 1–5 képernyőképet az e-Kréta / Filc órarendedről (vagy írd le szövegesen), és az AI magától kitölti a napokat!</small>
+            <b>✨ Automatikus kitöltés Kréta képernyőképből / fotóból (AI)</b>
+            <small>Tölts fel 1–5 képernyőképet a Kréta / Filc órarendedről (vagy fotót a papír órarendről), és az AI másodpercek alatt kitölti a napjaidat!</small>
           </div>
           <div className="my-ai-row">
             <label className="btn">
-              📷 {aiFiles.length ? `${aiFiles.length} kép kiválasztva` : 'Kréta képernyőkép / fotó'}
+              📷 {aiFiles.length ? `${aiFiles.length} kép kiválasztva` : 'Kép kiválasztása'}
               <input
                 type="file"
                 accept="image/*"
@@ -285,7 +284,7 @@ export function MyScheduleModal({
               disabled={aiBusy || (!aiFiles.length && !aiPrompt.trim())}
               onClick={runAiImport}
             >
-              {aiBusy ? 'Beolvasás...' : '✨ Beolvasás'}
+              {aiBusy ? '⏳ Beolvasás...' : '✨ Beolvasás'}
             </button>
           </div>
           {aiMsg && <p className="my-ai-msg" role="status">{aiMsg}</p>}
@@ -314,7 +313,7 @@ export function MyScheduleModal({
           <div className="mychips">
             {QUICK_SUBJECTS.map(subj => (
               <button key={subj} type="button" className="qchip" onClick={() => pickQuick(subj)}>
-                {subj === 'Lyukasóra' ? '☕ Lyukasóra' : subj}
+                {subj}
               </button>
             ))}
           </div>

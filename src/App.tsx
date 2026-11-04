@@ -13,10 +13,11 @@ import Arena from './Arena'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
-import { computeState, fmtCount, fmtHM, addDays, instantOf, nextSchoolDay, pickSchedule, scheduleFor, schoolDaysBetween, toSec, zoned, type BellState } from './lib/engine'
+import { computeState, fmtCount, fmtHM, addDays, instantOf, nextSchoolDay, scheduleFor, schoolDaysBetween, toSec, zoned, type BellState } from './lib/engine'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`
+const fmtRoom = (r: string) => (/^\d+$/.test(r.trim()) ? `${r.trim()}. terem` : r.trim())
 const TITLE: Record<BellState['phase'], string> = { closed: '', before: 'Tanítás előtt', lesson: '', break: 'Szünet', after: 'Vége a tanításnak' }
 const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő' }
 
@@ -50,7 +51,13 @@ function Ring({ s, my }: { s: BellState; my?: MyLessonEntry }) {
   const title = s.phase === 'lesson' ? (custom?.title || s.current!.label) : s.phase === 'closed' ? s.reason : TITLE[s.phase]
   return <div className={`ring ${s.phase}`}>
     <svg viewBox="0 0 200 200" aria-hidden="true">
-      <defs><linearGradient id="ledg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ff3fb8" /><stop offset=".3" stopColor="#ffb02e" /><stop offset=".5" stopColor="#39ff7a" /><stop offset=".75" stopColor="#2de2ff" /><stop offset="1" stopColor="#8a5cff" /></linearGradient></defs>
+      <defs>
+        <linearGradient id="ledg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#ff3fb8" /><stop offset="28%" stopColor="#ffb02e" />
+          <stop offset="55%" stopColor="#39ff7a" /><stop offset="80%" stopColor="#2de2ff" />
+          <stop offset="100%" stopColor="#8a5cff" />
+        </linearGradient>
+      </defs>
       <circle className="ticks" cx="100" cy="100" r="96" stroke="url(#ledg)" />
       <circle className="track" cx="100" cy="100" r={R} />
       {live && <circle className="arc" cx="100" cy="100" r={R} strokeDasharray={C} strokeDashoffset={C * (1 - s.progress)} />}
@@ -61,7 +68,7 @@ function Ring({ s, my }: { s: BellState; my?: MyLessonEntry }) {
       {custom && (custom.sub || custom.room) && (
         <div className="ring-my">
           {custom.sub && <span>{custom.sub}</span>}
-          {custom.room && <b>📍 {custom.room}</b>}
+          {custom.room && <b>📍 {fmtRoom(custom.room)}</b>}
         </div>
       )}
       {live && <>
@@ -79,7 +86,7 @@ function Next({ s, secs, my }: { s: BellState; secs: number; my?: MyLessonEntry 
   const custom = formatMyLesson(s.next, my)
   return <div className="next"><span>Következő</span><b>{custom.title}</b>
     {custom.sub && <span className="my-sub">({custom.sub})</span>}
-    {custom.room && <span className="room-pill">📍 {custom.room}</span>}
+    {custom.room && <span className="room-pill">📍 {fmtRoom(custom.room)}</span>}
     <span>{fmtHM(s.next.start_time)}{m > 0 && m < 120 ? `, ${m} perc múlva` : ''}</span></div>
 }
 
@@ -143,15 +150,17 @@ export default function App() {
   const { data, offline, z, schedule, state, now } = useBell() as any
   const tv = location.pathname.startsWith('/display')
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
-  // Stílus: a fejlécben váltható; a /display?style=school alakú cím a TV-nek is beállítja
   const style = 'neon'
   useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
   useEffect(() => { document.documentElement.dataset.theme = theme || data?.settings.theme || 'dark' }, [theme, data])
   useEffect(() => { document.documentElement.dataset.phase = state?.phase ?? '' }, [state?.phase])
   useEffect(() => { document.title = APP_NAME }, [])
-  // ✨ Effektek (részecskék, csengetési villanás): eszközönként kikapcsolhatók, a Neon stílusban élnek
-  const [fxOn, setFxOn] = useState(() => { try { return localStorage.getItem('fx') !== '0' } catch { return true } })
-  const fx = fxOn && style === 'neon'
+  useEffect(() => {
+    document.documentElement.classList.toggle('tv-lock', tv)
+    return () => document.documentElement.classList.remove('tv-lock')
+  }, [tv])
+  const [fxOn, setFxOn] = useState(() => localStorage.getItem('fx') !== '0')
+  const fx = fxOn && data?.settings.particles !== false && style === 'neon'
   const { poll, counts } = usePoll(data?.id)
   const videos = useVideos(data?.id)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
@@ -216,15 +225,15 @@ export default function App() {
     const lbl = custom.sub ? `${custom.title} (${custom.sub})` : custom.title
     return [{ t: toSec(l.start_time), txt: `${lbl} kezdete` }, { t: toSec(l.end_time), txt: `${lbl} vége` }]
   })
-    .filter((b: any) => b.t > z.secs).sort((x: any, y: any) => x.t - y.t).slice(0, 4)
+    .filter((b: any) => b.t > z.secs).sort((x: any, y: any) => x.t - y.t).slice(0, tv ? 3 : 4)
   const leftSecs = T.reduce((n: number, l: any) => n + Math.max(0, toSec(l.end_time) - Math.max(toSec(l.start_time), z.secs)), 0)
   const dayPct = T.length ? Math.round(Math.min(1, Math.max(0, (z.secs - toSec(T[0].start_time)) / (toSec(T[T.length - 1].end_time) - toSec(T[0].start_time)))) * 100) : 0
   const nb = T.findIndex((l: any, i: number) => toSec(l.end_time) > z.secs && T[i + 1])
   const stats = T.length > 0 && <div className="stats">
-    <div className="stat"><b>{T.filter((l: any) => toSec(l.end_time) <= z.secs).length} / {T.length}</b><span>elmúlt óra</span></div>
-    <div className="stat"><b>{Math.floor(leftSecs / 3600) ? `${Math.floor(leftSecs / 3600)} óra ` : ''}{Math.floor(leftSecs / 60) % 60} perc</b><span>tanítási idő hátra</span></div>
-    <div className="stat"><b>{dayPct}%</b><span>a nap haladása</span></div>
-    {nb >= 0 && <div className="stat"><b>{Math.round((toSec(T[nb + 1].start_time) - toSec(T[nb].end_time)) / 60)} perc</b><span>következő szünet, {fmtHM(T[nb].end_time)} után</span></div>}
+    <div className="stat"><b>{T.filter((l: any) => toSec(l.end_time) <= z.secs).length}/{T.length}</b><span>óra kész</span></div>
+    <div className="stat"><b>{Math.floor(leftSecs / 3600) ? `${Math.floor(leftSecs / 3600)} ó ` : ''}{Math.floor(leftSecs / 60) % 60} p</b><span>tanítás van hátra</span></div>
+    <div className="stat"><b>{dayPct}%</b><span>a napból</span></div>
+    {nb >= 0 && <div className="stat"><b>{Math.round((toSec(T[nb + 1].start_time) - toSec(T[nb].end_time)) / 60)} perc</b><span>köv. szünet ({fmtHM(T[nb].end_time)})</span></div>}
   </div>
   const strip = T.length > 0 && <DayStrip L={T} secs={z.secs} phase={s.phase} />
   const bells = bellList.length > 0 && <div className="bells"><div className="tag">Következő csengetések</div>
@@ -266,18 +275,18 @@ export default function App() {
   const sett = data.settings
   const KCH: Record<string, string> = { cancel: 'Elmarad', substitute: 'Helyettesítés', room: 'Teremváltás', info: 'Info' }
   const chgs = ((data.changes ?? []) as any[]).filter(c => c.day === z.date)
-  const changesBox = chgs.length > 0 && <section className="panel full chg"><div className="tag">Mai változások</div>
+  const changesBox = chgs.length > 0 && <section className="panel chg"><div className="tag">Mai változások</div>
     <ul>{chgs.map(c => <li key={c.id}><b>{c.lesson_label}</b><span className={`chip k-${c.kind}`}>{KCH[c.kind]}</span><em>{c.text}</em></li>)}</ul></section>
   const menu = ((data.menus ?? []) as any[]).find(m => m.day === z.date)
   const SL = schedule ? byPos(schedule.lessons) : []
   const li = sett.lunch_after ? SL.findIndex((l: any) => l.position === sett.lunch_after) : -1
   const lunchTime = li >= 0 && SL[li + 1] ? `${fmtHM(SL[li].end_time)} – ${fmtHM(SL[li + 1].start_time)}` : ''
-  const lunchBox = menu && s.phase !== 'closed' && <section className="panel full lunch"><div className="tag">Mai ebéd{lunchTime ? `, ebédszünet ${lunchTime}` : ''}</div><p>{menu.text}</p></section>
+  const lunchBox = menu && s.phase !== 'closed' && <section className="panel lunch"><div className="tag">Mai ebéd{lunchTime ? ` (${lunchTime})` : ''}</div><p>{menu.text}</p></section>
   const tms = (d: string) => Date.parse(d + 'T00:00:00Z')
   const yp = sett.year_start && sett.year_end ? Math.round(Math.min(1, Math.max(0, (tms(z.date) - tms(sett.year_start)) / (tms(sett.year_end) - tms(sett.year_start)) || 0)) * 100) : 0
-  const yearBox = sett.year_start && sett.year_end && <section className="panel full"><div className="tag">Tanév haladása</div>
+  const yearBox = sett.year_start && sett.year_end && <div className="year-inline"><div className="tag">Tanév haladása</div>
     <div className="yearbar"><i style={{ width: `${yp}%` }} /></div>
-    <p className="meta">{yp}%, még {schoolDaysBetween(startDay, sett.year_end, data.schedules, data.closed, ovMap)} tanítási nap a tanév végéig</p></section>
+    <p className="meta" style={{ marginBottom: 0 }}>{yp}%, még {schoolDaysBetween(startDay, sett.year_end, data.schedules, data.closed, ovMap)} tanítási nap a tanév végéig</p></div>
   const overlay = sett.alert_active && sett.alert_text && dismissed !== sett.alert_text && <div className="alertfs" role="alertdialog" aria-live="assertive">
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
@@ -285,113 +294,287 @@ export default function App() {
   const e0 = events[0]
   const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}
     ev={pv && first && until > 0
-      ? { icon: /ősz/i.test(s.reason ?? '') ? '🍂' : /tél/i.test(s.reason ?? '') ? '❄️' : /nyár/i.test(s.reason ?? '') ? '☀️' : /tavasz/i.test(s.reason ?? '') ? '🌷' : '😴',
+      ? { icon: /ősz/i.test(s.reason) ? '🍂' : /tél/i.test(s.reason) ? '❄️' : /nyár/i.test(s.reason) ? '☀️' : /tavasz/i.test(s.reason) ? '🌷' : '😴',
           days: Math.floor(until / 86400), hours: Math.floor((until % 86400) / 3600), mins: Math.floor((until % 3600) / 60),
-          note: `Ennyi van még hátra a pihenésből. Tanítás újra: ${dayName(pv.date, { weekday: 'long' })}, ${fmtHM(first.start_time)}` }
+          note: `Ennyi van még hátra a pihenésből! Tanítás újra: ${dayName(pv.date, { weekday: 'long' })}, ${fmtHM(first.start_time)}` }
       : e0 ? { icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined} />
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
 
-  return <><main className={tv ? 'tv' : ''}>
-    <header>
-      {tv && qr && <div className="qrbox"><img src={qr} alt="QR-kód az oldal megnyitásához" /><span>Telepítsd a telefonodra</span></div>}
-      <span className="brand"><img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />{APP_NAME}</span>
-      <div className="timebox">
-        <Digits text={tv && !data.settings.tv_show_seconds ? hms(z.secs).slice(0, 5) : hms(z.secs)} />
-        <div className="date">{dateText}</div>
-        {wx && <div className="wx"><span aria-hidden="true">{WX(wx.c)[0]}</span><b>{wx.t}°C, {WX(wx.c)[1]}</b><small>{data.settings.weather_city}, ma {wx.min}–{wx.max}°C, csapadék {wx.p}%</small></div>}
-      </div>
-      <div className="tools">
-        {offline && <span className="pill">Offline mód</span>}
-        {data.settings.sound_enabled && !audioOn && <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>}
-        {!tv && !standalone && (installEv ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button> : <button onClick={() => location.assign('/telepites')}>Telepítés</button>)}
-        {!tv && <button className={hasMySchedule ? 'on' : ''} onClick={() => setMyModalOpen(true)} title="Saját tantárgyak és termek beállítása">📚 Saját óráim</button>}
-        {!tv && <NotifyButton schoolId={data.id} />}
-        {!tv && <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>}
-        {!tv && style === 'neon' && <button className={fxOn ? 'on' : ''} aria-pressed={fxOn} title="Effektek be/ki" onClick={() => { const v = !fxOn; try { localStorage.setItem('fx', v ? '1' : '0') } catch { /* nem baj */ } setFxOn(v) }}>✨</button>}
-      </div>
-    </header>
-
-    {changesBox}
-    {!tv && vid}
-    {!tv && restBox}
-    {!tv && pollCard}
-    {!tv && <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />}
-    {!tv && stats && <section className="panel overview full"><div className="tag">A nap egy pillantásra</div>{stats}{strip}</section>}
-
-    <section className={`panel now ${s.phase}`}>
-      <div className="tag">Most</div>
-      <Ring s={s} my={myCur} />
-      {(!tv || data.settings.tv_show_next) && (pv && first ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} /> : <Next s={s} secs={z.secs} my={myNext} />)}
-      {!tv && bells}
-    </section>
-
-    {tv && <section className="tvside">{T.length > 0 ? <>{vid}{bells}{vid ? pollCard : pollCard || stats}{!vid && lunchBox}</> : <>{pollCard}{restBox || (events[0] && evCard(events[0], 0))}{offCard}</>}<VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv /><Arena schoolId={data.id} day={z.date} phase={s.phase} tv /></section>}
-
-    {!tv && L.length > 0 && <section className="panel board">
-      <div className="board-top">
-        <div className="tag" style={{ marginBottom: 0 }}>{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
-        <button type="button" className="my-btn" onClick={() => setMyModalOpen(true)}>
-          ✏️ {hasMySchedule ? 'Saját óráim szerkesztése' : 'Saját óráim beírása'}
-        </button>
-      </div>
-      <h2>{tl.name}</h2>
-      <p className="meta">{s.phase === 'closed' && pv ? `${dayName(pv.date, { weekday: 'long', month: 'long', day: 'numeric' })}, ` : ''}{L.length} óra, {fmtHM(L[0].start_time)} – {fmtHM(L[L.length - 1].end_time)}</p>
-      <ol>{L.map((l: any, i: number) => {
-        const nx = L[i + 1]
-        const cls = s.current?.id === l.id ? 'now' : s.next?.id === l.id ? 'upnext' : s.phase !== 'closed' && z.secs >= toSec(l.end_time) ? 'past' : ''
-        const gap = nx ? Math.round((toSec(nx.start_time) - toSec(l.end_time)) / 60) : 0
-        const inBreak = s.phase === 'break' && s.next?.id === nx?.id
-        const custom = formatMyLesson(l, getEntry(boardWeekday, l.position))
-        return <Fragment key={l.id}>
-          <li className={`l ${cls} ${custom.isFree ? 'free' : ''}`} style={p(cls === 'now')}>
-            <div className="l-main">
-              <b>{custom.title}</b>
-              {custom.sub && <small className="l-orig">{custom.sub}</small>}
-              {custom.room && <span className="room-pill">📍 {custom.room}</span>}
+  // ==================== TV / DISPLAY NÉZET (FIX 100SVH, GÖRGETÉS NÉLKÜL) ====================
+  if (tv) {
+    return (
+      <>
+        <main className="tv">
+          <header className="tv-hdr">
+            <div className="tv-hdr-left">
+              <span className="brand">
+                <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+                {APP_NAME}
+              </span>
+              <div className="date">{dateText}</div>
+              {wx && (
+                <div className="wx">
+                  <span>{WX(wx.c)[0]}</span>
+                  <b>{wx.t}°C, {WX(wx.c)[1]}</b>
+                  <small>{data.settings.weather_city} ({wx.min}–{wx.max}°C, 💧{wx.p}%)</small>
+                </div>
+              )}
             </div>
-            <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
-            <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'szabad' : '')}</span>
-          </li>
-          {gap > 0 && <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)}>{gap} perc szünet</li>}
-        </Fragment>
-      })}</ol>
-    </section>}
 
-    {!tv && <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />}
-    {!tv && lunchBox}
-    {!tv && notes.length > 0 && <section className="panel full"><div className="tag">Közlemények</div>
-      {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}</section>}
+            <div className="timebox">
+              <Digits text={!data.settings.tv_show_seconds ? hms(z.secs).slice(0, 5) : hms(z.secs)} />
+            </div>
 
-    {!tv && yearBox}
-    {!tv && <section className="panel full"><div className="tag">E heti rend</div>
-      <div className="week">{week.map(w => <div key={w.date} className={`wd ${w.date === z.date ? 'today' : ''} ${w.dim ? 'off' : ''}`}>
-        <b>{dayName(w.date, { weekday: 'long' })}</b><small>{dayName(w.date, { month: 'long', day: 'numeric' })}</small><span>{w.info}</span></div>)}</div></section>}
+            <div className="tv-hdr-right">
+              <div className="tools">
+                {offline && <span className="pill">Offline mód</span>}
+                {data.settings.sound_enabled && !audioOn && (
+                  <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>
+                )}
+              </div>
+              {qr && (
+                <div className="qrbox">
+                  <img src={qr} alt="QR-kód az oldal megnyitásához" />
+                  <span>Telepítsd<br />telefonra</span>
+                </div>
+              )}
+            </div>
+          </header>
 
-    {!tv && (events.length > 0 || offCard) && <section className="events">
-      <div className="tag wide">Közelgő szünetek és ünnepek</div>
-      {events.map(evCard)}{offCard}
-    </section>}
+          <div className="tv-main">
+            <section className={`panel now ${s.phase}`}>
+              <Ring s={s} />
+              {data.settings.tv_show_next && (
+                pv && first
+                  ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
+                  : <Next s={s} secs={z.secs} />
+              )}
+            </section>
 
-    {tv && strip && <div className="stripbox">{strip}</div>}
-    {tv && note && <section className="ticker"><span>Közlemény</span><p key={note.id} className="flash">{note.text}</p></section>}
-    {!tv && data.settings.site_version && <footer className="foot"><span className="ver">Verzió {data.settings.site_version}</span>{data.settings.version_note && <span>{data.settings.version_note}</span>}</footer>}
-    {!tv && data.settings.ask_enabled && <Ask />}
-    {!tv && (
-      <MyScheduleModal
-        open={myModalOpen}
-        onClose={() => setMyModalOpen(false)}
-        lessons={L}
-        defaultWeekday={boardWeekday}
-        map={myMap}
-        onSave={updateMyMap}
-      />
-    )}
-    {overlay}
-  </main>
-  <VibeOverlay floats={vibeFloats} />
-  {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
-  <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
-  {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
-  {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
-  </>
+            <section className="tvside">
+              {changesBox}
+              {T.length > 0 ? (
+                <>
+                  {vid ? (
+                    <div className="tv-vid-row">
+                      {vid}
+                      {pollCard || bells}
+                    </div>
+                  ) : (
+                    <>
+                      {bells}
+                      {pollCard || stats}
+                    </>
+                  )}
+                  <div className="tv-subgrid">
+                    {!vid && lunchBox}
+                    <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
+                    <Arena schoolId={data.id} day={z.date} phase={s.phase} tv />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {pollCard}
+                  {restBox || (events[0] && evCard(events[0], 0))}
+                  <div className="tv-subgrid">
+                    {offCard}
+                    <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
+                    <Arena schoolId={data.id} day={z.date} phase={s.phase} tv />
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
+
+          <div className="tv-bottom">
+            {strip && <div className="stripbox">{strip}</div>}
+            {note && <section className="ticker"><span>Közlemény</span><p key={note.id} className="flash">{note.text}</p></section>}
+          </div>
+
+          {overlay}
+        </main>
+        <VibeOverlay floats={vibeFloats} />
+        {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
+        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
+        {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
+        {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
+      </>
+    )
+  }
+
+  // ==================== NORMÁL (BENTO DASHBOARD) NÉZET ====================
+  return (
+    <>
+      <main className="bento-app">
+        <header className="bento-hdr">
+          <div className="hdr-brand-col">
+            <span className="brand">
+              <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+              {APP_NAME}
+            </span>
+            <div className="hdr-meta">
+              <div className="date">{dateText}</div>
+              {wx && (
+                <div className="wx">
+                  <span>{WX(wx.c)[0]}</span>
+                  <b>{wx.t}°C, {WX(wx.c)[1]}</b>
+                  <small>{data.settings.weather_city} ({wx.min}–{wx.max}°C, 💧{wx.p}%)</small>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="timebox">
+            <Digits text={hms(z.secs)} />
+          </div>
+
+          <div className="tools">
+            {offline && <span className="pill">Offline mód</span>}
+            {data.settings.sound_enabled && !audioOn && (
+              <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>
+            )}
+            {!standalone && (
+              installEv
+                ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button>
+                : <button onClick={() => location.assign('/telepites')}>Telepítés</button>
+            )}
+            <button className={hasMySchedule ? 'on' : ''} onClick={() => setMyModalOpen(true)} title="Saját tantárgyak és termek beállítása">📚 Saját óráim</button>
+            <NotifyButton schoolId={data.id} />
+            {data.settings.particles !== false && (
+              <button className={fxOn ? 'on' : ''} onClick={() => { const v = !fxOn; localStorage.setItem('fx', v ? '1' : '0'); setFxOn(v) }} title="Háttéreffektek">✨</button>
+            )}
+            <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>
+          </div>
+        </header>
+
+        {/* 3 oszlopos Bento Műszerfal */}
+        <div className="dash-grid">
+          {/* 1. OSZLOP (BAL): Fő visszaszámláló + Napsáv + Gyors statisztika + Következő csengetések */}
+          <div className="dash-col col-hero">
+            <section className={`panel now ${s.phase}`}>
+              <div className="tag">Most</div>
+              <Ring s={s} my={myCur} />
+              {pv && first
+                ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
+                : <Next s={s} secs={z.secs} my={myNext} />}
+              {strip && <div className="hero-strip">{strip}</div>}
+              {stats && <div className="hero-stats">{stats}</div>}
+              {bells}
+            </section>
+          </div>
+
+          {/* 2. OSZLOP (KÖZÉP): Mai napirend, változások, szünet-videó / pihenő mód, heti áttekintés */}
+          <div className="dash-col col-schedule">
+            {changesBox}
+            {vid}
+            {restBox}
+
+            {L.length > 0 && (
+              <section className="panel board">
+                <div className="board-top">
+                  <div>
+                    <div className="tag" style={{ marginBottom: 4 }}>{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
+                    <h2>{tl.name}</h2>
+                  </div>
+                  <button type="button" className="my-btn" onClick={() => setMyModalOpen(true)}>
+                    ✏️ {hasMySchedule ? 'Óráim szerkesztése' : 'Saját órák megadása'}
+                  </button>
+                </div>
+                <p className="meta">
+                  {s.phase === 'closed' && pv ? `${dayName(pv.date, { weekday: 'long', month: 'long', day: 'numeric' })}, ` : ''}
+                  {L.length} óra ({fmtHM(L[0].start_time)} – {fmtHM(L[L.length - 1].end_time)})
+                </p>
+                <ol>
+                  {L.map((l: any, i: number) => {
+                    const nx = L[i + 1]
+                    const cls = s.current?.id === l.id ? 'now' : s.next?.id === l.id ? 'upnext' : s.phase !== 'closed' && z.secs >= toSec(l.end_time) ? 'past' : ''
+                    const gap = nx ? Math.round((toSec(nx.start_time) - toSec(l.end_time)) / 60) : 0
+                    const inBreak = s.phase === 'break' && s.next?.id === nx?.id
+                    const custom = formatMyLesson(l, getEntry(boardWeekday, l.position))
+                    return (
+                      <Fragment key={l.id}>
+                        <li className={`l ${cls} ${custom.isFree ? 'free' : ''}`} style={p(cls === 'now')}>
+                          <div className="l-main">
+                            <b>{custom.title}</b>
+                            {custom.sub && <small className="l-orig">{custom.sub}</small>}
+                            {custom.room && <span className="room-pill">📍 {fmtRoom(custom.room)}</span>}
+                          </div>
+                          <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
+                          <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'szabad' : '')}</span>
+                        </li>
+                        {gap > 0 && <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)}>{gap} perc szünet</li>}
+                      </Fragment>
+                    )
+                  })}
+                </ol>
+              </section>
+            )}
+
+            <section className="panel week-panel">
+              <div className="tag">E heti rend</div>
+              <div className="week">
+                {week.map(w => (
+                  <div key={w.date} className={`wd ${w.date === z.date ? 'today' : ''} ${w.dim ? 'off' : ''}`}>
+                    <b>{dayName(w.date, { weekday: 'long' })}</b>
+                    <small>{dayName(w.date, { month: 'long', day: 'numeric' })}</small>
+                    <span>{w.info}</span>
+                  </div>
+                ))}
+              </div>
+              {yearBox}
+            </section>
+          </div>
+
+          {/* 3. OSZLOP (JOBB): Élő Hangulatfal, Mini-Aréna, Szavazás, Ebéd, Közlemények, Szünetek */}
+          <div className="dash-col col-side">
+            <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
+
+            <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
+
+            {pollCard}
+            {lunchBox}
+
+            {notes.length > 0 && (
+              <section className="panel">
+                <div className="tag">Közlemények</div>
+                {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}
+              </section>
+            )}
+
+            {(events.length > 0 || offCard) && (
+              <section className="events-side">
+                <div className="tag wide">Közelgő szünetek és ünnepek</div>
+                <div className="events">
+                  {events.map(evCard)}
+                  {offCard}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+
+        {data.settings.site_version && (
+          <footer className="foot">
+            <span className="ver">Verzió {data.settings.site_version}</span>
+            {data.settings.version_note && <span>{data.settings.version_note}</span>}
+          </footer>
+        )}
+        {data.settings.ask_enabled && <Ask />}
+        <MyScheduleModal
+          open={myModalOpen}
+          onClose={() => setMyModalOpen(false)}
+          lessons={L}
+          defaultWeekday={boardWeekday}
+          map={myMap}
+          onSave={updateMyMap}
+        />
+        {overlay}
+      </main>
+      <VibeOverlay floats={vibeFloats} />
+      {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
+      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
+      {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
+      {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
+    </>
+  )
 }

@@ -414,17 +414,17 @@ export default function Arena({
   // TV nézet: kompakt Napi Toplista kártya
   if (tv) {
     if (board.length === 0) return null
-    const top5 = board.slice(0, 5)
+    const top4 = board.slice(0, 4)
     return (
       <section className="panel arena-tv">
-        <div className="tag">🏆 Szüneti Mini-Aréna – Mai Toplista</div>
+        <div className="tag" style={{ marginBottom: 6 }}>🏆 Szüneti Aréna — Napi Toplista</div>
         <ol className="arena-lb">
-          {top5.map((b, i) => (
+          {top4.map((b, i) => (
             <li key={`${b.playerId}-${b.mode}-${i}`} className={i === 0 ? 'gold' : ''}>
               <span className="rk">{i === 0 ? '👑' : `${i + 1}.`}</span>
               <b>{b.name}</b>
               <span className="chip">{b.mode === 'reflex' ? '⚡ Reflex' : '🧠 Kvíz'}</span>
-              <strong className="pts">{b.score} pt</strong>
+              <strong className="pts">{b.score} p</strong>
             </li>
           ))}
         </ol>
@@ -432,30 +432,27 @@ export default function Arena({
     )
   }
 
-  // Tanóra alatt alapból összecsukva, hogy ne vonja el a figyelmet, de kinyitható
-  const collapsed = phase === 'lesson' && !openDuringLesson && rState !== 'play' && qState !== 'play'
+  const inLesson = phase === 'lesson'
+  const collapsed = inLesson && !openDuringLesson && rState !== 'play' && qState !== 'play'
 
   return (
-    <section className="panel full arena">
+    <section className="panel arena">
       <div className="arena-head">
-        <div>
-          <div className="tag" style={{ marginBottom: 4 }}>⚡ Szüneti Mini-Aréna & Napi Toplista</div>
-          <p className="meta" style={{ margin: 0 }}>
-            20–30 másodperces kihívások az egész iskolának – döntsd meg a napi rekordot!
-          </p>
-        </div>
-        {phase === 'lesson' && (
+        <div className="tag" style={{ margin: 0 }}>🎮 Szüneti Mini-Aréna & Napi Toplista</div>
+        {inLesson && (
           <button type="button" onClick={() => setOpenDuringLesson(v => !v)}>
-            {collapsed ? '🎮 Megnyitás óra közben' : 'Elrejtés'}
+            {collapsed ? 'Megnyitás óra alatt is' : 'Elrejtés'}
           </button>
         )}
       </div>
 
       {collapsed ? (
         <div className="arena-collapsed">
-          <span>📚 Épp tanóra tart – a Mini-Aréna szünetben automatikusan kinyílik!</span>
+          <span>📚 Most tanóra van — a Mini-Aréna a következő szünetben automatikusan kinyílik!</span>
           {board[0] && (
-            <b>👑 Mai csúcstartó: {board[0].name} ({board[0].score} pt)</b>
+            <span>
+              👑 Mai rekorder: <b>{board[0].name}</b> ({board[0].score} pont)
+            </span>
           )}
         </div>
       ) : (
@@ -468,20 +465,20 @@ export default function Arena({
                   className={tab === 'reflex' ? 'on' : ''}
                   onClick={() => setTab('reflex')}
                 >
-                  ⚡ Neon Reflex (20 mp)
+                  ⚡ Csengő-Reflex (20 mp)
                 </button>
                 <button
                   type="button"
                   className={tab === 'quiz' ? 'on' : ''}
                   onClick={() => setTab('quiz')}
                 >
-                  🧠 Napi Villám-Kvíz (30 mp)
+                  🧠 Napi Villámkvíz (30 mp)
                 </button>
               </div>
               <input
                 type="text"
                 className="arena-name"
-                placeholder="Beceneved + osztály (pl. Dani 10.B)"
+                placeholder="Becenév / osztály (pl. Dani 10.B)"
                 maxLength={20}
                 value={name}
                 onChange={e => saveName(e.target.value)}
@@ -492,7 +489,7 @@ export default function Arena({
               <div className="reflex-box">
                 <div className="arena-hud">
                   <span>Pont: <b>{rScore}</b></span>
-                  <span>Szorzó: <b className="combo">{rCombo}×</b></span>
+                  <span>Kombo: <b className="combo">{rCombo}×</b></span>
                   <span>Idő: <b>{rTime} mp</b></span>
                 </div>
 
@@ -514,10 +511,10 @@ export default function Arena({
 
                   {rState !== 'play' && (
                     <div className="arena-over">
-                      {rState === 'over' && <h3>Vége! {rScore} pontot szereztél 🎉</h3>}
-                      <p>Kapd el a felvillanó ⚡ és ⭐ célpontokat, de kerüld a 💣 bombát!</p>
+                      {rState === 'over' && <h3>🎉 Vége! Pontszámod: {rScore}</h3>}
+                      <p>Kapd el a felvillanó ⚡ (+10) és ⭐ (+25) csempéket, de kerüld a 💣 bombát!</p>
                       <button type="button" className="cta" onClick={startReflex}>
-                        {rState === 'over' ? '🔄 Újra próbálom' : '▶ Indítás (20 mp)'}
+                        {rState === 'over' ? '🔄 Újra próbálom' : '⚡ Játék indítása (20 mp)'}
                       </button>
                     </div>
                   )}
@@ -527,7 +524,7 @@ export default function Arena({
               <div className={`quiz-box ${qFlash ? `flash-${qFlash}` : ''}`}>
                 <div className="arena-hud">
                   <span>Pont: <b>{qScore}</b></span>
-                  <span>Sorozat: <b className="combo">🔥 {qStreak}</b></span>
+                  <span>Széria: <b className="combo">🔥 {qStreak}</b></span>
                   <span>Idő: <b>{qTime} mp</b></span>
                 </div>
 
@@ -548,10 +545,10 @@ export default function Arena({
                     </>
                   ) : (
                     <div className="arena-over static">
-                      {qState === 'over' && <h3>Szép munka! {qScore} pont 🧠</h3>}
-                      <p>Ma minden diák pontosan ugyanazt a kérdéssort kapja. Hányat tudsz hibátlanul 30 mp alatt?</p>
+                      {qState === 'over' && <h3>🎉 Szép munka! Pontszámod: {qScore}</h3>}
+                      <p>Mindenki ugyanazt a napi feladatsort kapja! Hány kérdésre tudsz helyesen válaszolni 30 mp alatt?</p>
                       <button type="button" className="cta" onClick={startQuiz}>
-                        {qState === 'over' ? '🔄 Újra próbálom' : '▶ Napi Kvíz indítása (30 mp)'}
+                        {qState === 'over' ? '🔄 Újra próbálom' : '🧠 Kvíz indítása (30 mp)'}
                       </button>
                     </div>
                   )}
@@ -562,17 +559,17 @@ export default function Arena({
 
           <div className="arena-side">
             <div className="tag" style={{ marginBottom: 10 }}>
-              🏆 Mai Toplista ({tab === 'reflex' ? 'Neon Reflex' : 'Napi Kvíz'})
+              🏆 Mai Toplista ({tab === 'reflex' ? '⚡ Reflex' : '🧠 Kvíz'})
             </div>
             {modeBoard.length === 0 ? (
-              <p className="meta">Még senki nem állított fel rekordot ma ebben a módban. Legyél te az első!</p>
+              <p className="meta">Még senki nem szerzett pontot ma ebben a módban. Legyél te az első!</p>
             ) : (
               <ol className="arena-lb">
                 {modeBoard.map((b, i) => (
                   <li key={`${b.playerId}-${i}`} className={i === 0 ? 'gold' : ''}>
                     <span className="rk">{i === 0 ? '👑' : `${i + 1}.`}</span>
                     <b>{b.name}</b>
-                    <strong className="pts">{b.score} pt</strong>
+                    <strong className="pts">{b.score} p</strong>
                   </li>
                 ))}
               </ol>
