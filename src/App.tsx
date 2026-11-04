@@ -10,6 +10,7 @@ import Ask from './Ask'
 import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } from './MySchedule'
 import { VibeOverlay, VibePanel, useVibe } from './Vibe'
 import Arena from './Arena'
+import Jukebox from './Jukebox'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -370,6 +371,7 @@ export default function App() {
                     {!vid && lunchBox}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
                     <Arena schoolId={data.id} day={z.date} phase={s.phase} tv />
+                    <Jukebox schoolId={data.id} day={z.date} tv />
                   </div>
                 </>
               ) : (
@@ -380,6 +382,7 @@ export default function App() {
                     {offCard}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
                     <Arena schoolId={data.id} day={z.date} phase={s.phase} tv />
+                    <Jukebox schoolId={data.id} day={z.date} tv />
                   </div>
                 </>
               )}
@@ -525,9 +528,11 @@ export default function App() {
             </section>
           </div>
 
-          {/* 3. OSZLOP (JOBB): Élő Hangulatfal, Mini-Aréna, Szavazás, Ebéd, Közlemények, Szünetek */}
+          {/* 3. OSZLOP (JOBB): Élő Hangulatfal, Mini-Aréna, Zenegép, Szavazás, Ebéd, Közlemények, Szünetek */}
           <div className="dash-col col-side">
             <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
+
+            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} />
 
             <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
 

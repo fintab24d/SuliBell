@@ -1,4 +1,4 @@
--- 3.4: Élő Hangulatfal (Emoji-reakciók) és Szüneti Mini-Aréna napi toplista. Futtasd az update16.sql után.
+-- 3.4: Élő Hangulatfal (Emoji-reakciók), Szüneti Mini-Aréna napi toplista és Szüneti Zenegép (Jukebox). Futtasd az update16.sql után.
 
 create table if not exists school_vibes (
   school_id uuid not null references schools(id) on delete cascade,
@@ -75,3 +75,62 @@ language sql security definer stable set search_path = public as $$
 $$;
 
 grant execute on function submit_arena_score(uuid, date, text, text, text, int), get_arena_leaderboard(uuid, date) to anon, authenticated;
+
+-- Szüneti Zenegép (Jukebox) kívánságlista és szavazatok
+create table if not exists jukebox_songs (
+  school_id uuid not null references schools(id) on delete cascade,
+  day date not null,
+  song_id text not null check (length(song_id) between 3 and 48),
+  title text not null check (length(title) between 1 and 80),
+  requester text not null default '' check (length(requester) <= 32),
+  yt_id text check (yt_id is null or length(yt_id) = 11),
+  votes int not null default 1,
+  created_at timestamptz not null default now(),
+  primary key (school_id, day, song_id)
+);
+
+alter table jukebox_songs enable row level security;
+drop policy if exists jukebox_songs_read on jukebox_songs;
+create policy jukebox_songs_read on jukebox_songs for select using (true);
+
+create or replace function submit_jukebox_song(
+  p_school uuid,
+  p_day date,
+  p_id text,
+  p_title text,
+  p_by text,
+  p_yt text default null
+) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if length(trim(p_title)) = 0 then return; end if;
+  insert into jukebox_songs(school_id, day, song_id, title, requester, yt_id, votes)
+    values (p_school, p_day, p_id, left(trim(p_title), 80), left(trim(coalesce(p_by, '')), 32), p_yt, 1)
+    on conflict (school_id, day, song_id)
+    do update set votes = jukebox_songs.votes + 1;
+end $$;
+
+create or replace function vote_jukebox_song(
+  p_school uuid,
+  p_day date,
+  p_id text,
+  p_voter text
+) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update jukebox_songs
+  set votes = votes + 1
+  where school_id = p_school and day = p_day and song_id = p_id;
+end $$;
+
+create or replace function get_jukebox_songs(p_school uuid, p_day date)
+returns table(song_id text, title text, requester text, yt_id text, votes int, created_at timestamptz)
+language sql security definer stable set search_path = public as $$
+  select song_id, title, requester, yt_id, votes, created_at
+  from jukebox_songs
+  where school_id = p_school and day = p_day
+  order by votes desc, created_at asc
+  limit 20
+$$;
+
+grant execute on function submit_jukebox_song(uuid, date, text, text, text, text), vote_jukebox_song(uuid, date, text, text), get_jukebox_songs(uuid, date) to anon, authenticated;
