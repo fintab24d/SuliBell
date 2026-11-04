@@ -3,7 +3,8 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
-import { parseVideo } from './lib/video'
+import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
+import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import Members from './Members'
 import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
@@ -83,7 +84,9 @@ function Panel() {
   const [subs, setSubs] = useState<number | null>(null)
   const [perms, setPerms] = useState<string[] | null | undefined>(undefined)   // null = teljes jogú; undefined = még töltődik
   const [vids, setVids] = useState<any[] | null>(null)   // null: az update12.sql még nem futott le
-  const [vf, setVf] = useState({ url: '', title: '' })
+  const [dbWishes, setDbWishes] = useState<SongWish[]>([])
+  const { songs: jbSongs, mode: todayMode, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
+  const { maint, updateMaint } = useMaintenance(d?.id, d?.announcements)
   const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
   const [polls, setPolls] = useState<any[] | null>(null)   // null: az update11.sql még nem futott le
   const [pcounts, setPcounts] = useState<Record<string, number[]>>({})
@@ -109,10 +112,24 @@ function Panel() {
     supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }).eq('school_id', d.id)
       .then(({ count, error }) => setSubs(error ? null : count ?? 0))
   }, [d])
-  useEffect(() => {   // szünet-videók
+  useEffect(() => {   // szünet-videók és beküldött zenék/videók
     if (!d) return
     supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at').then(({ data, error }) => setVids(error ? null : data ?? []))
-  }, [d])
+    supabase.from('jukebox_songs').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(50).then(({ data, error }: any) => {
+      if (error || !Array.isArray(data)) return
+      setDbWishes(data.map((r: any) => ({
+        id: String(r.song_id),
+        day: String(r.day),
+        kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mediaModeForDay(String(r.day)),
+        title: String(r.title),
+        by: String(r.requester ?? ''),
+        ytId: r.yt_id ? String(r.yt_id) : undefined,
+        mp4Url: r.media_url ? String(r.media_url) : undefined,
+        votes: Number(r.votes) || 1,
+        at: Date.parse(r.created_at) || Date.now(),
+      })))
+    })
+  }, [d, jbSongs.length])
   useEffect(() => {   // szavazások és állásuk
     if (!d) return
     supabase.from('polls').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(10).then(async ({ data, error }) => {
@@ -314,6 +331,98 @@ function Panel() {
         {d.settings.version_note && <button type="button" onClick={() => setS({ version_note: '' })}>↺ Megjegyzés törlése</button>}</div>
     </section>}
 
+    {can('settings') && (
+      <section>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h2>🔄 Frissítés / Karbantartás képernyő (homályos háttérrel)</h2>
+          {(maint.main || maint.tv) && (
+            <button
+              type="button"
+              onClick={async () => {
+                const { error } = await updateMaint({ main: false, tv: false })
+                setMsg(error ? 'Hiba: ' + error.message : 'Frissítés képernyő kikapcsolva mindenhol.');
+                await load()
+              }}
+            >
+              ↺ Kikapcsolás mindenhol
+            </button>
+          )}
+        </div>
+        <p>
+          Ha bekapcsolod, az adott felületen a háttér elhomályosodik, és az oldal közepén megjelenik a <b>„Frissítés folyamatban…”</b> ablak. Külön kapcsolhatod a főoldalra és a TV-kijelzőre (<code>/display</code>).
+        </p>
+        <div className="row">
+          <label>
+            <input
+              type="checkbox"
+              checked={maint.main}
+              onChange={async e => {
+                const val = e.target.checked
+                const { error } = await updateMaint({ main: val })
+                setMsg(error ? 'Hiba: ' + error.message : val ? 'Főoldal frissítés képernyő BEKAPCSOLVA' : 'Főoldal frissítés képernyő kikapcsolva')
+                await load()
+              }}
+            />{' '}
+            📱 <b>Főoldal (<code>/</code>)</b> — Frissítés folyamatban képernyő
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={maint.tv}
+              onChange={async e => {
+                const val = e.target.checked
+                const { error } = await updateMaint({ tv: val })
+                setMsg(error ? 'Hiba: ' + error.message : val ? 'Display (/display) frissítés képernyő BEKAPCSOLVA' : 'Display (/display) frissítés képernyő kikapcsolva')
+                await load()
+              }}
+            />{' '}
+            📺 <b>Display (<code>/display</code>)</b> — Frissítés folyamatban képernyő
+          </label>
+          {(!maint.main || !maint.tv) && (
+            <button
+              type="button"
+              onClick={async () => {
+                const { error } = await updateMaint({ main: true, tv: true })
+                setMsg(error ? 'Hiba: ' + error.message : 'Frissítés képernyő BEKAPCSOLVA a főoldalon és a Display-en is')
+                await load()
+              }}
+            >
+              Mindkettő bekapcsolása
+            </button>
+          )}
+        </div>
+        <div className="row">
+          Megjelenő üzenet:{' '}
+          <input
+            style={{ minWidth: '24rem' }}
+            placeholder={DEFAULT_MAINT.text}
+            defaultValue={maint.text}
+            key={'mt-' + maint.text}
+            onBlur={async e => {
+              const txt = e.target.value.trim() || DEFAULT_MAINT.text
+              if (txt !== maint.text) {
+                const { error } = await updateMaint({ text: txt })
+                setMsg(error ? 'Hiba: ' + error.message : 'Frissítési üzenet mentve')
+                await load()
+              }
+            }}
+          />
+          {maint.text !== DEFAULT_MAINT.text && (
+            <button
+              type="button"
+              onClick={async () => {
+                await updateMaint({ text: DEFAULT_MAINT.text })
+                setMsg('Alapértelmezett üzenet visszaállítva')
+                await load()
+              }}
+            >
+              ↺ Alapértelmezett szöveg
+            </button>
+          )}
+        </div>
+      </section>
+    )}
+
     {can('schedules') && <section><h2>Csengetési rendek</h2>
       <div className="row">{d.schedules.map(s => <button key={s.id} className={s.id === cur?.id ? 'on' : ''} onClick={() => setSel(s.id)}>{s.name}{s.is_default ? ' ★' : ''}</button>)}
         <button onClick={addSchedule}>+ Új rend</button></div>
@@ -383,9 +492,9 @@ function Panel() {
     {can('announcements') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h2>Közlemények (főoldal és TV)</h2>
-        {(d.announcements ?? []).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id))}>↺ Összes közlemény törlése</button>}
+        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%'))}>↺ Összes közlemény törlése</button>}
       </div>
-      {(d.announcements ?? []).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
+      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
         <button onClick={() => setAn({ text: n.text, until: n.active_until ?? '' })}>Szerkesztés</button>
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />
@@ -463,26 +572,100 @@ function Panel() {
       <div className="row">{wres.map((r, i) => <button key={i} onClick={() => { setS({ weather_city: r.name, weather_lat: r.latitude, weather_lon: r.longitude }); setWres([]); setWq('') }}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} ({r.country})</button>)}</div>
     </section>}
 
-    {can('videos') && <section>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h2>Szünet-videók (szünetben ezek játszódnak, hang nélkül)</h2>
-        {vids && vids.length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes szünet-videót?') && run(supabase.from('break_videos').delete().eq('school_id', d.id))}>↺ Összes videó törlése</button>}
-      </div>
-      {vids === null && <p>A videók még nincsenek bekapcsolva: futtasd le a <code>supabase/update12.sql</code> fájlt.</p>}
-      {vids !== null && <>
-        <div className="row"><label><input type="checkbox" checked={d.settings.break_videos !== false} onChange={e => setS({ break_videos: e.target.checked })} /> Videó mutatása szünetben</label></div>
-        <p>YouTube-link (watch, youtu.be, shorts) vagy közvetlen .mp4 / .webm link. Több videó esetén szünetenként váltakoznak.</p>
-        {vids.map(v => <div className="row" key={v.id}>{v.title || v.url}{v.title ? ` (${v.url})` : ''}
-          <button onClick={() => setVf({ url: v.url, title: v.title ?? '' })}>Szerkesztés</button>
-          <button onClick={() => run(supabase.from('break_videos').delete().eq('id', v.id))}>Törlés</button></div>)}
-        <div className="row"><input style={{ minWidth: '20rem' }} placeholder="Videó linkje (https://…)" value={vf.url} onChange={e => setVf({ ...vf, url: e.target.value })} />
-          <input placeholder="Név (nem kötelező)" value={vf.title} onChange={e => setVf({ ...vf, title: e.target.value })} />
-          <button disabled={!vf.url.trim()} onClick={async () => {
-            if (!parseVideo(vf.url)) return setMsg('Hiba: csak YouTube-link vagy .mp4 / .webm fájl adható meg (https-sel).')
-            await run(supabase.from('break_videos').insert({ school_id: d.id, url: vf.url.trim(), title: vf.title.trim() })); setVf({ url: '', title: '' })
-          }}>Hozzáadás</button>
-          {(vf.url || vf.title) && <button type="button" onClick={() => setVf({ url: '', title: '' })}>↺ Alaphelyzet</button>}</div></>}
-    </section>}
+    {can('videos') && (() => {
+      const mergedWishes: SongWish[] = [...jbSongs]
+      for (const w of [...dbWishes, ...loadAllLocalSongs()]) {
+        if (!mergedWishes.some(x => x.id === w.id)) mergedWishes.push(w)
+      }
+      return (
+        <section>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2>Szüneti Videók és Zenék moderálása ({todayMode === 'video' ? '🎬 Ma: Videó-nap' : '🎵 Ma: Zene-nap'})</h2>
+            {(mergedWishes.length > 0 || (vids && vids.length > 0)) && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!confirm('Biztosan törlöd az összes beküldött szüneti videót és zenét?')) return
+                  await clearAllSongs(todayStr)
+                  setDbWishes([])
+                  if (vids && vids.length > 0) {
+                    await run(supabase.from('break_videos').delete().eq('school_id', d.id))
+                  } else {
+                    setMsg('Összes kívánság törölve.')
+                  }
+                }}
+              >
+                ↺ Összes videó és zene törlése
+              </button>
+            )}
+          </div>
+          <div className="row">
+            <label>
+              <input
+                type="checkbox"
+                checked={d.settings.break_videos !== false}
+                onChange={e => setS({ break_videos: e.target.checked })}
+              />{' '}
+              Szüneti videók / zenék lejátszása a szünetekben (naponta váltakozva: egyik nap videó, másik nap zene)
+            </label>
+          </div>
+          <p>
+            A videókat és zenéket a diákok küldik be és szavazzák meg a főoldalon. Ha valaki iskolába nem illő videót vagy zenét küldött be, itt egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
+          </p>
+
+          {mergedWishes.length === 0 && (!vids || vids.length === 0) ? (
+            <p><i>Jelenleg nincs beküldött szüneti videó vagy zene.</i></p>
+          ) : (
+            <>
+              {mergedWishes.map(w => {
+                const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : w.mp4Url
+                return (
+                  <div className="row" key={w.id} style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+                    <div>
+                      <b>{w.kind === 'video' ? '🎬 Videó:' : '🎵 Zene:'} {w.title}</b>
+                      {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
+                      {' '}• <span>🔥 {w.votes} szavazat</span>
+                      {' '}• <small>{w.day}</small>
+                      {mediaLink && (
+                        <>
+                          {' '}• <a href={mediaLink} target="_blank" rel="noopener noreferrer">🔗 Link megnyitása</a>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await removeSong(w.id, w.day)
+                        setDbWishes(prev => prev.filter(x => x.id !== w.id))
+                        setMsg(`Törölve: ${w.title}`)
+                      }}
+                    >
+                      🗑️ Törlés
+                    </button>
+                  </div>
+                )
+              })}
+
+              {(vids ?? []).map(v => (
+                <div className="row" key={v.id} style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+                  <div>
+                    <b>🎬 Korábbi szünet-videó: {v.title || v.url}</b>
+                    {v.title ? ` (${v.url})` : ''}
+                    {' '}• <a href={v.url} target="_blank" rel="noopener noreferrer">🔗 Link megnyitása</a>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => run(supabase.from('break_videos').delete().eq('id', v.id))}
+                  >
+                    🗑️ Törlés
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </section>
+      )
+    })()}
 
     {can('polls') && <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>
       {polls === null && <p>A szavazás még nincs bekapcsolva: futtasd le a <code>supabase/update11.sql</code> fájlt.</p>}

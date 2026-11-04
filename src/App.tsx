@@ -10,7 +10,8 @@ import Ask from './Ask'
 import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } from './MySchedule'
 import { VibeOverlay, VibePanel, useVibe } from './Vibe'
 import Arena from './Arena'
-import Jukebox from './Jukebox'
+import Jukebox, { useJukebox } from './Jukebox'
+import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -175,6 +176,8 @@ export default function App() {
     z?.date ?? '',
     !!data?.settings.sound_enabled && audioOn
   )
+  const { songs: jbWishes } = useJukebox(data?.id, z?.date ?? '', false)
+  const { maint } = useMaintenance(data?.id, data?.announcements)
   const [dismissed, setDismissed] = useState('')   // a kiemelt közleményt a látogató bezárhatja (a TV-n nem)
   useEffect(() => { if (audioOn) preload(data?.settings.bell_sound_url) }, [audioOn, data?.settings.bell_sound_url])   // saját csengőhang előtöltése
   // Telepítés gomb (Chrome, Edge, Android): a böngésző jelzi, ha az oldal telepíthető
@@ -249,7 +252,8 @@ export default function App() {
   }).filter(w => w.i < 5 || !w.dim)
 
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
-  const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[]).filter(n => !n.active_until || n.active_until >= z.date)
+  const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[])
+    .filter(n => !isMaintAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
   const note = notes.length ? notes[Math.floor(now.getTime() / 10000) % notes.length] : null
 
   // ---- Visszaszámláló kártyák ----
@@ -291,7 +295,23 @@ export default function App() {
   const overlay = sett.alert_active && sett.alert_text && dismissed !== sett.alert_text && <div className="alertfs" role="alertdialog" aria-live="assertive">
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
-  const vid = s.phase === 'break' && data.settings.break_videos !== false && videos.length > 0 && <BreakVideo list={videos} breakKey={s.next?.id ?? key} />
+  const isUpdating = tv ? maint.tv : maint.main
+  const maintOverlay = isUpdating && (
+    <div className="maint-overlay" role="status" aria-live="assertive">
+      <div className="maint-card">
+        <div className="maint-spinner" aria-hidden="true">🔄</div>
+        <div className="tag">Rendszerfrissítés</div>
+        <h2>Frissítés folyamatban…</h2>
+        <p>{maint.text}</p>
+        <div className="maint-bar"><i /></div>
+      </div>
+    </div>
+  )
+
+  const hasPlayableWish = jbWishes.some(w => w.ytId || w.mp4Url)
+  const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasPlayableWish || videos.length > 0) && (
+    <BreakVideo list={videos} wishes={jbWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} />
+  )
   const e0 = events[0]
   const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}
     ev={pv && first && until > 0
@@ -305,7 +325,7 @@ export default function App() {
   if (tv) {
     return (
       <>
-        <main className="tv">
+        <main className={`tv${isUpdating ? ' is-updating' : ''}`}>
           <header className="tv-hdr">
             <div className="tv-hdr-left">
               <span className="brand">
@@ -396,6 +416,7 @@ export default function App() {
 
           {overlay}
         </main>
+        {maintOverlay}
         <VibeOverlay floats={vibeFloats} />
         {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
         <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
@@ -408,7 +429,7 @@ export default function App() {
   // ==================== NORMÁL (BENTO DASHBOARD) NÉZET ====================
   return (
     <>
-      <main className="bento-app">
+      <main className={`bento-app${isUpdating ? ' is-updating' : ''}`}>
         <header className="bento-hdr">
           <div className="hdr-brand-col">
             <span className="brand">
@@ -575,6 +596,7 @@ export default function App() {
         />
         {overlay}
       </main>
+      {maintOverlay}
       <VibeOverlay floats={vibeFloats} />
       {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
       <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />

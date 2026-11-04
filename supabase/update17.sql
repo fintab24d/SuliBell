@@ -92,6 +92,16 @@ create table if not exists jukebox_songs (
 alter table jukebox_songs enable row level security;
 drop policy if exists jukebox_songs_read on jukebox_songs;
 create policy jukebox_songs_read on jukebox_songs for select using (true);
+drop policy if exists jukebox_songs_admin on jukebox_songs;
+create policy jukebox_songs_admin on jukebox_songs for all using (is_school_admin(school_id)) with check (is_school_admin(school_id));
+
+create or replace function delete_jukebox_song(p_school uuid, p_id text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_school_admin(p_school) then return; end if;
+  delete from jukebox_songs where school_id = p_school and song_id = p_id;
+end $$;
+grant execute on function delete_jukebox_song(uuid, text) to authenticated;
 
 create or replace function submit_jukebox_song(
   p_school uuid,
