@@ -15,13 +15,13 @@ import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
-import { computeState, fmtCount, fmtHM, addDays, instantOf, nextSchoolDay, scheduleFor, schoolDaysBetween, toSec, zoned, type BellState } from './lib/engine'
+import { computeState, fmtCount, fmtHM, addDays, instantOf, isLessonCancelled, nextSchoolDay, scheduleFor, schoolDaysBetween, toSec, zoned, type BellState, type Lesson } from './lib/engine'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`
 const fmtRoom = (r: string) => (/^\d+$/.test(r.trim()) ? `${r.trim()}. terem` : r.trim())
 const TITLE: Record<BellState['phase'], string> = { closed: '', before: 'Tanítás előtt', lesson: '', break: 'Szünet', after: 'Vége a tanításnak' }
-const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő' }
+const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő', cancelled: 'elmarad' }
 
 /** Számjegyek "menetrend-tábla" csempékben (ez az oldal vizuális aláírása). */
 function Digits({ text }: { text: string }) {
@@ -29,20 +29,36 @@ function Digits({ text }: { text: string }) {
     {text.split('').map((c, i) => c === ':' ? <i key={i}>:</i> : <span key={`${i}${c}`} className="tile">{c}</span>)}</span>
 }
 
-/** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint. */
-function useBell() {
+/** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint, figyelembe véve az elmaradó órákat is. */
+function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined) {
   const { data, offline } = useSchool()
   const [now, setNow] = useState(() => new Date())
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 250); return () => clearInterval(t) }, [])
   return useMemo(() => {
-    if (!data) return { data, offline }
+    if (!data) return { data, offline, cancelledIds: new Set<string>() }
     const z = zoned(now, data.settings.timezone)
     const ov = Object.fromEntries((data.schedule_dates ?? []).map(x => [x.day, x.schedule_id]))
     const schedule = scheduleFor(z.date, data.schedules, ov)
-    const closed = data.closed.find(c => c.day === z.date)?.reason
-    const state = computeState(z.secs, schedule?.lessons ?? [], closed, !schedule)
-    return { data, offline, z, schedule, state, now }
-  }, [now, data, offline])
+    const allLessons: Lesson[] = [...(schedule?.lessons ?? [])].sort((a, b) => a.position - b.position)
+    const maxPos = allLessons.length ? Math.max(...allLessons.map(l => l.position)) : 0
+    const dayChanges = ((data.changes ?? []) as any[]).filter(c => c.day === z.date)
+    const cancelledIds = new Set<string>()
+    for (const l of allLessons) {
+      const myEntry = !tv ? getMyEntry?.(z.weekday, l.position) : undefined
+      const isMyFree = !!formatMyLesson(l, myEntry).isFree
+      if (isLessonCancelled(l, dayChanges, isMyFree, maxPos)) {
+        cancelledIds.add(l.id)
+      }
+    }
+    const activeLessons = allLessons.filter(l => !cancelledIds.has(l.id))
+    const cancelledLessons = allLessons.filter(l => cancelledIds.has(l.id))
+    let closed = data.closed.find(c => c.day === z.date)?.reason
+    if (!closed && allLessons.length > 0 && activeLessons.length === 0) {
+      closed = 'Minden mai óra elmarad.'
+    }
+    const state = computeState(z.secs, activeLessons, closed, !schedule, cancelledLessons)
+    return { data, offline, z, schedule, state, now, cancelledIds }
+  }, [now, data, offline, tv, getMyEntry])
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
@@ -50,7 +66,7 @@ function Ring({ s, my }: { s: BellState; my?: MyLessonEntry }) {
   const R = 86, C = 2 * Math.PI * R
   const live = s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before'
   const custom = s.phase === 'lesson' ? formatMyLesson(s.current, my) : null
-  const title = s.phase === 'lesson' ? (custom?.title || s.current!.label) : s.phase === 'closed' ? s.reason : TITLE[s.phase]
+  const title = s.phase === 'lesson' ? (custom?.title || s.current!.label) : (s.reason || TITLE[s.phase])
   return <div className={`ring ${s.phase}`}>
     <svg viewBox="0 0 200 200" aria-hidden="true">
       <defs>
@@ -132,14 +148,16 @@ function useWeather(lat: number | null, lon: number | null, tz: string | undefin
 }
 
 /** A tanítási nap sávja: az órák és szünetek arányosan, a pillanatnyi időt jelző vonallal. */
-function DayStrip({ L, secs, phase }: { L: any[]; secs: number; phase: BellState['phase'] }) {
+function DayStrip({ L, secs, phase, cancelledIds }: { L: any[]; secs: number; phase: BellState['phase']; cancelledIds?: Set<string> }) {
   const a = toSec(L[0].start_time), b = toSec(L[L.length - 1].end_time), span = b - a
   const live = phase === 'lesson' || phase === 'break'
   return <div className="strip">
     <div className="bar">
       {L.map((l, i) => {
         const s0 = toSec(l.start_time), e0 = toSec(l.end_time)
-        return <i key={l.id} className={`seg ${secs >= e0 ? 'past' : secs >= s0 ? 'on' : ''}`}
+        const isCanc = cancelledIds?.has(l.id)
+        const cls = isCanc ? 'cancelled' : secs >= e0 ? 'past' : secs >= s0 ? 'on' : ''
+        return <i key={l.id} className={`seg ${cls}`}
           style={{ left: `${((s0 - a) / span) * 100}%`, width: `${((e0 - s0) / span) * 100}%` }}>{i + 1}</i>
       })}
       {live && <span className="mark" style={{ left: `${Math.min(1, Math.max(0, (secs - a) / span)) * 100}%` }} />}
@@ -149,8 +167,9 @@ function DayStrip({ L, secs, phase }: { L: any[]; secs: number; phase: BellState
 }
 
 export default function App() {
-  const { data, offline, z, schedule, state, now } = useBell() as any
   const tv = location.pathname.startsWith('/display')
+  const { map: myMap, update: updateMyMap, getEntry, hasAny: hasMySchedule } = useMySchedule()
+  const { data, offline, z, schedule, state, now, cancelledIds } = useBell(tv, getEntry) as any
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
   const style = 'neon'
   useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
@@ -166,7 +185,6 @@ export default function App() {
   const { poll, counts } = usePoll(data?.id)
   const videos = useVideos(data?.id)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
-  const { map: myMap, update: updateMyMap, getEntry, hasAny: hasMySchedule } = useMySchedule()
   const [myModalOpen, setMyModalOpen] = useState(false)
 
   // Csengetési hang: állapotváltáskor szól, ha az admin bekapcsolta és a hang engedélyezve van.
@@ -220,8 +238,9 @@ export default function App() {
   const upcoming = (data.closed as { day: string; reason: string }[]).filter(c => c.day > z.date).sort((x, y) => x.day.localeCompare(y.day)).slice(0, 4)
   const p = (on: boolean) => (on ? ({ '--p': `${s.progress * 100}%` } as CSSProperties) : undefined)
 
-  // ---- A mai nap adatai (csak tanítási napon) ----
-  const T = schedule && s.phase !== 'closed' ? byPos(schedule.lessons) : []
+  // ---- A mai nap adatai (csak tanítási napon, az elmaradó órákat kihagyva a számolóból) ----
+  const T_all = schedule && s.phase !== 'closed' ? byPos(schedule.lessons) : []
+  const T = T_all.filter((l: any) => !cancelledIds.has(l.id))
   const hm = (t: number) => `${pad(Math.floor(t / 3600))}:${pad(Math.floor(t / 60) % 60)}`
   const away = (t: number) => { const m = Math.ceil((t - z.secs) / 60); return m < 120 ? `${m} perc múlva` : `${Math.floor(m / 60)} óra ${m % 60} perc múlva` }
   const bellList = T.flatMap((l: any) => {
@@ -239,7 +258,7 @@ export default function App() {
     <div className="stat"><b>{dayPct}%</b><span>a napból</span></div>
     {nb >= 0 && <div className="stat"><b>{Math.round((toSec(T[nb + 1].start_time) - toSec(T[nb].end_time)) / 60)} perc</b><span>köv. szünet ({fmtHM(T[nb].end_time)})</span></div>}
   </div>
-  const strip = T.length > 0 && <DayStrip L={T} secs={z.secs} phase={s.phase} />
+  const strip = T_all.length > 0 && <DayStrip L={T_all} secs={z.secs} phase={s.phase} cancelledIds={cancelledIds} />
   const bells = bellList.length > 0 && <div className="bells"><div className="tag">Következő csengetések</div>
     <ul>{bellList.map((b: any) => <li key={b.t + b.txt}><b>{hm(b.t)}</b><span>{b.txt}</span><span>{away(b.t)}</span></li>)}</ul></div>
 
@@ -511,20 +530,21 @@ export default function App() {
                 <ol>
                   {L.map((l: any, i: number) => {
                     const nx = L[i + 1]
-                    const cls = s.current?.id === l.id ? 'now' : s.next?.id === l.id ? 'upnext' : s.phase !== 'closed' && z.secs >= toSec(l.end_time) ? 'past' : ''
+                    const isCanc = s.phase !== 'closed' && cancelledIds.has(l.id)
+                    const cls = isCanc ? 'cancelled' : s.current?.id === l.id ? 'now' : s.next?.id === l.id ? 'upnext' : s.phase !== 'closed' && z.secs >= toSec(l.end_time) ? 'past' : ''
                     const gap = nx ? Math.round((toSec(nx.start_time) - toSec(l.end_time)) / 60) : 0
                     const inBreak = s.phase === 'break' && s.next?.id === nx?.id
                     const custom = formatMyLesson(l, getEntry(boardWeekday, l.position))
                     return (
                       <Fragment key={l.id}>
-                        <li className={`l ${cls} ${custom.isFree ? 'free' : ''}`} style={p(cls === 'now')}>
+                        <li className={`l ${cls} ${custom.isFree || isCanc ? 'free' : ''}`} style={p(cls === 'now')}>
                           <div className="l-main">
                             <b>{custom.title}</b>
                             {custom.sub && <small className="l-orig">{custom.sub}</small>}
                             {custom.room && <span className="room-pill">📍 {fmtRoom(custom.room)}</span>}
                           </div>
                           <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
-                          <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'szabad' : '')}</span>
+                          <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'elmarad' : '')}</span>
                         </li>
                         {gap > 0 && <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)}>{gap} perc szünet</li>}
                       </Fragment>

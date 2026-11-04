@@ -1,6 +1,7 @@
 // Tiszta időlogika: nincs benne UI, nincs benne hálózat. Minden számítás a megadott időzónában történik.
 export interface Lesson { id: string; label: string; start_time: string; end_time: string; position: number }
 export interface Schedule { id: string; name: string; weekdays: number[]; is_default: boolean; lessons: Lesson[] }
+export interface DayChange { id?: string; day?: string; kind: string; lesson_label: string; text?: string }
 export type Phase = 'closed' | 'before' | 'lesson' | 'break' | 'after'
 export interface BellState {
   phase: Phase; current?: Lesson; next?: Lesson
@@ -30,21 +31,91 @@ export function pickSchedule(list: Schedule[], weekday: number) {
   return list.find(s => s.weekdays.includes(weekday)) ?? (weekday <= 5 ? list.find(s => s.is_default) : undefined)
 }
 
-export function computeState(secs: number, lessons: Lesson[], closedReason?: string, noSchool = false): BellState {
+/** Eldönti, hogy egy változás-bejegyzés (pl. "7. óra", "6-8. óra", "1., 2. óra") vonatkozik-e az adott tanórára. */
+export function changeMatchesLesson(c: DayChange, lesson: Lesson, maxPos?: number): boolean {
+  const lbl = (c.lesson_label ?? '').trim().toLowerCase()
+  const txt = (c.text ?? '').trim().toLowerCase()
+  const combined = `${lbl} ${c.kind === 'cancel' ? txt : ''}`
+  if (!lbl && !txt) return false
+  if (/\b(minden|összes|egész\s*nap)\b/i.test(combined)) return true
+  if (lbl && lbl === lesson.label.trim().toLowerCase()) return true
+  if (maxPos && lesson.position === maxPos && /\butolsó\b/i.test(combined)) return true
+  if (lesson.position === 1 && /\belső\b/i.test(combined)) return true
+
+  const src = lbl || txt
+  const rangeRe = /(\d+)\s*\.?\s*[-–—]\s*(\d+)/g
+  let rm: RegExpExecArray | null
+  let matchedNum = false
+  while ((rm = rangeRe.exec(src)) !== null) {
+    matchedNum = true
+    const a = Number(rm[1]), b = Number(rm[2])
+    if (lesson.position >= Math.min(a, b) && lesson.position <= Math.max(a, b)) return true
+  }
+
+  const cleaned = src.replace(rangeRe, ' ')
+  const numRe = /\b(\d+)\b/g
+  let nm: RegExpExecArray | null
+  while ((nm = numRe.exec(cleaned)) !== null) {
+    matchedNum = true
+    if (Number(nm[1]) === lesson.position) return true
+  }
+  return !matchedNum && false
+}
+
+/** Eldönti, hogy az adott tanóra elmarad-e a mai változások (kind === 'cancel') vagy a saját órarend alapján. */
+export function isLessonCancelled(
+  lesson: Lesson,
+  dayChanges: DayChange[] = [],
+  isMyFree?: boolean,
+  maxPos?: number
+): boolean {
+  if (isMyFree) return true
+  return dayChanges.some(c => {
+    const isCancel = c.kind === 'cancel' || /\belmarad\b/i.test(c.text ?? '') || /\belmarad\b/i.test(c.lesson_label ?? '')
+    return isCancel && changeMatchesLesson(c, lesson, maxPos)
+  })
+}
+
+export function computeState(
+  secs: number,
+  lessons: Lesson[],
+  closedReason?: string,
+  noSchool = false,
+  cancelledLessons: Lesson[] = []
+): BellState {
   const L = [...lessons].sort((a, b) => a.position - b.position)
   if (closedReason || noSchool || !L.length)
     return { phase: 'closed', remaining: 0, progress: 0, soon: false, reason: closedReason ?? 'Ma nincs tanítás.' }
+  const curCancelled = cancelledLessons.find(cl => secs >= toSec(cl.start_time) && secs < toSec(cl.end_time))
   const mk = (phase: Phase, from: number, to: number, o: Partial<BellState>): BellState => ({
     phase, remaining: to - secs, progress: Math.min(1, Math.max(0, (secs - from) / (to - from))),
     soon: to - secs <= 60, ...o })
-  if (secs < toSec(L[0].start_time)) return mk('before', 0, toSec(L[0].start_time), { next: L[0] })
+  if (secs < toSec(L[0].start_time)) {
+    const firstCancelledStart = cancelledLessons.length > 0 ? Math.min(...cancelledLessons.map(cl => toSec(cl.start_time))) : 0
+    const fromSec = curCancelled ? firstCancelledStart : 0
+    return mk('before', fromSec, toSec(L[0].start_time), {
+      next: L[0],
+      reason: curCancelled ? `${curCancelled.label} elmarad` : undefined,
+    })
+  }
   for (let i = 0; i < L.length; i++) {
     const s = toSec(L[i].start_time), e = toSec(L[i].end_time)
     if (secs >= s && secs < e) return mk('lesson', s, e, { current: L[i], next: L[i + 1] })
     const n = L[i + 1]
-    if (n && secs >= e && secs < toSec(n.start_time)) return mk('break', e, toSec(n.start_time), { next: n })
+    if (n && secs >= e && secs < toSec(n.start_time)) {
+      return mk('break', e, toSec(n.start_time), {
+        next: n,
+        reason: curCancelled ? `Szünet (${curCancelled.label} elmarad)` : undefined,
+      })
+    }
   }
-  return { phase: 'after', remaining: 0, progress: 1, soon: false }
+  return {
+    phase: 'after',
+    remaining: 0,
+    progress: 1,
+    soon: false,
+    reason: curCancelled ? `Vége a tanításnak (${curCancelled.label} elmarad)` : undefined,
+  }
 }
 
 export const fmtHM = (t: string) => t.slice(0, 5)

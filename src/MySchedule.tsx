@@ -22,7 +22,7 @@ const DAYS: { id: number; name: string; short: string }[] = [
 
 const QUICK_SUBJECTS = [
   'Matek', 'Magyar', 'Töri', 'Angol', 'Német', 'Info',
-  'Fizika', 'Kémia', 'Biosz', 'Föci', 'Tesi', '☕ Lyukasóra',
+  'Fizika', 'Kémia', 'Biosz', 'Föci', 'Tesi', '☕ Lyukasóra', '🚫 Elmarad',
 ]
 
 /** Kép átméretezése és tömörítése base64 formátumba az AI felismeréshez (mint az AdminAi-ban). */
@@ -106,7 +106,7 @@ export function formatMyLesson(lesson: Lesson | undefined, entry: MyLessonEntry 
   if (!entry || !entry.subject) {
     return { title: lesson.label, room: entry?.room || undefined }
   }
-  const isFree = /lyukas/i.test(entry.subject)
+  const isFree = /(lyukas|elmarad|nincs\s*óra|szabad)/i.test(entry.subject)
   return {
     title: entry.subject,
     sub: lesson.label,

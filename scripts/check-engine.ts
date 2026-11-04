@@ -1,6 +1,6 @@
 // Futtatás: npm run check  (Node 22.6+). Az időlogikát ellenőrzi, hálózat nélkül.
 import assert from 'node:assert/strict'
-import { computeState, instantOf, nextSchoolDay, pickSchedule, schoolDaysBetween, zoned, type Lesson, type Schedule } from '../src/lib/engine.ts'
+import { computeState, instantOf, isLessonCancelled, nextSchoolDay, pickSchedule, schoolDaysBetween, zoned, type Lesson, type Schedule } from '../src/lib/engine.ts'
 
 const A = [['08:00','08:45'],['08:55','09:40'],['09:50','10:35'],['10:45','11:30'],['11:40','12:25'],['12:35','13:20'],['13:30','14:15'],['14:25','15:10']]
 const lessons: Lesson[] = A.map(([s, e], i) => ({ id: `l${i + 1}`, label: `${i + 1}. óra`, start_time: s, end_time: e, position: i + 1 }))
@@ -37,4 +37,23 @@ ok('visszaszámlálás pontos az őszi óraátállás fölött (43 óra)', () =>
 ok('tanítási napok száma: egy teljes hét = 5', () => assert.equal(schoolDaysBetween('2026-10-26', '2026-10-30', sch, []), 5))
 ok('tanítási napok száma: ünnepnap levonva', () => assert.equal(schoolDaysBetween('2026-10-26', '2026-10-30', sch, [{ day: '2026-10-28' }]), 4))
 ok('tanítási napok száma: hétvége = 0, fordított tartomány = 0', () => { assert.equal(schoolDaysBetween('2026-10-24', '2026-10-25', sch, []), 0); assert.equal(schoolDaysBetween('2026-10-26', '2026-10-25', sch, []), 0) })
+ok('elmaradó 7–8. óra: 6. óra után (13:20) vége a tanításnak', () => {
+  const chgs = [{ kind: 'cancel', lesson_label: '7-8. óra', text: 'Elmarad' }]
+  const active = lessons.filter(l => !isLessonCancelled(l, chgs, false, 8))
+  const cancelled = lessons.filter(l => isLessonCancelled(l, chgs, false, 8))
+  assert.equal(active.length, 6)
+  const st = computeState(13 * 3600 + 35 * 60, active, undefined, false, cancelled)
+  assert.equal(st.phase, 'after')
+  assert.equal(st.reason, 'Vége a tanításnak (7. óra elmarad)')
+})
+ok('elmaradó 2. óra: 1. óra után (08:45) egyből a 3. óráig (09:50) számol a szünet', () => {
+  const chgs = [{ kind: 'cancel', lesson_label: '2. óra' }]
+  const active = lessons.filter(l => !isLessonCancelled(l, chgs, false, 8))
+  const cancelled = lessons.filter(l => isLessonCancelled(l, chgs, false, 8))
+  const st = computeState(9 * 3600, active, undefined, false, cancelled)
+  assert.equal(st.phase, 'break')
+  assert.equal(st.next?.label, '3. óra')
+  assert.equal(st.remaining, 50 * 60)
+  assert.equal(st.reason, 'Szünet (2. óra elmarad)')
+})
 console.log(`TZ=${process.env.TZ ?? '(rendszer)'}: ${n} teszt OK`)
