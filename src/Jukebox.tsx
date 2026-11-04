@@ -339,7 +339,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     const cleanBy = rawBy.trim().slice(0, 24)
     const parsed = rawUrl?.trim() ? parseVideo(rawUrl.trim()) : parseVideo(rawTitle.trim())
     const ytId = explicitYtId || (parsed?.kind === 'yt' ? parsed.id : undefined)
-    const mp4Url = parsed?.kind === 'mp4' ? parsed.url : undefined
+    const mp4Url = parsed?.kind === 'file' ? parsed.src : undefined
 
     // Videó-napon kötelező vagy ajánlott az érvényes videólink / gyors tipp
     if (mode === 'video' && !ytId && !mp4Url && rawUrl?.trim()) {
