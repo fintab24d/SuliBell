@@ -11,6 +11,7 @@ import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } fr
 import { VibeOverlay, VibePanel, useVibe } from './Vibe'
 import Arena from './Arena'
 import Jukebox, { useJukebox } from './Jukebox'
+import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
@@ -567,17 +568,7 @@ export default function App() {
               </div>
               {yearBox}
             </section>
-          </div>
 
-          {/* 3. OSZLOP (JOBB): Élő Hangulatfal, Mini-Aréna, Zenegép, Szavazás, Ebéd, Közlemények, Szünetek */}
-          <div className="dash-col col-side">
-            <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
-
-            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} />
-
-            <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
-
-            {pollCard}
             {lunchBox}
 
             {notes.length > 0 && (
@@ -586,6 +577,8 @@ export default function App() {
                 {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}
               </section>
             )}
+
+            <Daily day={z.date} />
 
             {(events.length > 0 || offCard) && (
               <section className="events-side">
@@ -596,6 +589,17 @@ export default function App() {
                 </div>
               </section>
             )}
+          </div>
+
+          {/* 3. OSZLOP (JOBB): Élő Hangulatfal, Zenegép, Mini-Aréna, Szavazás */}
+          <div className="dash-col col-side">
+            <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
+
+            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} />
+
+            <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
+
+            {pollCard}
           </div>
         </div>
 

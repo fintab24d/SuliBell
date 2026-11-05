@@ -644,4 +644,17 @@ main.is-updating{filter:blur(14px) saturate(.8);pointer-events:none;user-select:
 .board .l.cancelled .chip{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 45%,transparent)}
 .strip .seg.cancelled{opacity:.32;text-decoration:line-through;background:repeating-linear-gradient(135deg,transparent,transparent 4px,color-mix(in srgb,var(--warn) 25%,transparent) 4px,color-mix(in srgb,var(--warn) 25%,transparent) 8px)!important}
 
+/* ===== A NAP GONDOLATA KÁRTYA ===== */
+.daily{display:grid;gap:12px}
+.daily-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.daily-head .tag{margin:0}
+.daily-next{padding:2px 10px;border-radius:99px;font-size:1rem;line-height:1.4}
+.daily-quote{margin:0;padding:4px 0 4px 14px;border-left:3px solid var(--n-pink,var(--lesson))}
+.daily-quote p{margin:0 0 6px;font-size:1.08rem;line-height:1.45;font-style:italic}
+.daily-quote cite{font-size:.85rem;color:var(--mut);font-style:normal}
+.daily-fact{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--n-cyan,var(--break)) 8%,transparent);border:1px solid color-mix(in srgb,var(--n-cyan,var(--break)) 25%,transparent)}
+.daily-ico{font-size:1.3rem;line-height:1.2}
+.daily-fact b{font-size:.85rem;color:var(--n-cyan,var(--break))}
+.daily-fact p{margin:2px 0 0;font-size:.92rem;line-height:1.45}
+
 @media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i{animation:none}}
