@@ -13,12 +13,22 @@ export interface BellState {
 
 export const toSec = (t: string) => { const [h, m, s] = t.split(':').map(Number); return h * 3600 + m * 60 + (s || 0) }
 
+const dtfCache = new Map<string, Intl.DateTimeFormat>()
+function getZonedFormatter(tz: string): Intl.DateTimeFormat {
+  let f = dtfCache.get(tz)
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz, hourCycle: 'h23', weekday: 'short', year: 'numeric', month: '2-digit',
+      day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
+    dtfCache.set(tz, f)
+  }
+  return f
+}
+
 /** A pillanat dátuma, napszaka és hétköznapja az adott időzónában (a nyári/téli időszámítást az Intl kezeli). */
 export function zoned(now: Date, tz: string) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz, hourCycle: 'h23', weekday: 'short', year: 'numeric', month: '2-digit',
-    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }).formatToParts(now).map(x => [x.type, x.value]))
+  const p = Object.fromEntries(getZonedFormatter(tz).formatToParts(now).map(x => [x.type, x.value]))
   return {
     date: `${p.year}-${p.month}-${p.day}`,
     secs: +p.hour * 3600 + +p.minute * 60 + +p.second,

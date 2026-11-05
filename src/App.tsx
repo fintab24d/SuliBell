@@ -25,6 +25,17 @@ const TITLE: Record<BellState['phase'], string> = { closed: '', before: 'Tanít�
 const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő', cancelled: 'elmarad' }
 
 /** Neon számjegyek: világító, egyenletes szélességű számok, váltáskor finom beúszással. */
+const huFmtCache = new Map<string, Intl.DateTimeFormat>()
+function formatHuDate(d: string, o: Intl.DateTimeFormatOptions): string {
+  const key = JSON.stringify(o)
+  let fmt = huFmtCache.get(key)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('hu-HU', { timeZone: 'UTC', ...o })
+    huFmtCache.set(key, fmt)
+  }
+  return fmt.format(new Date(d + 'T12:00:00Z'))
+}
+
 function Digits({ text }: { text: string }) {
   return <span className="digits neon" role="img" aria-label={text}>
     {text.split('').map((c, i) => c === ':' ? <i key={i} className="dg-sep">:</i> : <span key={`${i}${c}`} className="dg">{c}</span>)}</span>
@@ -33,9 +44,20 @@ function Digits({ text }: { text: string }) {
 /** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint, figyelembe véve az elmaradó órákat is. */
 function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined) {
   const { data, offline } = useSchool()
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 250); return () => clearInterval(t) }, [])
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    let t = 0
+    const tick = () => {
+      setNowSec(Math.floor(Date.now() / 1000))
+      if (!document.hidden) t = window.setTimeout(tick, 1015 - (Date.now() % 1000))
+    }
+    const onVis = () => { clearTimeout(t); if (!document.hidden) tick() }
+    t = window.setTimeout(tick, 1015 - (Date.now() % 1000))
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearTimeout(t); document.removeEventListener('visibilitychange', onVis) }
+  }, [])
   return useMemo(() => {
+    const now = new Date(nowSec * 1000)
     if (!data) return { data, offline, cancelledIds: new Set<string>() }
     const z = zoned(now, data.settings.timezone)
     const ov = Object.fromEntries((data.schedule_dates ?? []).map(x => [x.day, x.schedule_id]))
@@ -59,7 +81,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     }
     const state = computeState(z.secs, activeLessons, closed, !schedule, cancelledLessons)
     return { data, offline, z, schedule, state, now, cancelledIds }
-  }, [now, data, offline, tv, getMyEntry])
+  }, [nowSec, data, offline, tv, getMyEntry])
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
@@ -230,7 +252,7 @@ export default function App() {
   const myNext = !tv ? getEntry(z.weekday, s.next?.position) : undefined
   const first = pv && byPos(pv.schedule.lessons)[0]
   const until = pv && first ? Math.round((instantOf(pv.date, toSec(first.start_time), data.settings.timezone) - now.getTime()) / 1000) : 0
-  const dayName = (d: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('hu-HU', { timeZone: 'UTC', ...o }).format(new Date(d + 'T12:00:00Z'))
+  const dayName = formatHuDate
   const dateText = dayName(z.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   // Visszaszámlálók: a legközelebbi 4 még le nem járt esemény, másodperc pontosan (óraátállással is helyesen).
   const events = ((data.countdowns ?? []) as any[])

@@ -5,6 +5,7 @@ import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
 import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
+import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
 import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
@@ -87,13 +88,14 @@ function Panel() {
   const [dbWishes, setDbWishes] = useState<SongWish[]>([])
   const { songs: jbSongs, mode: todayMode, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
   const { maint, updateMaint } = useMaintenance(d?.id, d?.announcements)
+  const { notifyAllClients } = useAdminBroadcaster()
   const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
   const [polls, setPolls] = useState<any[] | null>(null)   // null: az update11.sql még nem futott le
   const [pcounts, setPcounts] = useState<Record<string, number[]>>({})
   const [wq, setWq] = useState('')
   const [wres, setWres] = useState<any[]>([])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (broadcast = true) => {
     const m = await supabase.from('school_members').select('school_id')
     setAdmin(!!m.data?.length)
     const { data, error } = await supabase.from('schools')
@@ -101,8 +103,9 @@ function Panel() {
     if (error || !data) return setMsg('Hiba: ' + (error?.message ?? 'nincs adat'))
     const r = data as any
     setD({ ...r, settings: Array.isArray(r.settings) ? r.settings[0] : r.settings })
-  }, [])
-  useEffect(() => { load() }, [load])
+    if (broadcast) notifyAllClients(r)
+  }, [notifyAllClients])
+  useEffect(() => { load(false) }, [load])
   useEffect(() => {   // saját jogosultságok (ha az update15.sql még nem futott le, teljes jogúként kezeljük)
     if (!d) return
     supabase.from('school_members').select('perms').eq('school_id', d.id).maybeSingle().then(({ data, error }) => setPerms(error ? null : (data?.perms ?? null)))
@@ -638,6 +641,7 @@ function Panel() {
                         await removeSong(w.id, w.day)
                         setDbWishes(prev => prev.filter(x => x.id !== w.id))
                         setMsg(`Törölve: ${w.title}`)
+                        notifyAllClients()
                       }}
                     >
                       🗑️ Törlés

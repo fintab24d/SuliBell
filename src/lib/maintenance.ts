@@ -3,11 +3,14 @@ import { supabase } from './supabase'
 
 export const MAINT_PREFIX = '__MAINT__:'
 const LOCAL_KEY = 'csengeto-maint-state'
+const RELOADED_KEY = 'csengeto-reloaded-at'
+const PAGE_LOADED_AT = Date.now()
 
 export interface MaintState {
   main: boolean
   tv: boolean
   text: string
+  reloadAt?: number
 }
 
 export const DEFAULT_MAINT: MaintState = {
@@ -20,6 +23,16 @@ export function isMaintAnnouncement(text?: string | null): boolean {
   return typeof text === 'string' && text.startsWith(MAINT_PREFIX)
 }
 
+function normalize(p: any): MaintState {
+  const r = Number(p?.reloadAt)
+  return {
+    main: !!p?.main,
+    tv: !!p?.tv,
+    text: typeof p?.text === 'string' && p.text.trim() ? p.text.trim() : DEFAULT_MAINT.text,
+    reloadAt: Number.isFinite(r) && r > 0 ? r : undefined,
+  }
+}
+
 export function parseMaintFromAnnouncements(
   announcements?: { id?: string; text: string; active_until?: string | null }[] | null
 ): MaintState | null {
@@ -27,14 +40,7 @@ export function parseMaintFromAnnouncements(
   const row = announcements.find(a => isMaintAnnouncement(a?.text))
   if (!row) return null
   try {
-    const parsed = JSON.parse(row.text.slice(MAINT_PREFIX.length))
-    return {
-      main: !!parsed.main,
-      tv: !!parsed.tv,
-      text: typeof parsed.text === 'string' && parsed.text.trim()
-        ? parsed.text.trim()
-        : DEFAULT_MAINT.text,
-    }
+    return normalize(JSON.parse(row.text.slice(MAINT_PREFIX.length)))
   } catch {
     return null
   }
@@ -43,13 +49,7 @@ export function parseMaintFromAnnouncements(
 function loadLocalMaint(): MaintState | null {
   try {
     const raw = localStorage.getItem(LOCAL_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw)
-    return {
-      main: !!p.main,
-      tv: !!p.tv,
-      text: typeof p.text === 'string' && p.text.trim() ? p.text.trim() : DEFAULT_MAINT.text,
-    }
+    return raw ? normalize(JSON.parse(raw)) : null
   } catch {
     return null
   }
@@ -59,6 +59,16 @@ function saveLocalMaint(st: MaintState) {
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(st))
   } catch { /* ignore */ }
+}
+
+function maybeReload(reloadAt?: number) {
+  if (location.pathname.startsWith('/admin')) return
+  if (!reloadAt || reloadAt <= PAGE_LOADED_AT) return
+  try {
+    if (localStorage.getItem(RELOADED_KEY) === String(reloadAt)) return
+    localStorage.setItem(RELOADED_KEY, String(reloadAt))
+  } catch { /* ignore */ }
+  setTimeout(() => location.reload(), 120)
 }
 
 /**
@@ -75,29 +85,30 @@ export function useMaintenance(
   const chanRef = useRef<any>(null)
   const bcRef = useRef<BroadcastChannel | null>(null)
 
-  // Ha az announcements betöltődik a useSchool-ból, szinkronizáljuk
-  useEffect(() => {
-    if (!Array.isArray(initialAnnouncements)) return
-    const fromAnn = parseMaintFromAnnouncements(initialAnnouncements)
-    const next = fromAnn ?? DEFAULT_MAINT
+  const apply = useCallback((next: MaintState) => {
     setMaint(next)
     saveLocalMaint(next)
-  }, [initialAnnouncements])
+    maybeReload(next.reloadAt)
+  }, [])
+
+  useEffect(() => {
+    if (!Array.isArray(initialAnnouncements)) return
+    apply(parseMaintFromAnnouncements(initialAnnouncements) ?? DEFAULT_MAINT)
+  }, [initialAnnouncements, apply])
 
   useEffect(() => {
     if (!schoolId) return
     let alive = true
 
     const fetchLatest = async () => {
+      if (document.hidden) return
       const { data, error } = await supabase
         .from('announcements')
         .select('id, text')
         .eq('school_id', schoolId)
         .like('text', `${MAINT_PREFIX}%`)
       if (!alive || error) return
-      const next = parseMaintFromAnnouncements(data as any) ?? DEFAULT_MAINT
-      setMaint(next)
-      saveLocalMaint(next)
+      apply(parseMaintFromAnnouncements(data as any) ?? DEFAULT_MAINT)
     }
 
     fetchLatest()
@@ -107,15 +118,8 @@ export function useMaintenance(
       config: { broadcast: { self: false } },
     })
     ch.on('broadcast', { event: 'maint' }, (msg: any) => {
-      const p = msg?.payload
-      if (!alive || !p) return
-      const next: MaintState = {
-        main: !!p.main,
-        tv: !!p.tv,
-        text: typeof p.text === 'string' && p.text.trim() ? p.text.trim() : DEFAULT_MAINT.text,
-      }
-      setMaint(next)
-      saveLocalMaint(next)
+      if (!alive || !msg?.payload) return
+      apply(normalize(msg.payload))
     }).subscribe()
     chanRef.current = ch
 
@@ -124,13 +128,7 @@ export function useMaintenance(
       bc = new BroadcastChannel(`sulibell-maint-${schoolId}`)
       bc.onmessage = ev => {
         if (!alive || !ev.data) return
-        const next: MaintState = {
-          main: !!ev.data.main,
-          tv: !!ev.data.tv,
-          text: typeof ev.data.text === 'string' && ev.data.text.trim() ? ev.data.text.trim() : DEFAULT_MAINT.text,
-        }
-        setMaint(next)
-        saveLocalMaint(next)
+        apply(normalize(ev.data))
       }
       bcRef.current = bc
     } catch { /* ignore */ }
@@ -143,18 +141,20 @@ export function useMaintenance(
       try { bc?.close() } catch { /* ignore */ }
       bcRef.current = null
     }
-  }, [schoolId])
+  }, [schoolId, apply])
 
-  const updateMaint = useCallback(async (patch: Partial<MaintState>) => {
+  const updateMaint = useCallback(async (patch: Partial<MaintState> & { forceReload?: boolean }) => {
+    const main = patch.main !== undefined ? patch.main : maint.main
+    const tv = patch.tv !== undefined ? patch.tv : maint.tv
+    const finished = (maint.main && !main) || (maint.tv && !tv)
     const next: MaintState = {
-      main: patch.main !== undefined ? patch.main : maint.main,
-      tv: patch.tv !== undefined ? patch.tv : maint.tv,
+      main,
+      tv,
       text: (patch.text !== undefined ? patch.text : maint.text).trim() || DEFAULT_MAINT.text,
+      reloadAt: finished || patch.forceReload ? Date.now() : maint.reloadAt,
     }
-    setMaint(next)
-    saveLocalMaint(next)
+    apply(next)
 
-    // Azonnali élő szórás minden nyitott főoldal és /display fülnek
     chanRef.current?.send({
       type: 'broadcast',
       event: 'maint',
@@ -164,22 +164,20 @@ export function useMaintenance(
 
     if (!schoolId) return { error: null }
 
-    // Mentés a Supabase announcements táblába (speciális __MAINT__: sorba)
     await supabase
       .from('announcements')
       .delete()
       .eq('school_id', schoolId)
       .like('text', `${MAINT_PREFIX}%`)
 
-    if (next.main || next.tv) {
-      const payloadStr = MAINT_PREFIX + JSON.stringify(next)
+    if (next.main || next.tv || next.reloadAt) {
       const { error } = await supabase
         .from('announcements')
-        .insert({ school_id: schoolId, text: payloadStr, active_until: null })
+        .insert({ school_id: schoolId, text: MAINT_PREFIX + JSON.stringify(next), active_until: null })
       return { error }
     }
     return { error: null }
-  }, [schoolId, maint])
+  }, [schoolId, maint, apply])
 
   return { maint, updateMaint }
 }

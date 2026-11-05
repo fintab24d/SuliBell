@@ -9,7 +9,7 @@ self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url)
   if (r.method !== 'GET' || u.origin !== location.origin) return
   if (r.mode === 'navigate') {   // oldal: előbb a hálózat (mindig friss verzió), nélküle a tárolt példány
-    e.respondWith(fetch(r).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put('/', copy)); return res }).catch(() => caches.match('/')))
+    e.respondWith(fetch(r, { cache: 'no-cache' }).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put('/', copy)); return res }).catch(() => caches.match('/')))
     return
   }
   // fájlok (kód, képek): azonnal a tárolt példány, a háttérben frissítés
