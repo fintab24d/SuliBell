@@ -657,4 +657,58 @@ main.is-updating{filter:blur(14px) saturate(.8);pointer-events:none;user-select:
 .daily-fact b{font-size:.85rem;color:var(--n-cyan,var(--break))}
 .daily-fact p{margin:2px 0 0;font-size:.92rem;line-height:1.45}
 
-@media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i{animation:none}}
+/* ===== NEON SZÁMJEGYEK (a régi lapozós csempék helyett) ===== */
+.digits.neon{--dc:var(--tilefg,#39ff7a);display:inline-flex;align-items:baseline;font:800 1em/1 var(--f);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.digits.neon .dg{display:inline-block;width:.6em;text-align:center;color:color-mix(in srgb,var(--dc) 30%,#fff);
+  text-shadow:0 0 .04em #fff,0 0 .12em var(--dc),0 0 .3em var(--dc),0 0 .65em color-mix(in srgb,var(--dc) 55%,transparent);
+  animation:dgIn .35s cubic-bezier(.2,.8,.2,1)}
+.digits.neon .dg-sep{font-style:normal;width:.32em;text-align:center;color:var(--dc);opacity:.85;text-shadow:0 0 .25em var(--dc);animation:sepBlink 1s steps(1) infinite;transform:translateY(-.06em)}
+@keyframes dgIn{from{opacity:.25;transform:translateY(-.12em);filter:blur(2px)}to{opacity:1;transform:none;filter:none}}
+@keyframes sepBlink{50%{opacity:.35}}
+.count.soon .digits.neon{--dc:var(--n-pink,#ff4fc3)}
+.count.soon .dg{animation:dgIn .35s ease-out,pulse 1s ease-in-out infinite}
+[data-theme=light] .digits.neon .dg{color:color-mix(in srgb,var(--dc) 55%,#000);text-shadow:0 0 .2em color-mix(in srgb,var(--dc) 45%,transparent)}
+/* Központi óra a fejlécben: neon "üvegcső" keret */
+.timebox{position:relative}
+.timebox .digits.neon{--dc:var(--n-cyan,#2de2ff);padding:.12em .35em .14em;border-radius:.28em;
+  background:radial-gradient(120% 140% at 50% 0%,color-mix(in srgb,var(--dc) 14%,transparent),transparent 70%);
+  border:1px solid color-mix(in srgb,var(--dc) 45%,transparent);
+  box-shadow:0 0 .35em -.08em var(--dc),inset 0 0 .4em -.12em var(--dc)}
+[data-theme=light] .timebox .digits.neon{background:color-mix(in srgb,var(--dc) 8%,#fff)}
+
+/* ===== DISPLAY (TV): MINDEN NAGYOBB ===== */
+main.tv{padding:1vh 1.4vw;gap:1vh}
+.tv-hdr{padding:.8vh 1.2vw}
+.tv-hdr-left .brand{font-size:3.4vh}.tv-hdr-left .logo{height:4.6vh}
+.tv-hdr-left .date{font-size:2.7vh}
+.tv-hdr-left .wx{font-size:2.6vh}.tv-hdr-left .wx small{font-size:2vh}
+.tv .timebox .digits{font-size:min(12vh,13vw)}
+.tv .qrbox{font-size:1.7vh}.tv .qrbox img{width:8.5vh;height:8.5vh}
+.tv-main{grid-template-columns:minmax(0,46fr) minmax(0,54fr);gap:1.6vw}
+.tv .ring{width:min(58vh,44vw)}
+.tv .next{padding:1vh 1.6vw;font-size:2.9vh}
+.tv .next b{font-size:3.6vh}
+.tvside{gap:1.2vh}
+.tv .bells .tag,.tv .lunch .tag,.tv .chg .tag,.vibe-tv .tag,.arena-tv .tag,.jukebox-tv .tag,.tv .vid .tag{font-size:2vh!important}
+.tv .bells li{padding:.8vh 1.2vw;font-size:2.5vh}
+.tv .bells b{font-size:3.3vh}
+.tv .stat{padding:1vh 1.2vw}
+.tv .stat b{font-size:3.4vh}
+.tv .stat span{font-size:1.9vh}
+.tv .lunch p{font-size:2.6vh}
+.tv .chg li{font-size:2.4vh;padding:.6vh 1vw}.tv .chg b{font-size:2.8vh}
+.tv-subgrid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.2vw}
+.vibe-topbadge{font-size:2.4vh}
+.tv .arena-lb li{font-size:2.2vh;padding:.6vh 1vw}.tv .arena-lb .pts{font-size:2.5vh}
+.tv-jb li{font-size:2.2vh;padding:.6vh 1vw}.tv-jb .jb-info small{font-size:1.8vh}.tv-jb .jb-votes{font-size:2.4vh}
+.tv .poll h2{font-size:3.2vh}.tv .popt,.tv .pbar{font-size:2.4vh}.tv .pbar b{font-size:2.9vh}.tv .pollqr img{width:9vh;height:9vh}.tv .pollqr{font-size:2vh}
+.tv .rest h2{font-size:3.4vh}.tv .restcount b{font-size:7vh}.tv .restcount span{font-size:2.6vh}.tv .restcount small{font-size:2vh}.tv .restcount em{font-size:2.1vh}
+.tv .vframe{max-height:32vh}
+.tv .strip .bar{height:4.4vh}
+.tv .seg{font-size:2.5vh}
+.tv .ends{font-size:2vh}
+.ticker{padding:1.1vh 1.6vw}
+.ticker span{font-size:1.9vh}
+.ticker p{font-size:3.2vh}
+
+@media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i,.digits.neon .dg,.digits.neon .dg-sep{animation:none}}

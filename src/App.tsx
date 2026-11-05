@@ -24,10 +24,10 @@ const fmtRoom = (r: string) => (/^\d+$/.test(r.trim()) ? `${r.trim()}. terem` : 
 const TITLE: Record<BellState['phase'], string> = { closed: '', before: 'Tanítás előtt', lesson: '', break: 'Szünet', after: 'Vége a tanításnak' }
 const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő', cancelled: 'elmarad' }
 
-/** Számjegyek "menetrend-tábla" csempékben (ez az oldal vizuális aláírása). */
+/** Neon számjegyek: világító, egyenletes szélességű számok, váltáskor finom beúszással. */
 function Digits({ text }: { text: string }) {
-  return <span className="digits" role="img" aria-label={text}>
-    {text.split('').map((c, i) => c === ':' ? <i key={i}>:</i> : <span key={`${i}${c}`} className="tile">{c}</span>)}</span>
+  return <span className="digits neon" role="img" aria-label={text}>
+    {text.split('').map((c, i) => c === ':' ? <i key={i} className="dg-sep">:</i> : <span key={`${i}${c}`} className="dg">{c}</span>)}</span>
 }
 
 /** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint, figyelembe véve az elmaradó órákat is. */
