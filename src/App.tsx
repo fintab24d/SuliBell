@@ -10,9 +10,10 @@ import Ask from './Ask'
 import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } from './MySchedule'
 import { VibeOverlay, VibePanel, useVibe } from './Vibe'
 import Arena from './Arena'
-import Jukebox, { useJukebox } from './Jukebox'
+import Jukebox, { mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
 import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
+import { useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -42,7 +43,7 @@ function Digits({ text }: { text: string }) {
 }
 
 /** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint, figyelembe véve az elmaradó órákat is. */
-function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined) {
+function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined, sb?: SandboxConfig | null) {
   const { data, offline } = useSchool()
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
@@ -59,12 +60,14 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
   return useMemo(() => {
     const now = new Date(nowSec * 1000)
     if (!data) return { data, offline, cancelledIds: new Set<string>() }
-    const z = zoned(now, data.settings.timezone)
+    const rawZ = zoned(now, data.settings.timezone)
+    const z = sb && sb.simSecs !== null ? { ...rawZ, secs: sb.simSecs } : rawZ
     const ov = Object.fromEntries((data.schedule_dates ?? []).map(x => [x.day, x.schedule_id]))
     const schedule = scheduleFor(z.date, data.schedules, ov)
     const allLessons: Lesson[] = [...(schedule?.lessons ?? [])].sort((a, b) => a.position - b.position)
     const maxPos = allLessons.length ? Math.max(...allLessons.map(l => l.position)) : 0
-    const dayChanges = ((data.changes ?? []) as any[]).filter(c => c.day === z.date)
+    const baseChanges = ((data.changes ?? []) as any[]).filter(c => c.day === z.date)
+    const dayChanges = sb ? [...baseChanges, ...sb.extraChanges.map(c => ({ ...c, day: z.date }))] : baseChanges
     const cancelledIds = new Set<string>()
     for (const l of allLessons) {
       const myEntry = !tv ? getMyEntry?.(z.weekday, l.position) : undefined
@@ -75,13 +78,24 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     }
     const activeLessons = allLessons.filter(l => !cancelledIds.has(l.id))
     const cancelledLessons = allLessons.filter(l => cancelledIds.has(l.id))
-    let closed = data.closed.find(c => c.day === z.date)?.reason
+    let closed = sb?.simClosedReason ?? data.closed.find(c => c.day === z.date)?.reason
     if (!closed && allLessons.length > 0 && activeLessons.length === 0) {
       closed = 'Minden mai óra elmarad.'
     }
     const state = computeState(z.secs, activeLessons, closed, !schedule, cancelledLessons)
-    return { data, offline, z, schedule, state, now, cancelledIds }
-  }, [nowSec, data, offline, tv, getMyEntry])
+    const effData = sb ? {
+      ...data,
+      changes: dayChanges,
+      menus: sb.testMenu.trim() ? [{ id: 'sb-m', day: z.date, text: sb.testMenu.trim() }, ...(data.menus ?? []).filter((m: any) => m.day !== z.date)] : data.menus,
+      announcements: sb.testAnnouncement.trim() ? [{ id: 'sb-a', text: sb.testAnnouncement.trim(), active_until: null }, ...(data.announcements ?? [])] : data.announcements,
+      settings: {
+        ...data.settings,
+        alert_active: sb.alertActive ? true : data.settings.alert_active,
+        alert_text: sb.alertActive ? sb.alertText : data.settings.alert_text,
+      },
+    } : data
+    return { data: effData, offline, z, schedule, state, now, cancelledIds }
+  }, [nowSec, data, offline, tv, getMyEntry, sb])
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
@@ -189,10 +203,11 @@ function DayStrip({ L, secs, phase, cancelledIds }: { L: any[]; secs: number; ph
   </div>
 }
 
-export default function App() {
-  const tv = location.pathname.startsWith('/display')
+export default function App({ sandbox }: { sandbox?: boolean } = {}) {
+  const sb = useSandbox(!!sandbox)
+  const tv = sandbox ? sb.simTv : location.pathname.startsWith('/display')
   const { map: myMap, update: updateMyMap, getEntry, hasAny: hasMySchedule } = useMySchedule()
-  const { data, offline, z, schedule, state, now, cancelledIds } = useBell(tv, getEntry) as any
+  const { data, offline, z, schedule, state, now, cancelledIds } = useBell(tv, getEntry, sandbox ? sb : null) as any
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
   const style = 'neon'
   useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
@@ -218,7 +233,10 @@ export default function App() {
     !!data?.settings.sound_enabled && audioOn
   )
   const { songs: jbWishes } = useJukebox(data?.id, z?.date ?? '', false)
-  const { maint } = useMaintenance(data?.id, data?.announcements)
+  const { maint: liveMaint } = useMaintenance(data?.id, data?.announcements)
+  const maint = sandbox && (sb.maintMain || sb.maintTv)
+    ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText }
+    : liveMaint
   const [dismissed, setDismissed] = useState('')   // a kiemelt közleményt a látogató bezárhatja (a TV-n nem)
   useEffect(() => { if (audioOn) preload(data?.settings.bell_sound_url) }, [audioOn, data?.settings.bell_sound_url])   // saját csengőhang előtöltése
   // Telepítés gomb (Chrome, Edge, Android): a böngésző jelzi, ha az oldal telepíthető
@@ -350,9 +368,10 @@ export default function App() {
     </div>
   )
 
-  const hasPlayableWish = jbWishes.some(w => w.ytId || w.mp4Url)
+  const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia && !jbWishes.some(w => w.ytId || w.mp4Url) ? [{ id: 'sb-demo', day: z.date, kind: mediaModeForDay(z.date), title: 'Teszt szüneti lejátszás (4K természetfilm / zene)', by: 'Admin Tesztlabor', ytId: 'LXb3EKWsInQ', votes: 12, at: Date.now() }, ...jbWishes] : jbWishes
+  const hasPlayableWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
   const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasPlayableWish || videos.length > 0) && (
-    <BreakVideo list={videos} wishes={jbWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} />
+    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} />
   )
   const e0 = events[0]
   const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}

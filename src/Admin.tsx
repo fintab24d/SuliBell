@@ -298,7 +298,13 @@ function Panel() {
   }
 
   return <main className="admin">
-    <header><h1>Admin – {d.name}</h1><button onClick={() => supabase.auth.signOut()}>Kilépés</button></header>
+    <header>
+      <h1>Admin – {d.name}</h1>
+      <div className="row" style={{ margin: 0 }}>
+        <a className="btn" href="/teszt" target="_blank" rel="noreferrer" title="Privát tesztoldal megnyitása, amit mások nem látnak">🧪 Teszt oldal (/teszt)</a>
+        <button onClick={() => supabase.auth.signOut()}>Kilépés</button>
+      </div>
+    </header>
     <p className="msg" role="status">{msg}</p>
     {perms && <p>Korlátozott jogosultságod van: csak a megengedett részeket látod és szerkesztheted.</p>}
     {can('ai') && <AdminAi schoolId={d.id} onDone={load} />}

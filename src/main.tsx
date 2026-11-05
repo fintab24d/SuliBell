@@ -5,16 +5,19 @@ import Cursor from './Cursor'
 import './index.css'
 
 const Admin = lazy(() => import('./Admin'))
+const TestLab = lazy(() => import('./TestLab'))
 const Install = lazy(() => import('./Install'))
 const Vote = lazy(() => import('./Poll'))
 
 const page = location.pathname.startsWith('/admin')
   ? <Admin />
-  : location.pathname.startsWith('/telepites')
-    ? <Install />
-    : location.pathname.startsWith('/szavazas')
-      ? <Vote />
-      : <App />
+  : location.pathname.startsWith('/teszt')
+    ? <TestLab />
+    : location.pathname.startsWith('/telepites')
+      ? <Install />
+      : location.pathname.startsWith('/szavazas')
+        ? <Vote />
+        : <App />
 
 createRoot(document.getElementById('root')!).render(
   <>

@@ -142,7 +142,7 @@ export function useSchool() {
 
   useEffect(() => {
     let alive = true
-    const isAdminPage = location.pathname.startsWith('/admin')
+    const isAdminPage = location.pathname.startsWith('/admin') || location.pathname.startsWith('/teszt')
 
     const triggerClientReload = async () => {
       if (isAdminPage || reloadingRef.current) return

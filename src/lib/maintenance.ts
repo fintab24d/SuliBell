@@ -62,7 +62,7 @@ function saveLocalMaint(st: MaintState) {
 }
 
 function maybeReload(reloadAt?: number) {
-  if (location.pathname.startsWith('/admin')) return
+  if (location.pathname.startsWith('/admin') || location.pathname.startsWith('/teszt')) return
   if (!reloadAt || reloadAt <= PAGE_LOADED_AT) return
   try {
     if (localStorage.getItem(RELOADED_KEY) === String(reloadAt)) return
