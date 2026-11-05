@@ -668,12 +668,18 @@ main.is-updating{filter:blur(14px) saturate(.8);pointer-events:none;user-select:
 .count.soon .digits.neon{--dc:var(--n-pink,#ff4fc3)}
 .count.soon .dg{animation:dgIn .35s ease-out,pulse 1s ease-in-out infinite}
 [data-theme=light] .digits.neon .dg{color:color-mix(in srgb,var(--dc) 55%,#000);text-shadow:0 0 .2em color-mix(in srgb,var(--dc) 45%,transparent)}
-/* Központi óra a fejlécben: neon "üvegcső" keret */
+/* Központi óra a fejlécben: színváltó neon "üvegcső" keret */
+@property --dc{syntax:'<color>';inherits:true;initial-value:#2de2ff}
+@keyframes neonHue{
+  0%{--dc:#2de2ff}20%{--dc:#8a5cff}40%{--dc:#ff3fb8}60%{--dc:#ffb02e}80%{--dc:#39ff7a}100%{--dc:#2de2ff}
+}
 .timebox{position:relative}
-.timebox .digits.neon{--dc:var(--n-cyan,#2de2ff);padding:.12em .35em .14em;border-radius:.28em;
+.timebox .digits.neon{--dc:#2de2ff;padding:.12em .35em .14em;border-radius:.28em;
   background:radial-gradient(120% 140% at 50% 0%,color-mix(in srgb,var(--dc) 14%,transparent),transparent 70%);
-  border:1px solid color-mix(in srgb,var(--dc) 45%,transparent);
-  box-shadow:0 0 .35em -.08em var(--dc),inset 0 0 .4em -.12em var(--dc)}
+  border:1px solid color-mix(in srgb,var(--dc) 55%,transparent);
+  box-shadow:0 0 .35em -.08em var(--dc),inset 0 0 .4em -.12em var(--dc);
+  animation:neonHue 12s linear infinite}
+.bento-hdr .timebox .digits{font-size:clamp(3rem,6.5vw,5rem)}
 [data-theme=light] .timebox .digits.neon{background:color-mix(in srgb,var(--dc) 8%,#fff)}
 
 /* ===== DISPLAY (TV): MINDEN NAGYOBB ===== */
@@ -711,4 +717,4 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .ticker span{font-size:1.9vh}
 .ticker p{font-size:3.2vh}
 
-@media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i,.digits.neon .dg,.digits.neon .dg-sep{animation:none}}
+@media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i,.digits.neon .dg,.digits.neon .dg-sep,.timebox .digits.neon{animation:none}}
