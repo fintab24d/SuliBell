@@ -736,11 +736,13 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .testlab-tag button{background:none;border:0;color:var(--fg);cursor:pointer;font-weight:800;padding:0 .2rem}
 
 /* ==================== HÁTTÉR ZENELEJÁTSZÓ + NEON VISUALIZER ==================== */
-.bg-audio-engine{position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:.01;pointer-events:none;overflow:hidden;z-index:-1}
-.bg-audio-engine iframe,.bg-audio-engine video{width:1px;height:1px;border:0}
+.bg-audio-engine{position:absolute;top:0;left:0;width:240px;height:200px;pointer-events:none;overflow:hidden;z-index:0}
+.bg-audio-engine iframe,.bg-audio-engine video{width:240px;height:200px;border:0}
+.viz-foreground{position:relative;z-index:2;display:grid;gap:14px;padding:16px 18px;border-radius:17px;background:radial-gradient(120% 130% at 15% 10%,color-mix(in srgb,var(--n-pink,#f472b6) 18%,transparent),transparent 55%),radial-gradient(110% 120% at 88% 85%,color-mix(in srgb,var(--n-cyan,#22d3ee) 20%,transparent),transparent 60%),#090b1a}
 .music-panel{padding:14px 16px!important;overflow:hidden}
-.music-viz{position:relative;display:grid;gap:14px;padding:16px 18px;border-radius:18px;background:radial-gradient(120% 130% at 15% 10%,color-mix(in srgb,var(--n-pink,#f472b6) 16%,transparent),transparent 55%),radial-gradient(110% 120% at 88% 85%,color-mix(in srgb,var(--n-cyan,#22d3ee) 18%,transparent),transparent 60%),rgba(8,10,24,.78);border:1px solid color-mix(in srgb,var(--n-cyan,#22d3ee) 42%,var(--line));box-shadow:0 14px 36px rgba(0,0,0,.38),inset 0 0 28px color-mix(in srgb,var(--n-pink,#f472b6) 8%,transparent);overflow:hidden}
-.music-viz.compact{padding:12px 14px;gap:10px;border-radius:14px;margin-top:4px}
+.music-viz{position:relative;border-radius:18px;background:#090b1a;border:1px solid color-mix(in srgb,var(--n-cyan,#22d3ee) 42%,var(--line));box-shadow:0 14px 36px rgba(0,0,0,.38),inset 0 0 28px color-mix(in srgb,var(--n-pink,#f472b6) 8%,transparent);overflow:hidden}
+.music-viz.compact{border-radius:14px;margin-top:4px}
+.music-viz.compact .viz-foreground{padding:12px 14px;gap:10px;border-radius:13px}
 .viz-top{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px}
 .music-viz.compact .viz-top{gap:12px}
 .viz-disc-wrap{position:relative;width:84px;height:84px;display:grid;place-items:center;flex-shrink:0}

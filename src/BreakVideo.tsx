@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { supabase } from './lib/supabase'
 import { pickVideos, type Vid } from './lib/video'
 import { mediaModeForDay, type SongWish } from './Jukebox'
@@ -33,7 +33,8 @@ const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
 
 /**
  * Háttérben szóló zenelejátszó + Neon Spektrum Visualizer.
- * A videót nem jeleníti meg, csak a hang szól a háttérben, miközben a lemez és a spektrum sávok mozognak.
+ * A YouTube / audio lejátszó 240x200px méretben a visualizer réteg mögött fut (így a YouTube és a böngésző
+ * nem tiltja le a hangot), miközben a felhasználó csak a Neon Visualizert látja.
  */
 export function MusicVisualizer({
   title,
@@ -56,24 +57,75 @@ export function MusicVisualizer({
 }) {
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(initialMuted)
+  const [reloadNonce, setReloadNonce] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const mediaRef = useRef<HTMLVideoElement | null>(null)
 
-  const sendYtCmd = (func: string, args: unknown[] = []) => {
-    iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: 'command', func, args }),
-      '*'
-    )
-  }
+  const sendYtCmd = useCallback((func: string, args: unknown[] = []) => {
+    const win = iframeRef.current?.contentWindow
+    if (!win) return
+    win.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*')
+    win.postMessage(JSON.stringify({ event: 'command', func, args }), '*')
+  }, [])
+
+  const forceUnmuteAndPlay = useCallback(() => {
+    if (ytId) {
+      sendYtCmd('unMute')
+      sendYtCmd('setVolume', [100])
+      sendYtCmd('playVideo')
+    } else if (mediaRef.current) {
+      mediaRef.current.muted = false
+      mediaRef.current.volume = 1
+      mediaRef.current.play().catch(() => {})
+    }
+  }, [ytId, sendYtCmd])
+
+  // Amikor az iframe betöltődik, többször is elküldjük az unMute + setVolume(100) + playVideo parancsot
+  const handleIframeLoad = useCallback(() => {
+    if (muted) return
+    forceUnmuteAndPlay()
+    const t1 = setTimeout(forceUnmuteAndPlay, 250)
+    const t2 = setTimeout(forceUnmuteAndPlay, 800)
+    const t3 = setTimeout(forceUnmuteAndPlay, 1600)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+      clearTimeout(t3)
+    }
+  }, [muted, forceUnmuteAndPlay])
+
+  // Ha a böngésző az első kattintásig visszafogná a hangot, az oldal bárhol történő első érintésére felhangosítjuk
+  useEffect(() => {
+    if (muted || !playing) return
+    const unlock = () => {
+      forceUnmuteAndPlay()
+    }
+    window.addEventListener('pointerdown', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [muted, playing, forceUnmuteAndPlay])
 
   const togglePlay = () => {
     const next = !playing
     setPlaying(next)
     if (ytId) {
-      sendYtCmd(next ? 'playVideo' : 'pauseVideo')
+      if (next) {
+        sendYtCmd('unMute')
+        sendYtCmd('setVolume', [100])
+        sendYtCmd('playVideo')
+      } else {
+        sendYtCmd('pauseVideo')
+      }
     } else if (mediaRef.current) {
-      if (next) mediaRef.current.play().catch(() => {})
-      else mediaRef.current.pause()
+      if (next) {
+        mediaRef.current.muted = muted
+        mediaRef.current.play().catch(() => {})
+      } else {
+        mediaRef.current.pause()
+      }
     }
   }
 
@@ -81,33 +133,30 @@ export function MusicVisualizer({
     const next = !muted
     setMuted(next)
     if (ytId) {
-      sendYtCmd(next ? 'mute' : 'unMute')
-      if (!next) {
-        sendYtCmd('setVolume', [100])
-        sendYtCmd('playVideo')
+      if (next) {
+        sendYtCmd('mute')
+      } else {
         setPlaying(true)
+        setReloadNonce(n => n + 1)
+        setTimeout(() => {
+          sendYtCmd('unMute')
+          sendYtCmd('setVolume', [100])
+          sendYtCmd('playVideo')
+        }, 200)
       }
     } else if (mediaRef.current) {
       mediaRef.current.muted = next
       if (!next) {
+        mediaRef.current.volume = 1
         mediaRef.current.play().catch(() => {})
         setPlaying(true)
       }
     }
   }
 
-  // Ha a szülő komponensben bekapcsolják a hangot, vegyük le a némítást
-  useEffect(() => {
-    setMuted(initialMuted)
-    if (ytId) {
-      sendYtCmd(initialMuted ? 'mute' : 'unMute')
-    } else if (mediaRef.current) {
-      mediaRef.current.muted = initialMuted
-    }
-  }, [initialMuted, ytId])
-
+  const origin = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
   const ytSrc = ytId
-    ? `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=${initialMuted ? 1 : 0}&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${ytId}&enablejsapi=1`
+    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&rel=0&playsinline=1&loop=1&playlist=${ytId}&enablejsapi=1&origin=${origin}`
     : undefined
 
   const thumbUrl = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : undefined
@@ -115,17 +164,17 @@ export function MusicVisualizer({
 
   return (
     <div className={`music-viz ${compact ? 'compact' : ''} ${playing ? 'is-playing' : 'is-paused'}`}>
-      {/* Háttérben futó, láthatatlan audio motor (nem jelenik meg videóként) */}
+      {/* Háttérben futó 240x200px-es audio motor a visualizer réteg mögött (YouTube >=200x200px előírás miatt) */}
       <div className="bg-audio-engine" aria-hidden="true">
-        {ytSrc && (
+        {ytSrc && playing && (
           <iframe
             ref={iframeRef}
-            key={ytId}
+            key={`${ytId}-${reloadNonce}`}
             src={ytSrc}
             title={title}
-            allow="autoplay; encrypted-media"
-            sandbox="allow-scripts allow-same-origin allow-presentation"
+            allow="autoplay; encrypted-media; picture-in-picture"
             referrerPolicy="strict-origin-when-cross-origin"
+            onLoad={handleIframeLoad}
             tabIndex={-1}
           />
         )}
@@ -142,72 +191,88 @@ export function MusicVisualizer({
         )}
       </div>
 
-      <div className="viz-top">
-        {/* Forgó neon bakelit korong + pulzáló hanghullám gyűrűk */}
-        <div className="viz-disc-wrap">
-          <div className="viz-ring r1" />
-          <div className="viz-ring r2" />
-          <div className={`viz-disc ${playing ? 'spin' : ''}`}>
-            {thumbUrl ? (
-              <img src={thumbUrl} alt="" className="viz-thumb" loading="lazy" />
-            ) : (
-              <span className="viz-note">🎵</span>
-            )}
-            <span className="viz-hole" />
-          </div>
-        </div>
-
-        {/* Szám adatai és vezérlőgombok */}
-        <div className="viz-meta">
-          <div className="viz-status-row">
-            <span className="viz-badge">
-              <span className="eq" aria-hidden="true"><i /><i /><i /></span>
-              {playing ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'MOST SZÓL A HÁTTÉRBEN') : 'SZÜNETELTETVE'}
-            </span>
-            {typeof votes === 'number' && (
-              <span className="pill">🔥 {votes} szavazat</span>
-            )}
-          </div>
-          <h3 className="viz-title" title={title}>{title}</h3>
-          <div className="viz-sub">
-            {by ? <span>Küldi: <b>{by}</b></span> : <span>Szüneti Zenegép</span>}
+      <div className="viz-foreground">
+        <div className="viz-top">
+          {/* Forgó neon bakelit korong + pulzáló hanghullám gyűrűk */}
+          <div className="viz-disc-wrap">
+            <div className="viz-ring r1" />
+            <div className="viz-ring r2" />
+            <div className={`viz-disc ${playing ? 'spin' : ''}`}>
+              {thumbUrl ? (
+                <img src={thumbUrl} alt="" className="viz-thumb" loading="lazy" />
+              ) : (
+                <span className="viz-note">🎵</span>
+              )}
+              <span className="viz-hole" />
+            </div>
           </div>
 
-          <div className="viz-controls">
-            <button type="button" className="viz-btn" onClick={togglePlay}>
-              {playing ? '⏸ Szünet' : '▶ Lejátszás'}
-            </button>
-            <button
-              type="button"
-              className={`viz-btn ${muted ? 'warn' : 'on'}`}
-              onClick={toggleMute}
-            >
-              {muted ? '🔇 Hang bekapcsolása' : '🔊 Hang BE'}
-            </button>
-            {onClose && (
-              <button type="button" className="viz-btn" onClick={onClose}>
-                ⏹ Bezárás
+          {/* Szám adatai és vezérlőgombok */}
+          <div className="viz-meta">
+            <div className="viz-status-row">
+              <span className="viz-badge">
+                <span className="eq" aria-hidden="true"><i /><i /><i /></span>
+                {playing ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'MOST SZÓL A HÁTTÉRBEN') : 'SZÜNETELTETVE'}
+              </span>
+              {typeof votes === 'number' && (
+                <span className="pill">🔥 {votes} szavazat</span>
+              )}
+            </div>
+            <h3 className="viz-title" title={title}>{title}</h3>
+            <div className="viz-sub">
+              {by ? <span>Küldi: <b>{by}</b></span> : <span>Szüneti Zenegép</span>}
+            </div>
+
+            <div className="viz-controls">
+              <button type="button" className="viz-btn" onClick={togglePlay}>
+                {playing ? '⏸ Szünet' : '▶ Lejátszás'}
               </button>
-            )}
+              <button
+                type="button"
+                className={`viz-btn ${muted ? 'warn' : 'on'}`}
+                onClick={toggleMute}
+              >
+                {muted ? '🔇 Hang bekapcsolása' : '🔊 Hang BE'}
+              </button>
+              {ytId && (
+                <button
+                  type="button"
+                  className="viz-btn"
+                  onClick={() => {
+                    setMuted(false)
+                    setPlaying(true)
+                    setReloadNonce(n => n + 1)
+                  }}
+                  title="Ha a böngésző letiltotta az automatikus hangot, kattints ide a hangos újraindításhoz"
+                >
+                  🔄 Hang frissítése
+                </button>
+              )}
+              {onClose && (
+                <button type="button" className="viz-btn" onClick={onClose}>
+                  ⏹ Bezárás
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Neon Spektrum Hullám Visualizer */}
-      <div className={`viz-bars ${active ? 'live' : playing ? 'soft' : 'idle'}`} aria-hidden="true">
-        {VIZ_BARS.map((b, idx) => (
-          <span
-            key={idx}
-            className="viz-bar"
-            style={
-              {
-                '--d': b.delay,
-                '--s': b.dur,
-                '--h': b.maxH,
-              } as CSSProperties
-            }
-          />
-        ))}
+        {/* Neon Spektrum Hullám Visualizer */}
+        <div className={`viz-bars ${active ? 'live' : playing ? 'soft' : 'idle'}`} aria-hidden="true">
+          {VIZ_BARS.map((b, idx) => (
+            <span
+              key={idx}
+              className="viz-bar"
+              style={
+                {
+                  '--d': b.delay,
+                  '--s': b.dur,
+                  '--h': b.maxH,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -237,7 +302,6 @@ export default function BreakVideo({
   const playableWishes = wishes.filter(w => w.ytId || w.mp4Url)
 
   if (playableWishes.length > 0) {
-    // A legtöbb szavazatot kapott kívánság (vagy döntetlen esetén a szünet kulcsa alapján választva az élmezőnyből)
     const topVotes = playableWishes[0].votes
     const leaders = playableWishes.filter(w => w.votes === topVotes)
     let h = 0
@@ -264,7 +328,7 @@ export default function BreakVideo({
 
     const muteParam = soundOn ? 0 : 1
     const ytSrc = chosen.ytId
-      ? `https://www.youtube-nocookie.com/embed/${chosen.ytId}?autoplay=1&mute=${muteParam}&controls=1&rel=0&playsinline=1&loop=1&playlist=${chosen.ytId}`
+      ? `https://www.youtube.com/embed/${chosen.ytId}?autoplay=1&mute=${muteParam}&controls=1&rel=0&playsinline=1&loop=1&playlist=${chosen.ytId}`
       : undefined
 
     return (
@@ -283,7 +347,6 @@ export default function BreakVideo({
               src={ytSrc}
               title={chosen.title}
               allow="autoplay; encrypted-media; picture-in-picture"
-              sandbox="allow-scripts allow-same-origin allow-presentation"
               referrerPolicy="strict-origin-when-cross-origin"
               loading="lazy"
             />
@@ -323,7 +386,6 @@ export default function BreakVideo({
             src={p.yt}
             title={p.title || 'Szünet-videó'}
             allow="autoplay; encrypted-media; picture-in-picture"
-            sandbox="allow-scripts allow-same-origin allow-presentation"
             referrerPolicy="strict-origin-when-cross-origin"
             loading="lazy"
           />

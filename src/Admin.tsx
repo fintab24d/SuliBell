@@ -335,8 +335,9 @@ function Panel() {
         {d.settings.tv_scale !== 100 && <button type="button" onClick={() => setS({ tv_scale: 100 })}>↺ 100%</button>}</div>
       <div className="row">Oldal verziója <input size={8} placeholder="pl. 1.2.0" defaultValue={d.settings.site_version ?? ''} key={'v' + d.settings.site_version}
           onBlur={e => e.target.value !== (d.settings.site_version ?? '') && setS({ site_version: e.target.value })} />
-        Megjegyzés <input style={{ minWidth: '16rem' }} placeholder="pl. Új közlemények" defaultValue={d.settings.version_note ?? ''} key={'n' + d.settings.version_note}
+        Megjegyzés <input style={{ minWidth: '18rem' }} placeholder="pl. Új közlemények" defaultValue={d.settings.version_note ?? ''} key={'n' + d.settings.version_note}
           onBlur={e => e.target.value !== (d.settings.version_note ?? '') && setS({ version_note: e.target.value })} />
+        <button type="button" onClick={() => setS({ version_note: 'Neon óra, háttérzene visualizerrel, váltakozó zene/videó napok, elmaradó órák okos átugrása' })}>✨ Legújabb újítások beírása</button>
         {d.settings.version_note && <button type="button" onClick={() => setS({ version_note: '' })}>↺ Megjegyzés törlése</button>}</div>
     </section>}
 

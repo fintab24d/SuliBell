@@ -368,7 +368,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     </div>
   )
 
-  const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: sb.breakMediaKind, title: sb.breakMediaKind === 'music' ? 'Lofi Hip Hop Beats – Szüneti Chill Mix' : 'Teszt szüneti videó (4K természetfilm)', by: 'Admin Tesztlabor', ytId: sb.breakMediaKind === 'music' ? 'jfKfPfyJRdk' : 'LXb3EKWsInQ', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
+  const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: sb.breakMediaKind, title: sb.breakMediaKind === 'music' ? 'Cartoon – On & On (Szüneti Zene Mix)' : 'Teszt szüneti videó (4K természetfilm)', by: 'Admin Tesztlabor', ytId: sb.breakMediaKind === 'music' ? 'K4DyBUG242c' : 'LXb3EKWsInQ', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
   const hasPlayableWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
   const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasPlayableWish || videos.length > 0) && (
     <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} />

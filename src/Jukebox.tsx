@@ -30,12 +30,12 @@ export interface SongWish {
 }
 
 const QUICK_SONGS: { title: string; ytId: string }[] = [
+  { title: 'Cartoon – On & On (NCS)', ytId: 'K4DyBUG242c' },
+  { title: 'Elektronomia – Sky High', ytId: 'TW9d8vYrVFQ' },
+  { title: 'Deaf Kev – Invincible', ytId: 'J2X5mJ3HDYE' },
+  { title: 'Alan Walker – Fade', ytId: 'bM7SZ5SBzyY' },
   { title: 'Azahriah – 3korty', ytId: 'mR8_ld2wccU' },
   { title: 'DESH – Kukásautó', ytId: 'k7N-rC7c8H0' },
-  { title: 'The Weeknd – Blinding Lights', ytId: '4NRXx6U8ABQ' },
-  { title: 'Daft Punk – One More Time', ytId: 'FGBhQbmPwH8' },
-  { title: 'Avicii – Levels', ytId: '_ovdm2yX4MA' },
-  { title: 'Queen – Don’t Stop Me Now', ytId: 'HgzGwKwLmgM' },
 ]
 
 const QUICK_VIDEOS: { title: string; ytId: string }[] = [
