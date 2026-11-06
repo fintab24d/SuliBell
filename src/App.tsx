@@ -334,7 +334,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const week = [0, 1, 2, 3, 4, 5, 6].map(i => {
     const date = addDays(monday, i), sch = scheduleFor(date, data.schedules, ovMap), ls = sch ? byPos(sch.lessons) : []
     const off = (data.closed as { day: string; reason: string }[]).find(c => c.day === date)?.reason
-    return { date, i, dim: !!off || !ls.length, info: off ?? (ls.length ? `${ls.length} óra, ${fmtHM(ls[0].start_time)}–${fmtHM(ls[ls.length - 1].end_time)}` : 'Nincs tanítás') }
+    return { date, i, dim: !!off || !ls.length, info: off ?? '' }
   }).filter(w => w.i < 5 || !w.dim)
 
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
@@ -623,13 +623,13 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             )}
 
             <section className="panel week-panel">
-              <div className="tag">E heti rend</div>
+              <div className="tag">E heti naptár</div>
               <div className="week">
                 {week.map(w => (
                   <div key={w.date} className={`wd ${w.date === z.date ? 'today' : ''} ${w.dim ? 'off' : ''}`}>
                     <b>{dayName(w.date, { weekday: 'long' })}</b>
                     <small>{dayName(w.date, { month: 'long', day: 'numeric' })}</small>
-                    <span>{w.info}</span>
+                    {w.info && <span>{w.info}</span>}
                   </div>
                 ))}
               </div>
