@@ -738,11 +738,19 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 /* ==================== HÁTTÉR ZENELEJÁTSZÓ + NEON VISUALIZER ==================== */
 .bg-audio-engine{position:absolute;top:0;left:0;width:240px;height:200px;pointer-events:none;overflow:hidden;z-index:0}
 .bg-audio-engine iframe,.bg-audio-engine video{width:240px;height:200px;border:0}
-.viz-foreground{position:relative;z-index:2;display:grid;gap:14px;padding:16px 18px;border-radius:17px;background:radial-gradient(120% 130% at 15% 10%,color-mix(in srgb,var(--n-pink,#f472b6) 18%,transparent),transparent 55%),radial-gradient(110% 120% at 88% 85%,color-mix(in srgb,var(--n-cyan,#22d3ee) 20%,transparent),transparent 60%),#090b1a}
+.viz-foreground{position:relative;z-index:2;display:grid;gap:14px;padding:16px 18px;border-radius:0;min-height:100%;background:radial-gradient(120% 130% at 15% 10%,color-mix(in srgb,var(--n-pink,#f472b6) 18%,transparent),transparent 55%),radial-gradient(110% 120% at 88% 85%,color-mix(in srgb,var(--n-cyan,#22d3ee) 20%,transparent),transparent 60%),#090b1a}
 .music-panel{padding:14px 16px!important;overflow:hidden}
-.music-viz{position:relative;border-radius:18px;background:#090b1a;border:1px solid color-mix(in srgb,var(--n-cyan,#22d3ee) 42%,var(--line));box-shadow:0 14px 36px rgba(0,0,0,.38),inset 0 0 28px color-mix(in srgb,var(--n-pink,#f472b6) 8%,transparent);overflow:hidden}
+.music-viz{position:relative;padding:0!important;isolation:isolate;border-radius:18px;background:#090b1a;border:1px solid color-mix(in srgb,var(--n-cyan,#22d3ee) 42%,var(--line));box-shadow:0 14px 36px rgba(0,0,0,.38),inset 0 0 28px color-mix(in srgb,var(--n-pink,#f472b6) 8%,transparent);overflow:hidden}
 .music-viz.compact{border-radius:14px;margin-top:4px}
-.music-viz.compact .viz-foreground{padding:12px 14px;gap:10px;border-radius:13px}
+.music-viz.compact .viz-foreground{padding:12px 14px;gap:10px}
+.viz-lyrics{display:grid;gap:4px;text-align:center;padding:4px 8px;min-height:3.4em}
+.viz-lyrics p{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.viz-lyrics .now{font-size:clamp(1.05rem,1.9vw,1.4rem);font-weight:800;color:#fff;text-shadow:0 0 14px color-mix(in srgb,var(--n-cyan,#22d3ee) 70%,transparent);animation:lyricIn .35s ease-out}
+.viz-lyrics .next{font-size:.9rem;color:var(--mut);opacity:.75}
+@keyframes lyricIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.music-viz.compact .viz-lyrics .now{font-size:1rem}
+.tv .viz-lyrics .now{font-size:3.4vh}
+.tv .viz-lyrics .next{font-size:2.1vh}
 .viz-top{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px}
 .music-viz.compact .viz-top{gap:12px}
 .viz-disc-wrap{position:relative;width:84px;height:84px;display:grid;place-items:center;flex-shrink:0}
@@ -774,7 +782,7 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .viz-bars.soft .viz-bar{opacity:.55;animation-duration:calc(var(--s,.6s) * 1.6)}
 .viz-bars.idle .viz-bar{animation:none;transform:scaleY(.18);opacity:.35}
 @keyframes vizDance{0%{transform:scaleY(.16);filter:hue-rotate(0deg)}50%{transform:scaleY(.62)}100%{transform:scaleY(1);filter:hue-rotate(28deg)}}
-.tv .music-viz{padding:1.4vh 1.6vw;gap:1.2vh}
+.tv .music-viz .viz-foreground{padding:1.4vh 1.6vw;gap:1.2vh}
 .tv .viz-disc-wrap{width:9vh;height:9vh}
 .tv .viz-title{font-size:2.6vh}
 .tv .viz-sub{font-size:1.8vh}

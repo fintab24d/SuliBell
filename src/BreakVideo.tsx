@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { supabase } from './lib/supabase'
 import { pickVideos, type Vid } from './lib/video'
 import { mediaModeForDay, type SongWish } from './Jukebox'
+import { currentLyricIndex, useLyrics } from './lib/lyrics'
 
 /** Az iskola régi szünet-videói (ha még van a break_videos táblában); 5 percenként frissül. */
 export function useVideos(schoolId?: string) {
@@ -80,19 +81,37 @@ export function MusicVisualizer({
     }
   }, [ytId, sendYtCmd])
 
-  // Amikor az iframe betöltődik, többször is elküldjük az unMute + setVolume(100) + playVideo parancsot
+  // Amikor az iframe betöltődik, feliratkozunk az időadatokra, és többször is elküldjük az unMute + setVolume(100) + playVideo parancsot
   const handleIframeLoad = useCallback(() => {
+    const win = iframeRef.current?.contentWindow
+    win?.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*')
     if (muted) return
     forceUnmuteAndPlay()
-    const t1 = setTimeout(forceUnmuteAndPlay, 250)
-    const t2 = setTimeout(forceUnmuteAndPlay, 800)
-    const t3 = setTimeout(forceUnmuteAndPlay, 1600)
-    return () => {
-      clearTimeout(t1)
-      clearTimeout(t2)
-      clearTimeout(t3)
-    }
+    setTimeout(forceUnmuteAndPlay, 250)
+    setTimeout(forceUnmuteAndPlay, 800)
+    setTimeout(forceUnmuteAndPlay, 1600)
   }, [muted, forceUnmuteAndPlay])
+
+  // Lejátszási idő követése (a YouTube "infoDelivery" üzeneteiből), a feliratok időzítéséhez
+  const [time, setTime] = useState(0)
+  const lyrics = useLyrics(title)
+  useEffect(() => {
+    if (!ytId) return
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.source !== iframeRef.current?.contentWindow) return
+      if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(String(ev.origin))) return
+      try {
+        const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+        const t = d?.info?.currentTime
+        if (typeof t === 'number') setTime(t)
+      } catch { /* nem JSON */ }
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [ytId])
+  const lyricIdx = currentLyricIndex(lyrics, time)
+  const lyricNow = lyricIdx >= 0 ? lyrics[lyricIdx].text : ''
+  const lyricNext = lyrics[lyricIdx + 1]?.text ?? ''
 
   // Ha a böngésző az első kattintásig visszafogná a hangot, az oldal bárhol történő első érintésére felhangosítjuk
   useEffect(() => {
@@ -187,6 +206,7 @@ export function MusicVisualizer({
             muted={muted}
             loop
             playsInline
+            onTimeUpdate={e => setTime(e.currentTarget.currentTime)}
           />
         )}
       </div>
@@ -256,6 +276,14 @@ export function MusicVisualizer({
             </div>
           </div>
         </div>
+
+        {/* Időzített dalszöveg (csak ha elérhető) */}
+        {lyrics.length > 0 && (
+          <div className="viz-lyrics" aria-live="polite">
+            <p key={`n${lyricIdx}`} className="now">{lyricNow || '♪'}</p>
+            {lyricNext && <p className="next">{lyricNext}</p>}
+          </div>
+        )}
 
         {/* Neon Spektrum Hullám Visualizer */}
         <div className={`viz-bars ${active ? 'live' : playing ? 'soft' : 'idle'}`} aria-hidden="true">
