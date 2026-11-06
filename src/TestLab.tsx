@@ -164,8 +164,11 @@ function SandboxWorkspace() {
                 <button type="button" onClick={() => setSimTime('08:44:50')}>
                   🔥 Utolsó 10 mp (08:44:50)
                 </button>
-                <button type="button" onClick={() => setSimTime('08:50:00', { forceBreakMedia: true })}>
-                  🎉 Szünet + Videó/Zene (08:50)
+                <button type="button" onClick={() => { updateSandbox({ breakMediaKind: 'music' }); setSimTime('08:50:00', { forceBreakMedia: true }) }}>
+                  🎵 Szünet + Zene Visualizer (08:50)
+                </button>
+                <button type="button" onClick={() => { updateSandbox({ breakMediaKind: 'video' }); setSimTime('08:50:00', { forceBreakMedia: true }) }}>
+                  🎬 Szünet + Videó (08:50)
                 </button>
                 <button type="button" onClick={() => setSimTime('15:15:00')}>
                   🏁 Tanítás után (15:15)

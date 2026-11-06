@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { parseVideo } from './lib/video'
 import { voterId } from './Poll'
+import { MusicVisualizer } from './BreakVideo'
 
 export type MediaKind = 'music' | 'video'
 
@@ -674,7 +675,11 @@ export default function Jukebox({
                           className="jb-link"
                           onClick={() => setPlayingId(isPlaying ? null : s.id)}
                         >
-                          {isPlaying ? '⏹ Elrejtés' : '▶ Előnézet'}
+                          {isPlaying
+                            ? '⏹ Leállítás'
+                            : (!isVideoDay || s.kind === 'music')
+                              ? '🎧 Belehallgatás'
+                              : '▶ Előnézet'}
                         </button>
                       ) : (
                         <a
@@ -700,7 +705,19 @@ export default function Jukebox({
                   </button>
                 </div>
 
-                {isPlaying && s.ytId && (
+                {isPlaying && (s.ytId || s.mp4Url) && (!isVideoDay || s.kind === 'music') && (
+                  <MusicVisualizer
+                    compact
+                    title={s.title}
+                    by={s.by}
+                    votes={s.votes}
+                    ytId={s.ytId}
+                    mp4Url={s.mp4Url}
+                    initialMuted={false}
+                    onClose={() => setPlayingId(null)}
+                  />
+                )}
+                {isPlaying && isVideoDay && s.kind !== 'music' && s.ytId && (
                   <div className="jb-player">
                     <iframe
                       src={`https://www.youtube-nocookie.com/embed/${s.ytId}?autoplay=1&rel=0`}
@@ -711,7 +728,7 @@ export default function Jukebox({
                     />
                   </div>
                 )}
-                {isPlaying && !s.ytId && s.mp4Url && (
+                {isPlaying && isVideoDay && s.kind !== 'music' && !s.ytId && s.mp4Url && (
                   <div className="jb-player">
                     <video src={s.mp4Url} controls autoPlay playsInline style={{ width: '100%', height: '100%' }} />
                   </div>

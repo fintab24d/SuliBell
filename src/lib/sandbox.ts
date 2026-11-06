@@ -21,6 +21,8 @@ export interface SandboxConfig {
   testAnnouncement: string
   /** Szüneti videó/zene kényszerített tesztelése */
   forceBreakMedia: boolean
+  /** Szüneti média típusa a tesztlaborban ('music' = Visualizer, 'video' = Videó) */
+  breakMediaKind: 'music' | 'video'
 }
 
 export const DEFAULT_SANDBOX: SandboxConfig = {
@@ -36,6 +38,7 @@ export const DEFAULT_SANDBOX: SandboxConfig = {
   testMenu: '',
   testAnnouncement: '',
   forceBreakMedia: true,
+  breakMediaKind: 'music',
 }
 
 const EVT = 'sulibell:sandbox-change'
