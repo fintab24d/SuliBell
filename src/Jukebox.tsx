@@ -720,7 +720,7 @@ export default function Jukebox({
                 {isPlaying && isVideoDay && s.kind !== 'music' && s.ytId && (
                   <div className="jb-player">
                     <iframe
-                      src={`https://www.youtube-nocookie.com/embed/${s.ytId}?autoplay=1&rel=0`}
+                      src={`https://www.youtube-nocookie.com/embed/${s.ytId}?autoplay=1&mute=1&rel=0`}
                       title={s.title}
                       allow="autoplay; encrypted-media; picture-in-picture"
                       sandbox="allow-scripts allow-same-origin allow-presentation"
@@ -730,7 +730,7 @@ export default function Jukebox({
                 )}
                 {isPlaying && isVideoDay && s.kind !== 'music' && !s.ytId && s.mp4Url && (
                   <div className="jb-player">
-                    <video src={s.mp4Url} controls autoPlay playsInline style={{ width: '100%', height: '100%' }} />
+                    <video src={s.mp4Url} controls autoPlay muted playsInline style={{ width: '100%', height: '100%' }} />
                   </div>
                 )}
               </li>

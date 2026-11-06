@@ -58,6 +58,9 @@ export function MusicVisualizer({
 }) {
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(initialMuted)
+  const [volume, setVolume] = useState(50)
+  const volumeRef = useRef(50)
+  volumeRef.current = volume
   const [reloadNonce, setReloadNonce] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const mediaRef = useRef<HTMLVideoElement | null>(null)
@@ -70,13 +73,14 @@ export function MusicVisualizer({
   }, [])
 
   const forceUnmuteAndPlay = useCallback(() => {
+    const v = volumeRef.current
     if (ytId) {
       sendYtCmd('unMute')
-      sendYtCmd('setVolume', [100])
+      sendYtCmd('setVolume', [v])
       sendYtCmd('playVideo')
     } else if (mediaRef.current) {
       mediaRef.current.muted = false
-      mediaRef.current.volume = 1
+      mediaRef.current.volume = v / 100
       mediaRef.current.play().catch(() => {})
     }
   }, [ytId, sendYtCmd])
@@ -133,7 +137,7 @@ export function MusicVisualizer({
     if (ytId) {
       if (next) {
         sendYtCmd('unMute')
-        sendYtCmd('setVolume', [100])
+        sendYtCmd('setVolume', [volume])
         sendYtCmd('playVideo')
       } else {
         sendYtCmd('pauseVideo')
@@ -141,6 +145,7 @@ export function MusicVisualizer({
     } else if (mediaRef.current) {
       if (next) {
         mediaRef.current.muted = muted
+        mediaRef.current.volume = volume / 100
         mediaRef.current.play().catch(() => {})
       } else {
         mediaRef.current.pause()
@@ -159,16 +164,35 @@ export function MusicVisualizer({
         setReloadNonce(n => n + 1)
         setTimeout(() => {
           sendYtCmd('unMute')
-          sendYtCmd('setVolume', [100])
+          sendYtCmd('setVolume', [volume])
           sendYtCmd('playVideo')
         }, 200)
       }
     } else if (mediaRef.current) {
       mediaRef.current.muted = next
       if (!next) {
-        mediaRef.current.volume = 1
+        mediaRef.current.volume = volume / 100
         mediaRef.current.play().catch(() => {})
         setPlaying(true)
+      }
+    }
+  }
+
+  const changeVolume = (nextVol: number) => {
+    const v = Math.max(0, Math.min(100, nextVol))
+    setVolume(v)
+    if (v === 0) {
+      setMuted(true)
+      if (ytId) sendYtCmd('mute')
+      else if (mediaRef.current) mediaRef.current.muted = true
+    } else {
+      if (muted) setMuted(false)
+      if (ytId) {
+        sendYtCmd('unMute')
+        sendYtCmd('setVolume', [v])
+      } else if (mediaRef.current) {
+        mediaRef.current.muted = false
+        mediaRef.current.volume = v / 100
       }
     }
   }
@@ -252,8 +276,18 @@ export function MusicVisualizer({
                 className={`viz-btn ${muted ? 'warn' : 'on'}`}
                 onClick={toggleMute}
               >
-                {muted ? '🔇 Hang bekapcsolása' : '🔊 Hang BE'}
+                {muted ? '🔇 Némítva' : '🔊 Hang'}
               </button>
+              <label className="viz-vol" title="Hangerő szabályzó">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={muted ? 0 : volume}
+                  onChange={e => changeVolume(Number(e.target.value))}
+                />
+                <span>{muted ? 0 : volume}%</span>
+              </label>
               {ytId && (
                 <button
                   type="button"
@@ -316,7 +350,7 @@ export default function BreakVideo({
   wishes = [],
   day,
   breakKey,
-  soundOn,
+  soundOn: _soundOn,
   userMuted = false,
 }: {
   list: Vid[]
@@ -356,9 +390,9 @@ export default function BreakVideo({
       )
     }
 
-    const muteParam = soundOn ? 0 : 1
+    // Videó-napon a videók mindig némítva indulnak
     const ytSrc = chosen.ytId
-      ? `https://www.youtube.com/embed/${chosen.ytId}?autoplay=1&mute=${muteParam}&controls=1&rel=0&playsinline=1&loop=1&playlist=${chosen.ytId}`
+      ? `https://www.youtube.com/embed/${chosen.ytId}?autoplay=1&mute=1&controls=1&rel=0&playsinline=1&loop=1&playlist=${chosen.ytId}`
       : undefined
 
     return (
@@ -381,7 +415,7 @@ export default function BreakVideo({
               loading="lazy"
             />
           ) : (
-            <video key={chosen.mp4Url} src={chosen.mp4Url} autoPlay muted={!soundOn} controls loop playsInline />
+            <video key={chosen.mp4Url} src={chosen.mp4Url} autoPlay muted controls loop playsInline />
           )}
         </div>
       </section>

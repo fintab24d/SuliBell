@@ -777,6 +777,9 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .viz-btn{padding:5px 12px;border-radius:99px;font:600 .8rem var(--f);border:1px solid var(--line);background:rgba(255,255,255,.07);color:var(--fg);cursor:pointer;transition:transform .15s,border-color .2s,background-color .2s}
 .viz-btn.on{border-color:var(--n-cyan,#22d3ee);background:color-mix(in srgb,var(--n-cyan,#22d3ee) 18%,transparent);color:var(--n-cyan,#22d3ee)}
 .viz-btn.warn{border-color:var(--n-pink,#f472b6);background:color-mix(in srgb,var(--n-pink,#f472b6) 20%,transparent);color:#fff;box-shadow:0 0 16px color-mix(in srgb,var(--n-pink,#f472b6) 35%,transparent)}
+.viz-vol{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:rgba(255,255,255,.06);font:600 .78rem var(--f);color:var(--fg)}
+.viz-vol input[type="range"]{width:76px;height:5px;accent-color:var(--n-cyan,#22d3ee);cursor:pointer;margin:0}
+.viz-vol span{min-width:2.4rem;text-align:right;color:var(--n-cyan,#22d3ee)}
 .viz-bars{height:58px;display:grid;grid-template-columns:repeat(28,1fr);align-items:end;gap:4px;padding:8px 10px 4px;border-radius:12px;background:rgba(4,6,16,.62);border:1px solid rgba(255,255,255,.07)}
 .music-viz.compact .viz-bars{height:42px;gap:3px;padding:6px 8px 3px}
 .viz-bar{display:block;width:100%;height:var(--h,65%);border-radius:99px 99px 3px 3px;background:linear-gradient(180deg,var(--n-cyan,#22d3ee) 0%,#a78bfa 52%,var(--n-pink,#f472b6) 100%);box-shadow:0 0 10px color-mix(in srgb,var(--n-cyan,#22d3ee) 45%,transparent);transform-origin:bottom;animation:vizDance var(--s,.6s) ease-in-out var(--d,0s) infinite alternate}
