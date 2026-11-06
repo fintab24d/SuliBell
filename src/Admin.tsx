@@ -5,6 +5,7 @@ import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
 import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
+import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
 import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
 import AdminAi from './AdminAi'
@@ -77,6 +78,7 @@ function Panel() {
   const [cdTo, setCdTo] = useState('')   // ha meg van adva, az egész időszak (tól–ig) felvételre kerül
   const [ev, setEv] = useState({ title: '', kind: 'other', date: '', time: '00:00' })
   const [an, setAn] = useState({ text: '', until: '' })
+  const [pt, setPt] = useState({ icon: '🌐', name: '', url: '', desc: '' })
   const [sd, setSd] = useState({ day: '', schedule_id: '' })
   const [chg, setChg] = useState({ day: todayStr, kind: 'cancel', lesson_label: '', text: '' })
   const [mn, setMn] = useState({ day: todayStr, text: '' })
@@ -502,9 +504,9 @@ function Panel() {
     {can('announcements') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h2>Közlemények (főoldal és TV)</h2>
-        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%'))}>↺ Összes közlemény törlése</button>}
+        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%'))}>↺ Összes közlemény törlése</button>}
       </div>
-      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
+      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
         <button onClick={() => setAn({ text: n.text, until: n.active_until ?? '' })}>Szerkesztés</button>
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />
@@ -512,6 +514,69 @@ function Panel() {
         <button disabled={!an.text} onClick={async () => { await run(supabase.from('announcements').insert({ school_id: d.id, text: an.text, active_until: an.until || null })); setAn({ text: '', until: '' }) }}>Hozzáadás</button>
         {(an.text || an.until) && <button type="button" onClick={() => setAn({ text: '', until: '' })}>↺ Alaphelyzet</button>}</div>
     </section>}
+
+    {can('announcements') && (() => {
+      const partners = parsePartnersFromAnnouncements(d.announcements)
+      const savePartners = async (next: PartnerSite[]) => {
+        await run(savePartnersToDb(d.id, next) as any)
+      }
+      return (
+        <section>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2>🤝 Társoldalak és hasznos linkek (főoldalon)</h2>
+            {partners.length > 0 && (
+              <button type="button" onClick={() => confirm('Biztosan törlöd az összes társoldalt?') && savePartners([])}>
+                ↺ Összes társoldal törlése
+              </button>
+            )}
+          </div>
+          <p style={{ margin: '0 0 .5rem', opacity: 0.75, fontSize: '.9rem' }}>
+            Itt adhatsz meg partneroldalakat és hasznos iskolai linkeket (pl. Iskola honlapja, KRÉTA, Diákönkormányzat, Menza), amelyek a főoldalon külön kártyán jelennek meg.
+          </p>
+          {partners.map(p => (
+            <div className="row" key={p.id}>
+              <span>{p.icon || '🌐'} <b>{p.name}</b> — <a href={p.url} target="_blank" rel="noopener noreferrer">{p.url}</a>{p.desc ? ` (${p.desc})` : ''}</span>
+              <button type="button" onClick={() => setPt({ icon: p.icon || '🌐', name: p.name, url: p.url, desc: p.desc || '' })}>Szerkesztés</button>
+              <button type="button" onClick={() => savePartners(partners.filter(x => x.id !== p.id))}>Törlés</button>
+            </div>
+          ))}
+          <div className="row">
+            <select value={pt.icon} onChange={e => setPt({ ...pt, icon: e.target.value })} title="Ikon">
+              {['🌐', '🏫', '📘', '🎓', '🍽️', '📸', '📰', '🏆', '💬', '🔗'].map(ic => (
+                <option key={ic} value={ic}>{ic}</option>
+              ))}
+            </select>
+            <input placeholder="Oldal neve (pl. Iskola honlapja) *" value={pt.name} onChange={e => setPt({ ...pt, name: e.target.value })} />
+            <input style={{ minWidth: '14rem' }} placeholder="Link (pl. https://iskola.hu) *" value={pt.url} onChange={e => setPt({ ...pt, url: e.target.value })} />
+            <input placeholder="Rövid leírás (opcionális)" value={pt.desc} onChange={e => setPt({ ...pt, desc: e.target.value })} />
+            <button
+              type="button"
+              disabled={!pt.name.trim() || !pt.url.trim()}
+              onClick={async () => {
+                const cleanUrl = /^https?:\/\//i.test(pt.url.trim()) ? pt.url.trim() : `https://${pt.url.trim()}`
+                const filtered = partners.filter(x => x.name.toLowerCase() !== pt.name.trim().toLowerCase())
+                await savePartners([
+                  ...filtered,
+                  {
+                    id: `p-${Date.now().toString(36)}`,
+                    icon: pt.icon || '🌐',
+                    name: pt.name.trim(),
+                    url: cleanUrl,
+                    desc: pt.desc.trim() || undefined,
+                  },
+                ])
+                setPt({ icon: '🌐', name: '', url: '', desc: '' })
+              }}
+            >
+              Hozzáadás / Mentés
+            </button>
+            {(pt.name || pt.url || pt.desc) && (
+              <button type="button" onClick={() => setPt({ icon: '🌐', name: '', url: '', desc: '' })}>↺ Alaphelyzet</button>
+            )}
+          </div>
+        </section>
+      )
+    })()}
 
     {can('calendar') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>

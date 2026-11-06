@@ -13,6 +13,7 @@ import Arena from './Arena'
 import Jukebox, { mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
 import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
+import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/partners'
 import { useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
@@ -339,7 +340,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
   const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[])
-    .filter(n => !isMaintAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
+    .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
+  const partners = parsePartnersFromAnnouncements(data.announcements)
+  const partnersBox = !tv && partners.length > 0 && <section className="panel partners-panel"><div className="tag">🤝 Társoldalak</div><div className="partners-grid">{partners.map(p => <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="partner-card"><span className="p-ico" aria-hidden="true">{p.icon || '🌐'}</span><div className="p-info"><b>{p.name}</b>{p.desc && <small>{p.desc}</small>}</div><span className="p-arr" aria-hidden="true">↗</span></a>)}</div></section>
   const note = notes.length ? notes[Math.floor(now.getTime() / 10000) % notes.length] : null
 
   // ---- Visszaszámláló kártyák ----
@@ -484,6 +487,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               ) : (
                 <>
                   {pollCard}
+            {partnersBox}
                   {restBox || (events[0] && evCard(events[0], 0))}
                   <div className="tv-subgrid">
                     {offCard}
@@ -667,6 +671,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
 
             {pollCard}
+            {partnersBox}
           </div>
         </div>
 
