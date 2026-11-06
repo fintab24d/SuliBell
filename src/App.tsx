@@ -233,7 +233,25 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const [myModalOpen, setMyModalOpen] = useState(false)
 
   // Csengetési hang: állapotváltáskor szól, ha az admin bekapcsolta és a hang engedélyezve van.
-  const [audioOn, setAudioOn] = useState(audioReady())
+  // Hang alapból bekapcsolva: a böngésző az első érintésnél/kattintásnál/billentyűnél automatikusan feloldja; a látogató letilthatja.
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem('sound-muted') === '1' } catch { return false } })
+  const [ctxOn, setCtxOn] = useState(audioReady())
+  useEffect(() => {
+    if (muted || ctxOn) return
+    let done = false
+    const unlock = () => { if (done) return; enableAudio().then(ok => { if (ok) { done = true; setCtxOn(true) } }).catch(() => {}) }
+    unlock()   // ha a böngésző már engedi (pl. kioszk / korábbi interakció), azonnal indul
+    const evs = ['pointerdown', 'keydown', 'touchstart'] as const
+    evs.forEach(e => window.addEventListener(e, unlock, { passive: true }))
+    return () => evs.forEach(e => window.removeEventListener(e, unlock))
+  }, [muted, ctxOn])
+  const toggleMute = async () => {
+    const next = !muted
+    setMuted(next)
+    try { localStorage.setItem('sound-muted', next ? '1' : '0') } catch { /* nem baj */ }
+    if (!next) setCtxOn(await enableAudio())
+  }
+  const audioOn = !muted && ctxOn
   const { counts: vibeCounts, floats: vibeFloats, sendVibe, cooldown: vibeCooldown } = useVibe(
     data?.id,
     z?.date ?? '',
@@ -259,7 +277,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
   useEffect(() => {
-    if (prev.current && key !== prev.current && state?.phase !== 'closed' && data?.settings.sound_enabled) ring(data.settings.bell_sound_url)
+    if (prev.current && key !== prev.current && state?.phase !== 'closed' && data?.settings.sound_enabled && !muted) ring(data.settings.bell_sound_url)
     prev.current = key
   }, [key])
   // TV-mód méretezése az admin beállítása szerint.
@@ -379,7 +397,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: sb.breakMediaKind, title: sb.breakMediaKind === 'music' ? 'Cartoon – On & On (Szüneti Zene Mix)' : 'Teszt szüneti videó (4K természetfilm)', by: 'Admin Tesztlabor', ytId: sb.breakMediaKind === 'music' ? 'K4DyBUG242c' : 'LXb3EKWsInQ', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
   const hasPlayableWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
   const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasPlayableWish || videos.length > 0) && (
-    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} />
+    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} />
   )
   const e0 = events[0]
   const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}
@@ -418,8 +436,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <div className="tv-hdr-right">
               <div className="tools">
                 {offline && <span className="pill">Offline mód</span>}
-                {data.settings.sound_enabled && !audioOn && (
-                  <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>
+                {data.settings.sound_enabled && (
+                  <button className={muted ? 'cta' : ''} onClick={toggleMute}>{muted ? '🔊 Hang bekapcsolása' : '🔇 Hang letiltása'}</button>
                 )}
               </div>
               {qr && (
@@ -523,8 +541,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
           <div className="tools">
             {offline && <span className="pill">Offline mód</span>}
-            {data.settings.sound_enabled && !audioOn && (
-              <button className="cta" onClick={async () => setAudioOn(await enableAudio())}>Hang engedélyezése</button>
+            {data.settings.sound_enabled && (
+              <button className={muted ? 'cta' : ''} onClick={toggleMute}>{muted ? '🔊 Hang bekapcsolása' : '🔇 Hang letiltása'}</button>
             )}
             {!standalone && (
               installEv

@@ -317,12 +317,14 @@ export default function BreakVideo({
   day,
   breakKey,
   soundOn,
+  userMuted = false,
 }: {
   list: Vid[]
   wishes?: SongWish[]
   day: string
   breakKey: string
   soundOn?: boolean
+  userMuted?: boolean
 }) {
   const mode = mediaModeForDay(day)
 
@@ -348,7 +350,7 @@ export default function BreakVideo({
             votes={chosen.votes}
             ytId={chosen.ytId}
             mp4Url={chosen.mp4Url}
-            initialMuted={false}
+            initialMuted={userMuted}
           />
         </section>
       )
@@ -397,7 +399,7 @@ export default function BreakVideo({
           title={p.title || 'Szüneti zene'}
           ytId={ytMatch?.[1]}
           mp4Url={p.src}
-          initialMuted={false}
+          initialMuted={userMuted}
         />
       </section>
     )
