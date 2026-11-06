@@ -22,6 +22,12 @@ import { computeState, fmtCount, fmtHM, addDays, instantOf, isLessonCancelled, n
 const pad = (n: number) => String(n).padStart(2, '0')
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`
 const fmtRoom = (r: string) => (/^\d+$/.test(r.trim()) ? `${r.trim()}. terem` : r.trim())
+/** Saját órarend: ha a látogató az adott napra kitöltött legalább egy órát, a kitöltetlen órák nem látszanak (és nem számolnak). */
+const onlyMyLessons = <T extends { position: number }>(lessons: T[], weekday: number, get?: (weekday: number, pos?: number) => MyLessonEntry | undefined): T[] => {
+  if (!get) return lessons
+  const mine = lessons.filter(l => get(weekday, l.position))
+  return mine.length ? mine : lessons
+}
 const TITLE: Record<BellState['phase'], string> = { closed: '', before: 'Tanítás előtt', lesson: '', break: 'Szünet', after: 'Vége a tanításnak' }
 const CHIP: Record<string, string> = { past: 'vége', now: 'most', upnext: 'következő', cancelled: 'elmarad' }
 
@@ -63,8 +69,9 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     const rawZ = zoned(now, data.settings.timezone)
     const z = sb && sb.simSecs !== null ? { ...rawZ, secs: sb.simSecs } : rawZ
     const ov = Object.fromEntries((data.schedule_dates ?? []).map(x => [x.day, x.schedule_id]))
-    const schedule = scheduleFor(z.date, data.schedules, ov)
-    const allLessons: Lesson[] = [...(schedule?.lessons ?? [])].sort((a, b) => a.position - b.position)
+    const baseSchedule = scheduleFor(z.date, data.schedules, ov)
+    const allLessons: Lesson[] = onlyMyLessons([...(baseSchedule?.lessons ?? [])].sort((a, b) => a.position - b.position), z.weekday, tv ? undefined : getMyEntry)
+    const schedule = baseSchedule ? { ...baseSchedule, lessons: allLessons } : baseSchedule
     const maxPos = allLessons.length ? Math.max(...allLessons.map(l => l.position)) : 0
     const baseChanges = ((data.changes ?? []) as any[]).filter(c => c.day === z.date)
     const dayChanges = sb ? [...baseChanges, ...sb.extraChanges.map(c => ({ ...c, day: z.date }))] : baseChanges
@@ -262,7 +269,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const s: BellState = state
   const byPos = (x: any[]) => [...x].sort((p: any, q: any) => p.position - q.position)
   const ovMap = Object.fromEntries(((data.schedule_dates ?? []) as any[]).map(x => [x.day, x.schedule_id])) as Record<string, string>
-  const pv = s.phase === 'closed' || s.phase === 'after' ? nextSchoolDay(z.date, data.schedules, data.closed, ovMap) : undefined
+  const pvRaw = s.phase === 'closed' || s.phase === 'after' ? nextSchoolDay(z.date, data.schedules, data.closed, ovMap) : undefined
+  const pv = pvRaw ? { ...pvRaw, schedule: { ...pvRaw.schedule, lessons: onlyMyLessons(pvRaw.schedule.lessons, new Date(pvRaw.date + 'T12:00:00Z').getUTCDay() || 7, tv ? undefined : getEntry) } } : undefined
   const tl = s.phase === 'closed' ? pv?.schedule : schedule            // zárva: a következő tanítási nap rendje látszik
   const L = tl ? byPos(tl.lessons) : []
   const boardWeekday = s.phase === 'closed' && pv ? (new Date(pv.date + 'T12:00:00Z').getUTCDay() || 7) : z.weekday
