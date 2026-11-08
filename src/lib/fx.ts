@@ -138,6 +138,7 @@ export class FxEngine {
   /** Valódi időjárás a háttérben: eső, hó, vihar (villámlással). */
   setWeather(code: number | null | undefined) {
     const [k, p] = weatherKind(code)
+    if (this.wkind === k && this.wpow === p) return
     this.wkind = k; this.wpow = p
     this.nextBolt = this.time + rnd(3, 7)
     this.fitDrops()

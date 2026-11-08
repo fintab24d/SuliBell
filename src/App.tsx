@@ -274,7 +274,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   }, [])
   const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
   const qr = useQr(location.origin + '/telepites', tv && data?.settings.tv_show_qr !== false)
-  const wx = useWeather(data?.settings.weather_lat ?? null, data?.settings.weather_lon ?? null, data?.settings.timezone, !!data?.settings.weather_enabled)
+  const rawWx = useWeather(data?.settings.weather_lat ?? null, data?.settings.weather_lon ?? null, data?.settings.timezone, !!data?.settings.weather_enabled)
+  const wx = sandbox && sb.simWeatherCode !== null
+    ? { t: 14, c: sb.simWeatherCode, min: 10, max: 18, p: 90, lat: 0, lon: 0 }
+    : rawWx
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
   useEffect(() => {

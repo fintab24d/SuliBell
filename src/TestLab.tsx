@@ -304,6 +304,35 @@ function SandboxWorkspace() {
                   🔔 Csengőhang teszt
                 </button>
               </div>
+              <div className="testlab-btns" style={{ marginTop: '0.35rem' }}>
+                <span style={{ fontSize: '0.82rem', opacity: 0.8, alignSelf: 'center' }}>🌧️ Csapadék teszt:</span>
+                <button
+                  type="button"
+                  className={sb.simWeatherCode === 61 ? 'active' : ''}
+                  onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === 61 ? null : 61 })}
+                >
+                  🌧️ Eső
+                </button>
+                <button
+                  type="button"
+                  className={sb.simWeatherCode === 71 ? 'active' : ''}
+                  onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === 71 ? null : 71 })}
+                >
+                  ❄️ Hó
+                </button>
+                <button
+                  type="button"
+                  className={sb.simWeatherCode === 95 ? 'active' : ''}
+                  onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === 95 ? null : 95 })}
+                >
+                  ⛈️ Vihar
+                </button>
+                {sb.simWeatherCode !== null && (
+                  <button type="button" onClick={() => updateSandbox({ simWeatherCode: null })}>
+                    ✕ Csapadék ki
+                  </button>
+                )}
+              </div>
               <div className="testlab-row">
                 <input
                   placeholder="Frissítés üzenete…"

@@ -10,6 +10,7 @@ export default function Fx({ phase, bellKey, tv, wx, sound }: { phase: string; b
   const eng = useRef<FxEngine | null>(null)
   const off = reduced()
 
+  // Csak a releváns propok változásakor induljon újra az engine
   useEffect(() => {
     if (off || !ref.current) return
     let e: FxEngine
@@ -21,8 +22,8 @@ export default function Fx({ phase, bellKey, tv, wx, sound }: { phase: string; b
   }, [off, tv])
 
   useEffect(() => { eng.current?.setPhase(phase) }, [phase])
-  useEffect(() => { if (eng.current) eng.current.onSound = sound ? fxSound : undefined }, [sound, off, tv])
-  useEffect(() => { eng.current?.setWeather(wx) }, [wx, off, tv])      // valódi időjárás: eső, hó, vihar
+  useEffect(() => { if (eng.current) eng.current.onSound = sound ? fxSound : undefined }, [sound])
+  useEffect(() => { eng.current?.setWeather(wx) }, [wx])      // valódi időjárás: eső, hó, vihar
   useEffect(() => {                                                    // tűzijáték / konfetti a nagy pillanatokra
     const on = (e: Event) => { const d = (e as CustomEvent).detail ?? {}; eng.current?.celebrate(d.kind ?? 'both', d.power ?? 1) }
     window.addEventListener('sulibell:celebrate', on)
