@@ -30,6 +30,54 @@ const TRIVIA_BANK: QuizQ[] = [
   { q: 'Mi Magyarország legmagasabb csúcsa?', opts: ['Dobogókő', 'Kékes', 'Csóványos', 'Írott-kő'], ans: 1 },
   { q: 'Hány másodperc 3 és fél perc?', opts: ['180 mp', '200 mp', '210 mp', '230 mp'], ans: 2 },
   { q: 'Melyik gázból van legtöbb a Föld légkörében?', opts: ['Oxigén', 'Nitrogén', 'Szén-dioxid', 'Hidrogén'], ans: 1 },
+  { q: 'Ki írta az Egri csillagokat?', opts: ['Jókai Mór', 'Mikszáth Kálmán', 'Gárdonyi Géza', 'Arany János'], ans: 2 },
+  { q: 'Mi az arany vegyjele a periódusos rendszerben?', opts: ['Ag', 'Au', 'Fe', 'Gd'], ans: 1 },
+  { q: 'Melyik évben koronázták meg Szent Istvánt?', opts: ['896', '955', '1000', '1083'], ans: 2 },
+  { q: 'Hány megyéje (vármegyéje) van Magyarországnak?', opts: ['17', '18', '19', '20'], ans: 2 },
+  { q: 'Melyik a világ leghosszabb folyója?', opts: ['Duna', 'Nílus', 'Volga', 'Mississippi'], ans: 1 },
+  { q: 'Melyik szervünk termeli az inzulint?', opts: ['Máj', 'Vese', 'Hasnyálmirigy', 'Lép'], ans: 2 },
+  { q: 'Mi a fény sebessége vákuumban megközelítőleg?', opts: ['30 000 km/s', '150 000 km/s', '300 000 km/s', '1 000 000 km/s'], ans: 2 },
+  { q: 'Ki szerezte a Himnusz zenéjét?', opts: ['Liszt Ferenc', 'Erkel Ferenc', 'Kodály Zoltán', 'Bartók Béla'], ans: 1 },
+  { q: 'Hány fok egy négyszög belső szögeinek összege?', opts: ['180°', '270°', '360°', '540°'], ans: 2 },
+  { q: 'Melyik kontinensen található a Szahara sivatag?', opts: ['Ázsia', 'Afrika', 'Ausztrália', 'Dél-Amerika'], ans: 1 },
+  { q: 'Melyik évben adták ki az Aranybullát?', opts: ['1222', '1241', '1301', '1456'], ans: 0 },
+  { q: 'Mi a konyhasó kémiai képlete?', opts: ['KCl', 'NaCl', 'CaCO₃', 'NaOH'], ans: 1 },
+  { q: 'Ki írta a Toldit?', opts: ['Petőfi Sándor', 'Arany János', 'Vörösmarty Mihály', 'Kölcsey Ferenc'], ans: 1 },
+  { q: 'Melyik a Naprendszer legnagyobb bolygója?', opts: ['Szaturnusz', 'Jupiter', 'Uránusz', 'Neptunusz'], ans: 1 },
+  { q: 'Hány oldalú egy szabályos hatszög?', opts: ['5', '6', '7', '8'], ans: 1 },
+  { q: 'Mi Ausztrália fővárosa?', opts: ['Sydney', 'Melbourne', 'Canberra', 'Perth'], ans: 2 },
+  { q: 'Melyik magyar feltaláló nevéhez fűződik a C-vitamin izolálása?', opts: ['Bíró László', 'Szent-Györgyi Albert', 'Neumann János', 'Jedlik Ányos'], ans: 1 },
+  { q: 'Melyik HTTP státuszkód jelenti a „Nem található” hibát?', opts: ['200', '301', '404', '500'], ans: 2 },
+  { q: 'Hány billentyű van egy szabványos zongorán?', opts: ['76', '84', '88', '92'], ans: 2 },
+  { q: 'Melyik csata zajlott 1526. augusztus 29-én?', opts: ['Kenyérmezei csata', 'Mohácsi csata', 'Nándorfehérvári diadal', 'Muhi csata'], ans: 1 },
+  { q: 'Mi a vas vegyjele?', opts: ['Va', 'Fe', 'Ir', 'Zn'], ans: 1 },
+  { q: 'Hány napból áll egy szökőév?', opts: ['364', '365', '366', '367'], ans: 2 },
+  { q: 'Melyik óceán a Föld legnagyobb óceánja?', opts: ['Atlanti-óceán', 'Indiai-óceán', 'Csendes-óceán', 'Jeges-tenger'], ans: 2 },
+  { q: 'Ki írta a János vitézt?', opts: ['Petőfi Sándor', 'Arany János', 'József Attila', 'Ady Endre'], ans: 0 },
+  { q: 'Mennyi 144 négyzetgyöke?', opts: ['11', '12', '13', '14'], ans: 1 },
+  { q: 'Melyik város volt Magyarország fővárosa a középkorban Buda előtt?', opts: ['Debrecen', 'Székesfehérvár', 'Sopron', 'Pécs'], ans: 1 },
+  { q: 'Milyen mértékegységgel mérjük az elektromos ellenállást?', opts: ['Amper', 'Volt', 'Ohm', 'Watt'], ans: 2 },
+  { q: 'Melyik folyó folyik át Szegeden?', opts: ['Duna', 'Tisza', 'Rába', 'Dráva'], ans: 1 },
+  { q: 'Ki írta A kőszívű ember fiait?', opts: ['Jókai Mór', 'Mikszáth Kálmán', 'Móricz Zsigmond', 'Kosztolányi Dezső'], ans: 0 },
+  { q: 'Hány kromoszómája van egy egészséges emberi testi sejtnek?', opts: ['23', '44', '46', '48'], ans: 2 },
+  { q: 'Melyik évben volt a tatárjárás Magyarországon?', opts: ['1095–1096', '1241–1242', '1348–1349', '1456'], ans: 1 },
+  { q: 'Mi Kanada fővárosa?', opts: ['Toronto', 'Vancouver', 'Ottawa', 'Montreal'], ans: 2 },
+  { q: 'Melyik prímszám az alábbiak közül?', opts: ['21', '27', '29', '33'], ans: 2 },
+  { q: 'Ki írta a Légy jó mindhalálig című regényt?', opts: ['Móricz Zsigmond', 'Karinthy Frigyes', 'Babits Mihály', 'Molnár Ferenc'], ans: 0 },
+  { q: 'Melyik elemnek a rendszáma az 1 a periódusos rendszerben?', opts: ['Hélium', 'Hidrogén', 'Lítium', 'Szén'], ans: 1 },
+  { q: 'Melyik hegységben található a Kékes?', opts: ['Bükk', 'Mátra', 'Börzsöny', 'Bakony'], ans: 1 },
+  { q: 'Hány játékos van egy kosárlabdacsapatban egyszerre a pályán?', opts: ['5', '6', '7', '11'], ans: 0 },
+  { q: 'Melyik évben lépett ember először a Holdra?', opts: ['1961', '1965', '1969', '1972'], ans: 2 },
+  { q: 'Mi a római C számjegye arab számmal?', opts: ['50', '100', '500', '1000'], ans: 1 },
+  { q: 'Melyik vitamin keletkezik a bőrben napfény hatására?', opts: ['A-vitamin', 'B-vitamin', 'C-vitamin', 'D-vitamin'], ans: 3 },
+  { q: 'Ki írta a Szózatot?', opts: ['Kölcsey Ferenc', 'Vörösmarty Mihály', 'Petőfi Sándor', 'Berzsenyi Dániel'], ans: 1 },
+  { q: 'Melyik ország zászlaján látható juharlevél?', opts: ['Ausztrália', 'Kanada', 'Új-Zéland', 'Írország'], ans: 1 },
+  { q: 'Hány bájt 1 kilobájt (binárisan, KiB)?', opts: ['512', '1000', '1024', '2048'], ans: 2 },
+  { q: 'Melyik magyar királyunk uralkodott 1458 és 1490 között?', opts: ['Károly Róbert', 'Nagy Lajos', 'Hunyadi Mátyás', 'Zsigmond'], ans: 2 },
+  { q: 'Melyik bolygót nevezik a „vörös bolygónak”?', opts: ['Vénusz', 'Mars', 'Jupiter', 'Merkúr'], ans: 1 },
+  { q: 'Mennyi 3⁴ (három a negyediken)?', opts: ['27', '64', '81', '108'], ans: 2 },
+  { q: 'Melyik a Föld legmélyebb tava?', opts: ['Tanganyika-tó', 'Bajkál-tó', 'Felső-tó', 'Viktória-tó'], ans: 1 },
+  { q: 'Ki alkotta meg a bűvös kockát 1974-ben?', opts: ['Gábor Dénes', 'Rubik Ernő', 'Kempelen Farkas', 'Puskás Tivadar'], ans: 1 },
 ]
 
 /** Determinisztikus napi véletlenszám-generátor (hogy mindenki ugyanazt a feladatsort kapja adott napon) */
@@ -47,32 +95,75 @@ function seededRng(seedStr: string) {
   }
 }
 
+/** Napi sorszám (epoch nap), hogy az egymást követő napok kérdéscsomagjai garantáltan eltérjenek */
+function dayOffset(day: string): number {
+  const ms = Date.parse(`${day}T00:00:00Z`)
+  return Number.isFinite(ms) ? Math.floor(ms / 86400000) : 0
+}
+
+/** Adott napra determinisztikusan megkevert tudáspróba-sorrend (ismétlődés nélkül) */
+function getDailyTriviaOrder(day: string): number[] {
+  const n = TRIVIA_BANK.length
+  const order = Array.from({ length: n }, (_, i) => i)
+  const rng = seededRng(`trivia-deck-${day}`)
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+  // Naponta eltoljuk a csomagot, így két egymást követő napon még a kezdő kérdések sem fedhetnek át
+  const shift = ((dayOffset(day) * 17) % n + n) % n
+  return order.map((_, i) => order[(i + shift) % n])
+}
+
 function makeDailyQuestion(day: string, index: number): QuizQ {
   const rng = seededRng(`${day}-q-${index}`)
-  // Minden 3. kérdés tudáspróba, a többi pörgős fejszámolás
-  if (index % 3 === 1) {
-    const pick = TRIVIA_BANK[Math.floor(rng() * TRIVIA_BANK.length)]
-    return pick
+  // A kérdések 2/3-a napi egyedi tudáspróba (ismétlődés nélkül), minden 3. kérdés változatos fejszámolás/logika
+  if (index % 3 !== 2) {
+    const triviaSlot = index - Math.floor(index / 3)
+    const deck = getDailyTriviaOrder(day)
+    const base = TRIVIA_BANK[deck[triviaSlot % deck.length]]
+    // A válaszlehetőségek sorrendjét is megkeverjük naponta
+    const idxs = [0, 1, 2, 3]
+    for (let i = idxs.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[idxs[i], idxs[j]] = [idxs[j], idxs[i]]
+    }
+    return {
+      q: base.q,
+      opts: idxs.map(i => base.opts[i]),
+      ans: idxs.indexOf(base.ans),
+    }
   }
-  const kind = Math.floor(rng() * 3)
+  const kind = (Math.floor(rng() * 5) + dayOffset(day) + index) % 5
   let q = '', right = 0
   if (kind === 0) {
-    const a = 12 + Math.floor(rng() * 38)
-    const b = 11 + Math.floor(rng() * 35)
+    const a = 14 + Math.floor(rng() * 45)
+    const b = 12 + Math.floor(rng() * 42)
     right = a + b
     q = `${a} + ${b} = ?`
   } else if (kind === 1) {
-    const a = 30 + Math.floor(rng() * 55)
-    const b = 11 + Math.floor(rng() * 28)
+    const a = 35 + Math.floor(rng() * 60)
+    const b = 12 + Math.floor(rng() * 32)
     right = a - b
     q = `${a} − ${b} = ?`
-  } else {
-    const a = 4 + Math.floor(rng() * 11)
-    const b = 3 + Math.floor(rng() * 11)
+  } else if (kind === 2) {
+    const a = 4 + Math.floor(rng() * 12)
+    const b = 3 + Math.floor(rng() * 12)
     right = a * b
     q = `${a} × ${b} = ?`
+  } else if (kind === 3) {
+    const b = 3 + Math.floor(rng() * 10)
+    right = 4 + Math.floor(rng() * 12)
+    const a = b * right
+    q = `${a} ÷ ${b} = ?`
+  } else {
+    const a = 3 + Math.floor(rng() * 9)
+    const b = 2 + Math.floor(rng() * 7)
+    const c = 4 + Math.floor(rng() * 15)
+    right = a * b + c
+    q = `${a} × ${b} + ${c} = ?`
   }
-  const deltas = [-10, -3, -2, -1, 1, 2, 3, 10]
+  const deltas = [-10, -4, -3, -2, -1, 1, 2, 3, 4, 10]
   const wrongs = new Set<number>()
   while (wrongs.size < 3) {
     const d = deltas[Math.floor(rng() * deltas.length)]

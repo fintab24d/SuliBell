@@ -6,6 +6,21 @@ const COLS = 22, ROWS = 14
 const KEYS: Record<string, P> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, w: { x: 0, y: -1 }, s: { x: 0, y: 1 }, a: { x: -1, y: 0 }, d: { x: 1, y: 0 } }
 const bestGet = () => { try { return +(localStorage.getItem('snake-best') ?? 0) } catch { return 0 } }
 
+export type SnakeDiff = 'easy' | 'normal' | 'hard' | 'extreme'
+const SNAKE_DIFFS: { id: SnakeDiff; label: string; ms: number }[] = [
+  { id: 'easy', label: 'Könnyű', ms: 135 },
+  { id: 'normal', label: 'Normál', ms: 95 },
+  { id: 'hard', label: 'Nehéz', ms: 68 },
+  { id: 'extreme', label: 'Extrém', ms: 48 },
+]
+const diffGet = (): SnakeDiff => {
+  try {
+    const v = localStorage.getItem('snake-diff')
+    if (v === 'easy' || v === 'normal' || v === 'hard' || v === 'extreme') return v
+  } catch { /* ignore */ }
+  return 'normal'
+}
+
 /** Neon Snake. A TV-n (és amíg senki nem játszik) a gép játszik; koppintásra / Enter-re átveheted az irányítást.
  *  Irányítás: nyilak, WASD vagy ujjal húzás a játéktéren. */
 function Snake({ tv }: { tv: boolean }) {
@@ -16,7 +31,13 @@ function Snake({ tv }: { tv: boolean }) {
   const m = useRef(mode); m.current = mode
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(bestGet)
+  const [diff, setDiff] = useState<SnakeDiff>(diffGet)
   const wait = useRef(0)
+
+  const changeDiff = (d: SnakeDiff) => {
+    setDiff(d)
+    try { localStorage.setItem('snake-diff', d) } catch { /* ignore */ }
+  }
 
   const start = () => { g.current = newGame(COLS, ROWS); q.current = []; setScore(0); setMode('play') }
 
@@ -60,10 +81,11 @@ function Snake({ tv }: { tv: boolean }) {
       draw()
     }
     draw()
-    const t = setInterval(tick, tv ? 85 : 100)
+    const speedMs = tv ? 85 : (SNAKE_DIFFS.find(d => d.id === diff)?.ms ?? 95)
+    const t = setInterval(tick, speedMs)
     window.addEventListener('resize', draw)
     return () => { clearInterval(t); window.removeEventListener('resize', draw) }
-  }, [tv])
+  }, [tv, diff])
 
   // Billentyűk: csak játék közben nyeljük el a nyilakat (hogy az oldal ne görögjön)
   useEffect(() => {
@@ -88,7 +110,26 @@ function Snake({ tv }: { tv: boolean }) {
   }
 
   return <div className="snake">
-    <div className="snakehud"><span>Snake</span><span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{score}</b></span><span>Rekord: <b>{best}</b></span></div>
+    <div className="snakehud">
+      <span>Snake</span>
+      <span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{score}</b></span>
+      <span>Rekord: <b>{best}</b></span>
+    </div>
+    {!tv && (
+      <div className="snakediff" role="group" aria-label="Nehézségi szint">
+        <span>Nehézség:</span>
+        {SNAKE_DIFFS.map(d => (
+          <button
+            key={d.id}
+            type="button"
+            className={diff === d.id ? 'on' : ''}
+            onClick={() => changeDiff(d.id)}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+    )}
     <div className="snakescreen">
       <canvas ref={cv} onPointerDown={down} onPointerUp={up} aria-label="Snake játék" />
       {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
