@@ -15,7 +15,7 @@ import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/partners'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
-import { useSandbox, type SandboxConfig } from './lib/sandbox'
+import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
@@ -260,8 +260,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     !!data?.settings.sound_enabled && audioOn
   )
   const { songs: jbWishes } = useJukebox(data?.id, z?.date ?? '', false)
-  const { maint: liveMaint } = useMaintenance(data?.id, data?.announcements)
-  const maint = sandbox && (sb.maintMain || sb.maintTv)
+  const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
+  const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
     : liveMaint
   const maintSeenRef = useRef<{ on: boolean; deadline: number }>({ on: false, deadline: 0 })
@@ -423,6 +423,16 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <span>{maint.text}</span>
         </div>
         <div className="maint-prep-timer">{prepLeftSec} mp</div>
+        {sandbox && (
+          <button
+            type="button"
+            className="maint-test-exit-btn"
+            onClick={() => updateSandbox({ maintMain: false, maintTv: false })}
+            title="Teszt leállítása"
+          >
+            ✕ Mégse / Kilépés
+          </button>
+        )}
       </div>
       <div className="maint-prep-progress"><i style={{ width: `${Math.min(100, (prepLeftSec / 10) * 100)}%` }} /></div>
     </div>
@@ -435,6 +445,17 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <h2>Frissítés folyamatban…</h2>
         <p>{maint.text}</p>
         <div className="maint-bar"><i /></div>
+        {sandbox && (
+          <div className="maint-test-actions">
+            <button
+              type="button"
+              className="cta maint-test-exit-btn"
+              onClick={() => updateSandbox({ maintMain: false, maintTv: false })}
+            >
+              ✕ Kilépés a tesztből (Frissítés kikapcsolása)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

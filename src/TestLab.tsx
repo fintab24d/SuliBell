@@ -88,6 +88,16 @@ function SandboxWorkspace() {
   const [customKind, setCustomKind] = useState<'cancel' | 'substitute' | 'room' | 'info'>('cancel')
   const [customText, setCustomText] = useState('Elmarad (teszt)')
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && (sb.maintMain || sb.maintTv || sb.alertActive)) {
+        updateSandbox({ maintMain: false, maintTv: false, alertActive: false })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [sb.maintMain, sb.maintTv, sb.alertActive])
+
   const addQuickChange = (lesson_label: string, kind: 'cancel' | 'substitute' | 'room' | 'info', text: string) => {
     updateSandbox({
       extraChanges: [
@@ -135,6 +145,15 @@ function SandboxWorkspace() {
             <button type="button" onClick={() => resetSandbox()} title="Minden teszt beállítás alaphelyzetbe">
               ↺ Alaphelyzet
             </button>
+            {(sb.maintMain || sb.maintTv) && (
+              <button
+                type="button"
+                onClick={() => updateSandbox({ maintMain: false, maintTv: false })}
+                style={{ background: '#ff4f6a', color: '#fff', borderColor: '#ff4f6a', fontWeight: 'bold' }}
+              >
+                ✕ Frissítés leállítása
+              </button>
+            )}
             <a className="btn" href="/admin">← Admin felület</a>
             <button type="button" className="testlab-toggle" onClick={() => setOpen(o => !o)}>
               {open ? '▲ Vezérlő elrejtése' : '▼ Teszt vezérlőpult'}
@@ -278,15 +297,33 @@ function SandboxWorkspace() {
                   className={sb.maintMain ? 'active' : ''}
                   onClick={() => updateSandbox({ maintMain: !sb.maintMain })}
                 >
-                  {sb.maintMain ? '🟢 Főoldal Frissítés AKTÍV' : '⚪ Főoldal Frissítés teszt'}
+                  {sb.maintMain ? '🟢 Főoldal Frissítés AKTÍV (kattints a kikapcsoláshoz)' : '⚪ Főoldal Frissítés teszt'}
                 </button>
                 <button
                   type="button"
                   className={sb.maintTv ? 'active' : ''}
                   onClick={() => updateSandbox({ maintTv: !sb.maintTv })}
                 >
-                  {sb.maintTv ? '🟢 Display Frissítés AKTÍV' : '⚪ Display Frissítés teszt'}
+                  {sb.maintTv ? '🟢 Display Frissítés AKTÍV (kattints a kikapcsoláshoz)' : '⚪ Display Frissítés teszt'}
                 </button>
+                {(sb.maintMain || sb.maintTv) && (
+                  <button
+                    type="button"
+                    onClick={() => updateSandbox({ maintMain: false, maintTv: false })}
+                    style={{ background: 'rgba(255, 79, 106, 0.25)', borderColor: '#ff4f6a', color: '#ff4f6a', fontWeight: 'bold' }}
+                  >
+                    ✕ Frissítés kikapcsolása
+                  </button>
+                )}
+                {(sb.maintMain || sb.maintTv) && (
+                  <button
+                    type="button"
+                    onClick={() => updateSandbox({ maintMainStartsAt: 1, maintTvStartsAt: 1 })}
+                    title="A 10 másodperces felkészülés azonnali átugrása"
+                  >
+                    ⏩ 10 mp átugrása (azonnali homályos képernyő)
+                  </button>
+                )}
                 <button
                   type="button"
                   className={sb.alertActive ? 'active' : ''}
