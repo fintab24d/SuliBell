@@ -159,7 +159,11 @@ export function useSchool() {
         setError('Nincs kapcsolat')
         return
       }
-      const nextFp = JSON.stringify(d)
+      const fpData = {
+        ...d,
+        announcements: (d.announcements ?? []).filter(a => !a.text?.startsWith('__MAINT__:')),
+      }
+      const nextFp = JSON.stringify(fpData)
       const prevFp = fingerprintRef.current
       fingerprintRef.current = nextFp
 
@@ -208,7 +212,7 @@ export function useSchool() {
     })
     ch.on('postgres_changes', { event: '*', schema: 'public' }, () => {
       if (!alive) return
-      triggerClientReload()
+      load(true)
     })
     ch.subscribe()
 

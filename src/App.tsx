@@ -262,8 +262,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const { songs: jbWishes } = useJukebox(data?.id, z?.date ?? '', false)
   const { maint: liveMaint } = useMaintenance(data?.id, data?.announcements)
   const maint = sandbox && (sb.maintMain || sb.maintTv)
-    ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText }
+    ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
     : liveMaint
+  const maintSeenRef = useRef<{ on: boolean; deadline: number }>({ on: false, deadline: 0 })
   const [discordNotes, setDiscordNotes] = useState<DiscordAnnouncementItem[]>([])
   useEffect(() => {
     let alive = true
@@ -400,7 +401,32 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const overlay = sett.alert_active && sett.alert_text && dismissed !== sett.alert_text && <div className="alertfs" role="alertdialog" aria-live="assertive">
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
-  const isUpdating = tv ? maint.tv : maint.main
+  const maintTargetOn = tv ? maint.tv : maint.main
+  const rawStartsAt = tv ? maint.tvStartsAt : maint.mainStartsAt
+  if (!maintTargetOn) {
+    maintSeenRef.current = { on: false, deadline: 0 }
+  } else if (!maintSeenRef.current.on) {
+    const nowMs = Date.now()
+    const isRecentTrigger = !rawStartsAt || rawStartsAt > nowMs - 6_000
+    const deadline = isRecentTrigger ? Math.max(rawStartsAt ?? 0, nowMs + 10_000) : (rawStartsAt ?? 0)
+    maintSeenRef.current = { on: true, deadline }
+  }
+  const prepLeftSec = maintTargetOn ? Math.max(0, Math.ceil((maintSeenRef.current.deadline - Date.now()) / 1000)) : 0
+  const isPrepCountdown = maintTargetOn && prepLeftSec > 0
+  const isUpdating = maintTargetOn && prepLeftSec <= 0
+  const maintPrepBanner = isPrepCountdown && (
+    <div className="maint-prep-banner" role="alert" aria-live="polite">
+      <div className="maint-prep-inner">
+        <span className="maint-prep-badge">⏳ Rendszerfrissítés hamarosan</span>
+        <div className="maint-prep-main">
+          <b>Készülj fel! A frissítési képernyő {prepLeftSec} másodperc múlva aktiválódik…</b>
+          <span>{maint.text}</span>
+        </div>
+        <div className="maint-prep-timer">{prepLeftSec} mp</div>
+      </div>
+      <div className="maint-prep-progress"><i style={{ width: `${Math.min(100, (prepLeftSec / 10) * 100)}%` }} /></div>
+    </div>
+  )
   const maintOverlay = isUpdating && (
     <div className="maint-overlay" role="status" aria-live="assertive">
       <div className="maint-card">
@@ -523,7 +549,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
           {overlay}
         </main>
-        {maintOverlay}
+        {maintPrepBanner}
+      {maintOverlay}
         <VibeOverlay floats={vibeFloats} />
         {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
         <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
@@ -709,6 +736,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         />
         {overlay}
       </main>
+      {maintPrepBanner}
       {maintOverlay}
       <VibeOverlay floats={vibeFloats} />
       {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}

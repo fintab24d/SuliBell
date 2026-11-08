@@ -353,7 +353,7 @@ function Panel() {
               type="button"
               onClick={async () => {
                 const { error } = await updateMaint({ main: false, tv: false })
-                setMsg(error ? 'Hiba: ' + error.message : 'Frissítés képernyő kikapcsolva mindenhol.');
+                setMsg(error ? 'Hiba: ' + error.message : 'Frissítés képernyő kikapcsolva mindenhol.')
                 await load()
               }}
             >
@@ -362,7 +362,7 @@ function Panel() {
           )}
         </div>
         <p>
-          Ha bekapcsolod, az adott felületen a háttér elhomályosodik, és az oldal közepén megjelenik a <b>„Frissítés folyamatban…”</b> ablak. Külön kapcsolhatod a főoldalra és a TV-kijelzőre (<code>/display</code>).
+          Ha bekapcsolod, a felhasználóknál először egy <b>10 másodperces felkészülési visszaszámláló</b> jelenik meg, majd a háttér elhomályosodik, és az oldal közepén megjelenik a <b>„Frissítés folyamatban…”</b> ablak. Külön kapcsolhatod a főoldalra és a TV-kijelzőre (<code>/display</code>).
         </p>
         <div className="row">
           <label>
@@ -372,8 +372,8 @@ function Panel() {
               onChange={async e => {
                 const val = e.target.checked
                 const { error } = await updateMaint({ main: val })
-                setMsg(error ? 'Hiba: ' + error.message : val ? 'Főoldal frissítés képernyő BEKAPCSOLVA' : 'Főoldal frissítés képernyő kikapcsolva')
-                await load()
+                setMsg(error ? 'Hiba: ' + error.message : val ? 'Főoldal frissítés: 10 mp felkészülési visszaszámlálás elindítva!' : 'Főoldal frissítés képernyő kikapcsolva')
+                await load(!val)
               }}
             />{' '}
             📱 <b>Főoldal (<code>/</code>)</b> — Frissítés folyamatban képernyő
@@ -385,8 +385,8 @@ function Panel() {
               onChange={async e => {
                 const val = e.target.checked
                 const { error } = await updateMaint({ tv: val })
-                setMsg(error ? 'Hiba: ' + error.message : val ? 'Display (/display) frissítés képernyő BEKAPCSOLVA' : 'Display (/display) frissítés képernyő kikapcsolva')
-                await load()
+                setMsg(error ? 'Hiba: ' + error.message : val ? 'Display (/display) frissítés: 10 mp felkészülési visszaszámlálás elindítva!' : 'Display (/display) frissítés képernyő kikapcsolva')
+                await load(!val)
               }}
             />{' '}
             📺 <b>Display (<code>/display</code>)</b> — Frissítés folyamatban képernyő
@@ -396,8 +396,8 @@ function Panel() {
               type="button"
               onClick={async () => {
                 const { error } = await updateMaint({ main: true, tv: true })
-                setMsg(error ? 'Hiba: ' + error.message : 'Frissítés képernyő BEKAPCSOLVA a főoldalon és a Display-en is')
-                await load()
+                setMsg(error ? 'Hiba: ' + error.message : 'Frissítés képernyő: 10 mp felkészülési visszaszámlálás elindítva a főoldalon és a Display-en!')
+                await load(false)
               }}
             >
               Mindkettő bekapcsolása
@@ -416,7 +416,7 @@ function Panel() {
               if (txt !== maint.text) {
                 const { error } = await updateMaint({ text: txt })
                 setMsg(error ? 'Hiba: ' + error.message : 'Frissítési üzenet mentve')
-                await load()
+                await load(false)
               }
             }}
           />
@@ -426,7 +426,7 @@ function Panel() {
               onClick={async () => {
                 await updateMaint({ text: DEFAULT_MAINT.text })
                 setMsg('Alapértelmezett üzenet visszaállítva')
-                await load()
+                await load(false)
               }}
             >
               ↺ Alapértelmezett szöveg

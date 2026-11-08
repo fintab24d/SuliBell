@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 
 export const MAINT_PREFIX = '__MAINT__:'
+export const MAINT_PREP_MS = 10_000
 const LOCAL_KEY = 'csengeto-maint-state'
 const RELOADED_KEY = 'csengeto-reloaded-at'
 const PAGE_LOADED_AT = Date.now()
@@ -10,6 +11,8 @@ export interface MaintState {
   main: boolean
   tv: boolean
   text: string
+  mainStartsAt?: number
+  tvStartsAt?: number
   reloadAt?: number
 }
 
@@ -25,10 +28,14 @@ export function isMaintAnnouncement(text?: string | null): boolean {
 
 function normalize(p: any): MaintState {
   const r = Number(p?.reloadAt)
+  const ms = Number(p?.mainStartsAt)
+  const ts = Number(p?.tvStartsAt)
   return {
     main: !!p?.main,
     tv: !!p?.tv,
     text: typeof p?.text === 'string' && p.text.trim() ? p.text.trim() : DEFAULT_MAINT.text,
+    mainStartsAt: p?.main && Number.isFinite(ms) && ms > 0 ? ms : undefined,
+    tvStartsAt: p?.tv && Number.isFinite(ts) && ts > 0 ? ts : undefined,
     reloadAt: Number.isFinite(r) && r > 0 ? r : undefined,
   }
 }
@@ -112,7 +119,7 @@ export function useMaintenance(
     }
 
     fetchLatest()
-    const timer = setInterval(fetchLatest, 15_000)
+    const timer = setInterval(fetchLatest, 4_000)
 
     const ch = supabase.channel(`sulibell-maint-${schoolId}`, {
       config: { broadcast: { self: false } },
@@ -143,15 +150,33 @@ export function useMaintenance(
     }
   }, [schoolId, apply])
 
-  const updateMaint = useCallback(async (patch: Partial<MaintState> & { forceReload?: boolean }) => {
+  const updateMaint = useCallback(async (patch: Partial<MaintState> & { forceReload?: boolean; immediate?: boolean }) => {
+    const now = Date.now()
     const main = patch.main !== undefined ? patch.main : maint.main
     const tv = patch.tv !== undefined ? patch.tv : maint.tv
     const finished = (maint.main && !main) || (maint.tv && !tv)
+    const mainStartsAt = !main
+      ? undefined
+      : patch.mainStartsAt !== undefined
+        ? patch.mainStartsAt
+        : !maint.main
+          ? (patch.immediate ? now : now + MAINT_PREP_MS)
+          : maint.mainStartsAt
+    const tvStartsAt = !tv
+      ? undefined
+      : patch.tvStartsAt !== undefined
+        ? patch.tvStartsAt
+        : !maint.tv
+          ? (patch.immediate ? now : now + MAINT_PREP_MS)
+          : maint.tvStartsAt
+
     const next: MaintState = {
       main,
       tv,
       text: (patch.text !== undefined ? patch.text : maint.text).trim() || DEFAULT_MAINT.text,
-      reloadAt: finished || patch.forceReload ? Date.now() : maint.reloadAt,
+      mainStartsAt,
+      tvStartsAt,
+      reloadAt: finished || patch.forceReload ? now : maint.reloadAt,
     }
     apply(next)
 

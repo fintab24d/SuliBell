@@ -10,6 +10,8 @@ export interface SandboxConfig {
   maintMain: boolean
   maintTv: boolean
   maintText: string
+  maintMainStartsAt?: number
+  maintTvStartsAt?: number
   /** Kiemelt teljes képernyős riadó/közlemény tesztelése */
   alertActive: boolean
   alertText: string
@@ -52,7 +54,14 @@ export function getSandbox(): SandboxConfig {
 }
 
 export function updateSandbox(patch: Partial<SandboxConfig>) {
-  currentSandbox = { ...currentSandbox, ...patch }
+  const next: SandboxConfig = { ...currentSandbox, ...patch }
+  if (patch.maintMain !== undefined) {
+    next.maintMainStartsAt = patch.maintMain ? (!currentSandbox.maintMain ? Date.now() + 10_000 : currentSandbox.maintMainStartsAt) : undefined
+  }
+  if (patch.maintTv !== undefined) {
+    next.maintTvStartsAt = patch.maintTv ? (!currentSandbox.maintTv ? Date.now() + 10_000 : currentSandbox.maintTvStartsAt) : undefined
+  }
+  currentSandbox = next
   window.dispatchEvent(new Event(EVT))
 }
 
