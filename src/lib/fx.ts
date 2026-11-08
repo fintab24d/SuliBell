@@ -1,10 +1,15 @@
-// Neon részecske-motor: két rétegen (<canvas>) rajzol:
-// 1. Háttér (fxcanvas-bg, z-index: -1): lebegő neon "bokeh" gömbök, csillogó por, csengetéskori gyűrű-hullámok, vihar villanások.
-// 2. Előtér (fxcanvas-fg, z-index: 10): valódi időjárás (eső/hó a kártyák előtt), csapódás és szétfröccsenés a kártyák tetején,
-//    megmaradó hósapka a paneleken, kattintás-szikrák és konfetti/tűzijáték.
+// Neon részecske-motor: három rétegen dolgozik:
+// 1. Háttér (fxcanvas-bg, fixed, z-index: -1): lebegő neon "bokeh" gömbök, csillogó por, csengetéskori gyűrű-hullámok, vihar villanások.
+// 2. Kártyákhoz kötött réteg (fx-ledges-root, absolute dokumentum-réteg, z-index: 10): a kártyák tetején megmaradó hósapka és
+//    a kártyák tetejére csapódó esőcseppek fröccsenése/gyűrűi — közvetlenül a kártyák dokumentum-pozíciójához kötve, így görgetéskor soha nem csúszik el.
+// 3. Előtér (fxcanvas-fg, fixed, z-index: 10): a hulló esőcseppek és hópihék, kattintás-szikrák és konfetti/tűzijáték.
 type RGB = [number, number, number]
 const TAU = Math.PI * 2
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
+
+const LEDGE_OFFSET_Y = 30 // Hány px hely van a kártya felső éle felett a hósapkának és felcsapódó cseppeknek
+const LEDGE_BELOW_Y = 8   // Hány px nyúlik a kártya felső éle alá
+const LEDGE_H = LEDGE_OFFSET_Y + LEDGE_BELOW_Y
 
 function parseColor(s: string): RGB | null {
   s = s.trim()
@@ -47,11 +52,20 @@ interface Paper { x: number; y: number; vx: number; vy: number; rot: number; vr:
 interface Wave { x: number; y: number; r0: number; r1: number; t: number; max: number; ci: number }
 
 interface Ledge {
-  el: Element
-  x0: number
-  x1: number
-  y: number
+  el: HTMLElement
+  canvas: HTMLCanvasElement
+  ctx: CanvasRenderingContext2D
+  docX: number
+  docY: number
+  vx0: number
+  vx1: number
+  vy: number
+  w: number
+  seed: number
   snowDepth: number // 0..1 (a felhalmozódott hó vastagsága)
+  splashes: Splash[]
+  ripples: Ripple[]
+  empty: boolean
 }
 
 /** WMO időjárási kód → effekt: eső, hó, vihar vagy semmi (a második szám az erősség). */
@@ -68,6 +82,7 @@ export function weatherKind(code: number | null | undefined): ['none' | 'rain' |
 export class FxEngine {
   private ctxBg: CanvasRenderingContext2D
   private ctxFg: CanvasRenderingContext2D | null = null
+  private ledgesRoot: HTMLDivElement | null = null
   private w = 0
   private h = 0
   private dpr = 1
@@ -89,8 +104,6 @@ export class FxEngine {
   private wkind: 'none' | 'rain' | 'snow' | 'storm' = 'none'
   private wpow = 0
   private drops: Drop[] = []
-  private splashes: Splash[] = []
-  private ripples: Ripple[] = []
   private ledges: Ledge[] = []
   private lastLedgeScan = 0
   private rockets: Rocket[] = []
@@ -124,9 +137,15 @@ export class FxEngine {
   start() {
     if (this.running) return
     this.running = true
+    if (!this.ledgesRoot) {
+      const root = document.createElement('div')
+      root.className = 'fx-ledges-root'
+      root.setAttribute('aria-hidden', 'true')
+      document.body.appendChild(root)
+      this.ledgesRoot = root
+    }
     this.resize()
     window.addEventListener('resize', this.onResize)
-    window.addEventListener('scroll', this.onScroll, { passive: true })
     window.addEventListener('pointerdown', this.onDown, { passive: true })
     window.addEventListener('pointermove', this.onMove, { passive: true })
     document.addEventListener('visibilitychange', this.onVis)
@@ -138,7 +157,6 @@ export class FxEngine {
     this.running = false
     cancelAnimationFrame(this.raf)
     window.removeEventListener('resize', this.onResize)
-    window.removeEventListener('scroll', this.onScroll)
     window.removeEventListener('pointerdown', this.onDown)
     window.removeEventListener('pointermove', this.onMove)
     document.removeEventListener('visibilitychange', this.onVis)
@@ -146,6 +164,10 @@ export class FxEngine {
     if (this.ctxFg && this.canvasFg) {
       this.ctxFg.clearRect(0, 0, this.canvasFg.width, this.canvasFg.height)
     }
+    for (const l of this.ledges) l.canvas.remove()
+    this.ledges = []
+    this.ledgesRoot?.remove()
+    this.ledgesRoot = null
   }
 
   /** Az állapotváltáskor a gömbök fokozatosan átveszik az új állapot színét. */
@@ -171,17 +193,23 @@ export class FxEngine {
   setWeather(code: number | null | undefined) {
     const [k, p] = weatherKind(code)
     if (this.wkind === k && this.wpow === p) return
+    const wasSnow = this.wkind === 'snow'
     this.wkind = k
     this.wpow = p
     this.nextBolt = this.time + rnd(3, 7)
     this.scanLedges(true)
+    if (k === 'snow' && !wasSnow) {
+      for (const l of this.ledges) {
+        if (l.snowDepth < 0.35) l.snowDepth = 0.35
+      }
+    }
     this.fitDrops()
   }
 
   /** Nagy pillanat: tűzijáték és/vagy konfetti. */
   celebrate(kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) {
     const k = this.tv ? 0.7 : 1
-    if (kind !== 'fireworks') {
+    if (kind !== 'confetti') {
       const n = Math.round(9 * power)
       for (let i = 0; i < n; i++) this.queue.push({ t: this.time + 0.2 + i * 0.55 + rnd(0, 0.25), fn: () => this.launch(rnd(0.12, 0.88)) })
     }
@@ -222,7 +250,6 @@ export class FxEngine {
 
   private newDrop(anywhere: boolean): Drop {
     const snow = this.wkind === 'snow'
-    // Eső esetén jobbra kissé kiterjesztett sávból indul a balra dőlő esés miatt (-0.16 slant)
     const x = snow ? rnd(-20, this.w + 20) : rnd(-20, this.w + 220)
     const y = anywhere ? rnd(0, this.h) : rnd(-60, -5)
     return {
@@ -236,28 +263,32 @@ export class FxEngine {
     }
   }
 
-  private createRainSplash(x: number, y: number) {
+  /** Kártyához kötött eső-becsapódás (localX: 0..l.w a kártya saját koordináta-rendszerében). */
+  private createLedgeSplash(l: Ledge, localX: number, localTopY: number) {
     const n = (Math.random() * 3 + 2) | 0
     for (let i = 0; i < n; i++) {
-      this.splashes.push({
-        x: x + rnd(-2, 2),
-        y: y - 1,
+      l.splashes.push({
+        x: localX + rnd(-2, 2),
+        y: localTopY - 1,
         vx: rnd(-45, 20),
-        vy: -rnd(60, 140) * this.sc,
+        vy: -rnd(60, 135) * this.sc,
         r: rnd(1.2, 2.2) * this.sc,
         life: rnd(0.16, 0.32),
         max: 0.32,
         alpha: rnd(0.65, 0.95),
       })
     }
-    this.ripples.push({
-      x,
-      y: y + 1,
+    if (l.splashes.length > 60) l.splashes.splice(0, l.splashes.length - 60)
+
+    l.ripples.push({
+      x: localX,
+      y: localTopY + 1,
       r: 1,
       maxR: rnd(4, 9) * this.sc,
       life: 0.28,
       max: 0.28,
     })
+    if (l.ripples.length > 40) l.ripples.splice(0, l.ripples.length - 40)
   }
 
   burst(x: number, y: number, n = 16, power = 1) {
@@ -268,56 +299,111 @@ export class FxEngine {
     this.capSparks()
   }
 
-  // ---- kártya-peremek szkennelése a hósapkához és eső-becsapódáshoz ----
+  // ---- kártya-peremek szkennelése és dokumentum-pozícióhoz rögzítése ----
   private scanLedges(force = false) {
     const now = performance.now()
     if (!force && now - this.lastLedgeScan < 800) return
     this.lastLedgeScan = now
+    if (!this.ledgesRoot) return
 
-    // Csak a legfelső szintű kártyákat/paneleket gyűjtjük be
+    // Minden legfelső szintű kártyát/panelt begyűjtünk az oldalon (a képernyőn kívülieket is, hogy görgetéskor azonnal ott legyenek)
     const els = Array.from(
-      document.querySelectorAll<HTMLElement>('.panel, .bento-hdr, .ticker, .testlab-card')
+      document.querySelectorAll<HTMLElement>('.panel, .bento-hdr, .ticker')
     ).filter(el => {
+      if (el.closest('.mymodal-bg, .alertfs, .maint-overlay, .askbox, .testlab-dock')) return false
       let p = el.parentElement
       while (p) {
-        if (p.matches && p.matches('.panel, .bento-hdr, .ticker, .testlab-card')) return false
+        if (p.matches && p.matches('.panel, .bento-hdr, .ticker')) return false
         p = p.parentElement
       }
       return true
     })
 
-    const prevMap = new Map<Element, Ledge>()
+    const prevMap = new Map<HTMLElement, Ledge>()
     for (const l of this.ledges) prevMap.set(l.el, l)
 
     const next: Ledge[] = []
-    const vh = window.innerHeight, vw = window.innerWidth
+    const sx = window.scrollX
+    const sy = window.scrollY
 
     for (const el of els) {
       const r = el.getBoundingClientRect()
       if (r.width <= 30 || r.height <= 20) continue
-      if (r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) continue
 
-      const old = prevMap.get(el)
-      next.push({
-        el,
-        x0: Math.max(0, r.left),
-        x1: Math.min(vw, r.right),
-        y: r.top,
-        snowDepth: old ? old.snowDepth : (this.wkind === 'snow' ? 0.35 : 0),
-      })
+      const w = Math.round(r.width)
+      const docX = Math.round(r.left + sx)
+      const docY = Math.round(r.top + sy)
+
+      let l = prevMap.get(el)
+      if (l) {
+        prevMap.delete(el)
+        this.syncLedgeGeometry(l, docX, docY, w, r.left, r.right, r.top)
+        next.push(l)
+      } else {
+        const canvas = document.createElement('canvas')
+        canvas.className = 'fx-ledge'
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+        this.ledgesRoot.appendChild(canvas)
+        l = {
+          el,
+          canvas,
+          ctx,
+          docX: -99999,
+          docY: -99999,
+          vx0: r.left,
+          vx1: r.right,
+          vy: r.top,
+          w: 0,
+          seed: rnd(0, 100),
+          snowDepth: this.wkind === 'snow' ? 0.35 : 0,
+          splashes: [],
+          ripples: [],
+          empty: true,
+        }
+        this.syncLedgeGeometry(l, docX, docY, w, r.left, r.right, r.top)
+        next.push(l)
+      }
+    }
+
+    // Eltávolított kártyák canvasainak törlése
+    for (const old of prevMap.values()) {
+      old.canvas.remove()
     }
 
     this.ledges = next
   }
 
-  private onScroll = () => {
-    // Görgetéskor a kártyák pozíciója azonnal frissül
-    const vw = window.innerWidth
+  private syncLedgeGeometry(l: Ledge, docX: number, docY: number, w: number, vx0: number, vx1: number, vy: number) {
+    l.vx0 = vx0
+    l.vx1 = vx1
+    l.vy = vy
+    const targetW = Math.max(1, Math.round(w * this.dpr))
+    const targetH = Math.max(1, Math.round(LEDGE_H * this.dpr))
+    if (l.w !== w || l.canvas.width !== targetW || l.canvas.height !== targetH) {
+      l.w = w
+      l.canvas.width = targetW
+      l.canvas.height = targetH
+      l.canvas.style.width = `${w}px`
+      l.canvas.style.height = `${LEDGE_H}px`
+      l.empty = false
+    }
+    if (l.docX !== docX || l.docY !== docY) {
+      l.docX = docX
+      l.docY = docY
+      l.canvas.style.transform = `translate3d(${docX}px, ${docY - LEDGE_OFFSET_Y}px, 0)`
+    }
+  }
+
+  private updateLedgesEachFrame() {
+    const sx = window.scrollX
+    const sy = window.scrollY
     for (const l of this.ledges) {
       const r = l.el.getBoundingClientRect()
-      l.x0 = Math.max(0, r.left)
-      l.x1 = Math.min(vw, r.right)
-      l.y = r.top
+      const w = Math.round(r.width)
+      const docX = Math.round(r.left + sx)
+      const docY = Math.round(r.top + sy)
+      this.syncLedgeGeometry(l, docX, docY, w, r.left, r.right, r.top)
     }
   }
 
@@ -406,9 +492,12 @@ export class FxEngine {
       if (q.y > h + 20) this.papers.splice(i, 1)
     }
 
+    // Kártya-peremek frissítése
+    this.scanLedges()
+    this.updateLedgesEachFrame()
+
     // Időjárás és kártyákkal való ütközés
     if (this.wkind !== 'none') {
-      this.scanLedges()
       const snow = this.wkind === 'snow'
       const isRain = this.wkind === 'rain' || this.wkind === 'storm'
 
@@ -422,8 +511,9 @@ export class FxEngine {
         if (snow) {
           // Hópihe leérkezik a kártya tetejére és megmarad rajta
           for (const l of this.ledges) {
-            if (d.x >= l.x0 - 4 && d.x <= l.x1 + 4) {
-              if (prevY <= l.y + 4 && d.y >= l.y - 2) {
+            if (l.vy < -20 || l.vy > h + 20) continue
+            if (d.x >= l.vx0 - 4 && d.x <= l.vx1 + 4) {
+              if (prevY <= l.vy + 4 && d.y >= l.vy - 2) {
                 hit = true
                 l.snowDepth = Math.min(1, l.snowDepth + 0.02)
                 break
@@ -431,25 +521,21 @@ export class FxEngine {
             }
           }
         } else if (isRain) {
-          // Esőcsepp rácsapódik a kártya tetejére és fröccsen
+          // Esőcsepp rácsapódik a kártya tetejére és a kártyához kötötten fröccsen
           for (const l of this.ledges) {
-            if (d.x >= l.x0 - 2 && d.x <= l.x1 + 2) {
-              const topY = l.y - l.snowDepth * 8 * this.sc
+            if (l.vy < -20 || l.vy > h + 20) continue
+            if (d.x >= l.vx0 + 2 && d.x <= l.vx1 - 2) {
+              const snowOffset = l.snowDepth * 8 * this.sc
+              const topY = l.vy - snowOffset
               if (prevY <= topY + 4 && d.y >= topY - 2) {
-                // 75% esély a becsapódásra a peremen, 25% az előtérben hullik tovább
                 if (Math.random() < 0.75) {
                   hit = true
-                  this.createRainSplash(d.x, topY)
+                  this.createLedgeSplash(l, d.x - l.vx0, -snowOffset)
                   if (l.snowDepth > 0) l.snowDepth = Math.max(0, l.snowDepth - 0.04)
                   break
                 }
               }
             }
-          }
-          // A képernyő aljára csapódás (padló)
-          if (!hit && d.y >= h - 4) {
-            if (Math.random() < 0.5) this.createRainSplash(d.x, h - 3)
-            hit = true
           }
         }
 
@@ -479,26 +565,24 @@ export class FxEngine {
       }
     }
 
-    // Eső fröccsenések (splashes) mozgása
-    for (let i = this.splashes.length - 1; i >= 0; i--) {
-      const s = this.splashes[i]
-      s.life -= dt
-      if (s.life <= 0) { this.splashes.splice(i, 1); continue }
-      s.vy += 450 * dt
-      s.x += s.vx * dt
-      s.y += s.vy * dt
+    // Kártyákhoz kötött eső-fröccsenések és vízgyűrűk léptetése
+    for (const l of this.ledges) {
+      for (let i = l.splashes.length - 1; i >= 0; i--) {
+        const s = l.splashes[i]
+        s.life -= dt
+        if (s.life <= 0) { l.splashes.splice(i, 1); continue }
+        s.vy += 450 * dt
+        s.x += s.vx * dt
+        s.y += s.vy * dt
+      }
+      for (let i = l.ripples.length - 1; i >= 0; i--) {
+        const r = l.ripples[i]
+        r.life -= dt
+        if (r.life <= 0) { l.ripples.splice(i, 1); continue }
+        const prog = 1 - r.life / r.max
+        r.r = 1 + (r.maxR - 1) * prog
+      }
     }
-    if (this.splashes.length > 300) this.splashes.splice(0, this.splashes.length - 300)
-
-    // Eső gyűrűk (ripples) tágulása
-    for (let i = this.ripples.length - 1; i >= 0; i--) {
-      const r = this.ripples[i]
-      r.life -= dt
-      if (r.life <= 0) { this.ripples.splice(i, 1); continue }
-      const prog = 1 - r.life / r.max
-      r.r = 1 + (r.maxR - 1) * prog
-    }
-    if (this.ripples.length > 200) this.ripples.splice(0, this.ripples.length - 200)
 
     this.flash = Math.max(0, this.flash - dt * 3.2)
     for (let i = this.sparks.length - 1; i >= 0; i--) {
@@ -520,67 +604,108 @@ export class FxEngine {
     c.drawImage(this.sprites[ci], x - r, y - r, r * 2, r * 2)
   }
 
-  private drawSnowCaps(c: CanvasRenderingContext2D) {
+  /** Kártyákhoz kötött hósapkák, eső-csobbanások és vízgyűrűk kirajzolása a kártyák saját dokumentum-canvasaira. */
+  private drawLedges() {
     const isDark = this.additive
     for (const l of this.ledges) {
-      if (l.snowDepth <= 0.04) continue
-      const w = l.x1 - l.x0
-      if (w <= 20) continue
-      if (l.y < -30 || l.y > this.h + 20) continue
+      const hasSnow = l.snowDepth > 0.04 && l.w > 20
+      const hasRipples = l.ripples.length > 0
+      const hasSplashes = l.splashes.length > 0
 
-      const h = l.snowDepth * 10 * this.sc
-      const y = l.y
-      const x0 = l.x0 + 2
-      const x1 = l.x1 - 2
-
-      c.save()
-      c.shadowColor = isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(0, 40, 80, 0.15)'
-      c.shadowBlur = 4
-      c.shadowOffsetY = 2
-
-      c.beginPath()
-      c.moveTo(x0 + 8, y + 2)
-      c.lineTo(x1 - 8, y + 2)
-      c.quadraticCurveTo(x1 + 1, y, x1, y - h * 0.6)
-
-      const bumpW = 26 * this.sc
-      const count = Math.max(2, Math.round((x1 - x0) / bumpW))
-      const step = (x1 - x0) / count
-      for (let i = count; i >= 0; i--) {
-        const curX = x0 + i * step
-        const prevX = x0 + Math.max(0, i - 1) * step
-        const midX = (curX + prevX) / 2
-        const varH = Math.sin((curX + l.y) * 0.05) * 1.5
-        c.quadraticCurveTo(midX, y - h - varH - 1, prevX, y - h * 0.7)
+      if (!hasSnow && !hasRipples && !hasSplashes) {
+        if (!l.empty) {
+          l.ctx.setTransform(1, 0, 0, 1, 0, 0)
+          l.ctx.clearRect(0, 0, l.canvas.width, l.canvas.height)
+          l.empty = true
+        }
+        continue
       }
 
-      c.quadraticCurveTo(x0 - 1, y, x0 + 8, y + 2)
-      c.closePath()
+      l.empty = false
+      const c = l.ctx
+      c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
+      c.clearRect(0, 0, l.w, LEDGE_H)
 
-      const grad = c.createLinearGradient(0, y - h - 2, 0, y + 2)
-      if (isDark) {
-        grad.addColorStop(0, '#ffffff')
-        grad.addColorStop(0.7, '#f0f6ff')
-        grad.addColorStop(1, '#d8e8fc')
-      } else {
-        grad.addColorStop(0, '#ffffff')
-        grad.addColorStop(0.7, '#eef5fc')
-        grad.addColorStop(1, '#cce0f5')
-      }
-      c.fillStyle = grad
-      c.fill()
+      const y = LEDGE_OFFSET_Y
 
-      c.shadowColor = 'transparent'
-      c.fillStyle = isDark ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.85)'
-      for (let i = 1; i < count; i++) {
-        const bx = x0 + i * step
-        const by = y - h - Math.sin((bx + l.y) * 0.05) * 1.5
+      // 1. Megmaradó hósapka a kártya tetején (saját lokális koordinátákkal, görgetés-független hullámokkal)
+      if (hasSnow) {
+        const h = l.snowDepth * 10 * this.sc
+        const x0 = 2
+        const x1 = l.w - 2
+
+        c.save()
+        c.shadowColor = isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(0, 40, 80, 0.15)'
+        c.shadowBlur = 4
+        c.shadowOffsetY = 2
+
         c.beginPath()
-        c.arc(bx, by + 1.5, 1.2 * this.sc, 0, TAU)
+        c.moveTo(x0 + 8, y + 2)
+        c.lineTo(x1 - 8, y + 2)
+        c.quadraticCurveTo(x1 + 1, y, x1, y - h * 0.6)
+
+        const bumpW = 26 * this.sc
+        const count = Math.max(2, Math.round((x1 - x0) / bumpW))
+        const step = (x1 - x0) / count
+        for (let i = count; i >= 0; i--) {
+          const curX = x0 + i * step
+          const prevX = x0 + Math.max(0, i - 1) * step
+          const midX = (curX + prevX) / 2
+          const varH = Math.sin(curX * 0.05 + l.seed) * 1.5
+          c.quadraticCurveTo(midX, y - h - varH - 1, prevX, y - h * 0.7)
+        }
+
+        c.quadraticCurveTo(x0 - 1, y, x0 + 8, y + 2)
+        c.closePath()
+
+        const grad = c.createLinearGradient(0, y - h - 2, 0, y + 2)
+        if (isDark) {
+          grad.addColorStop(0, '#ffffff')
+          grad.addColorStop(0.7, '#f0f6ff')
+          grad.addColorStop(1, '#d8e8fc')
+        } else {
+          grad.addColorStop(0, '#ffffff')
+          grad.addColorStop(0.7, '#eef5fc')
+          grad.addColorStop(1, '#cce0f5')
+        }
+        c.fillStyle = grad
         c.fill()
+
+        c.shadowColor = 'transparent'
+        c.fillStyle = isDark ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.85)'
+        for (let i = 1; i < count; i++) {
+          const bx = x0 + i * step
+          const by = y - h - Math.sin(bx * 0.05 + l.seed) * 1.5
+          c.beginPath()
+          c.arc(bx, by + 1.5, 1.2 * this.sc, 0, TAU)
+          c.fill()
+        }
+
+        c.restore()
       }
 
-      c.restore()
+      // 2. Eső-becsapódási vízgyűrűk a kártya tetején
+      if (hasRipples) {
+        for (const rip of l.ripples) {
+          const f = rip.life / rip.max
+          c.strokeStyle = isDark ? `rgba(160, 230, 255, ${f * 0.75})` : `rgba(40, 100, 200, ${f * 0.6})`
+          c.lineWidth = 1.2 * this.sc
+          c.beginPath()
+          c.ellipse(rip.x, y + rip.y, rip.r * 1.6, rip.r * 0.5, 0, 0, TAU)
+          c.stroke()
+        }
+      }
+
+      // 3. Eső-becsapódási vízcseppek (fröccsenés) a kártya tetején
+      if (hasSplashes) {
+        for (const s of l.splashes) {
+          const f = s.life / s.max
+          c.fillStyle = isDark ? `rgba(180, 235, 255, ${f * s.alpha})` : `rgba(45, 110, 210, ${f * s.alpha})`
+          c.beginPath()
+          c.arc(s.x, y + s.y, s.r, 0, TAU)
+          c.fill()
+        }
+      }
     }
   }
 
@@ -620,14 +745,14 @@ export class FxEngine {
       cBg.globalAlpha = 1
     }
 
-    // 2. Előtér canvas (időjárás a kártyák előtt, hósapka a kártyákon, csobbanások, szikrák, konfetti)
+    // 2. Kártyákhoz rögzített hósapkák és becsapódások
+    this.drawLedges()
+
+    // 3. Előtér canvas (hulló eső/hó, szikrák, konfetti)
     if (this.ctxFg) {
       cFg.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
       cFg.clearRect(0, 0, this.w, this.h)
     }
-
-    // Hósapkák a kártyák tetején
-    this.drawSnowCaps(cFg)
 
     // Időjárás (eső vagy hó a kártyák előtt)
     if (this.drops.length) {
@@ -652,31 +777,6 @@ export class FxEngine {
         }
       }
       cFg.globalAlpha = 1
-    }
-
-    // Esőbecsapódási gyűrűk a kártyák tetején
-    if (this.ripples.length) {
-      const isDark = this.additive
-      for (const rip of this.ripples) {
-        const f = rip.life / rip.max
-        cFg.strokeStyle = isDark ? `rgba(160, 230, 255, ${f * 0.75})` : `rgba(40, 100, 200, ${f * 0.6})`
-        cFg.lineWidth = 1.2 * this.sc
-        cFg.beginPath()
-        cFg.ellipse(rip.x, rip.y, rip.r * 1.6, rip.r * 0.5, 0, 0, TAU)
-        cFg.stroke()
-      }
-    }
-
-    // Esőbecsapódási fröccsenések (vízcseppek)
-    if (this.splashes.length) {
-      const isDark = this.additive
-      for (const s of this.splashes) {
-        const f = s.life / s.max
-        cFg.fillStyle = isDark ? `rgba(180, 235, 255, ${f * s.alpha})` : `rgba(45, 110, 210, ${f * s.alpha})`
-        cFg.beginPath()
-        cFg.arc(s.x, s.y, s.r, 0, TAU)
-        cFg.fill()
-      }
     }
 
     // Kattintás és mozgás szikrák az előtérben
