@@ -354,7 +354,8 @@ label.btn:hover{border-color:var(--brand)}
 /* ===== 3.0: neon részecskék, fényfolt, csengetési effektek, szavazás ===== */
 :root{--spot:rgba(255,255,255,.08)}
 [data-theme=light]{--spot:rgba(196,21,127,.08)}
-.fxcanvas{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.fxcanvas,.fxcanvas-bg{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.fxcanvas-fg{position:fixed;inset:0;width:100%;height:100%;z-index:10;pointer-events:none}
 [data-style=neon] :is(.panel,.bento-hdr,.ev,.stat,.wd):hover{background-image:radial-gradient(380px circle at var(--mx,50%) var(--my,50%),var(--spot),transparent 65%)}
 
 /* Az utolsó 10 másodperc */

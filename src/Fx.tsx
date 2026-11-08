@@ -6,15 +6,16 @@ const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-r
 
 /** Neon háttér-réteg: részecskék, kattintás-szikrák, fényfolt a paneleken, csengetéskor robbanás. Csak a Neon stílusban él. */
 export default function Fx({ phase, bellKey, tv, wx, sound }: { phase: string; bellKey: string; tv: boolean; wx?: number | null; sound?: boolean }) {
-  const ref = useRef<HTMLCanvasElement>(null)
+  const refBg = useRef<HTMLCanvasElement>(null)
+  const refFg = useRef<HTMLCanvasElement>(null)
   const eng = useRef<FxEngine | null>(null)
   const off = reduced()
 
   // Csak a releváns propok változásakor induljon újra az engine
   useEffect(() => {
-    if (off || !ref.current) return
+    if (off || !refBg.current || !refFg.current) return
     let e: FxEngine
-    try { e = new FxEngine(ref.current, tv) } catch { return }
+    try { e = new FxEngine(refBg.current, refFg.current, tv) } catch { return }
     eng.current = e
     e.setPhase(phase)
     e.start()
@@ -60,7 +61,12 @@ export default function Fx({ phase, bellKey, tv, wx, sound }: { phase: string; b
     return () => { window.removeEventListener('pointermove', on); cancelAnimationFrame(raf) }
   }, [off])
 
-  return off ? null : <canvas ref={ref} className="fxcanvas" aria-hidden="true" />
+  return off ? null : (
+    <>
+      <canvas ref={refBg} className="fxcanvas fxcanvas-bg" aria-hidden="true" />
+      <canvas ref={refFg} className="fxcanvas-fg" aria-hidden="true" />
+    </>
+  )
 }
 
 /** Az utolsó 10 másodperc: hatalmas számok, élfény, gyűrű-lüktetés (másodpercenként újraindul). */
