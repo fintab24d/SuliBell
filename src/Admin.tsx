@@ -10,6 +10,7 @@ import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
 import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
+import { DISCORD_INVITE_URL, postToDiscord } from './lib/discord'
 
 interface Full {
   id: string; name: string
@@ -511,7 +512,13 @@ function Panel() {
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />
         <input type="date" title="Meddig látszódjon (üres = amíg törlöd)" value={an.until} onChange={e => setAn({ ...an, until: e.target.value })} />
-        <button disabled={!an.text} onClick={async () => { await run(supabase.from('announcements').insert({ school_id: d.id, text: an.text, active_until: an.until || null })); setAn({ text: '', until: '' }) }}>Hozzáadás</button>
+        <button disabled={!an.text} onClick={async () => {
+          const txt = an.text.trim()
+          const until = an.until || null
+          await run(supabase.from('announcements').insert({ school_id: d.id, text: txt, active_until: until }))
+          postToDiscord({ kind: 'announcement', text: txt, until: until || '' })
+          setAn({ text: '', until: '' })
+        }}>Hozzáadás</button>
         {(an.text || an.until) && <button type="button" onClick={() => setAn({ text: '', until: '' })}>↺ Alaphelyzet</button>}</div>
     </section>}
 
@@ -606,6 +613,13 @@ function Panel() {
         <label title="Csak a mai napra szóló változásnál megy ki"><input type="checkbox" checked={chgNotify} onChange={e => setChgNotify(e.target.checked)} /> Értesítés is</label>
         <button disabled={!chg.day || !(chg.lesson_label || chg.text)} onClick={async () => {
           await run(supabase.from('changes').insert({ school_id: d.id, ...chg }))
+          postToDiscord({
+            kind: 'change',
+            day: chg.day,
+            lesson_label: chg.lesson_label,
+            typeLabel: CHG[chg.kind] || chg.kind,
+            text: chg.text,
+          })
           if (chgNotify && chg.day === todayStr) await sendPush(`${CHG[chg.kind]}: ${chg.lesson_label}`.replace(/: $/, ''), chg.text || chg.lesson_label)
           setChg({ ...chg, lesson_label: '', text: '' })
         }}>Hozzáadás</button>
@@ -622,7 +636,13 @@ function Panel() {
         <button onClick={() => run(supabase.from('menus').delete().eq('id', m.id))}>Törlés</button></div>)}
       <div className="row"><input type="date" value={mn.day} onChange={e => setMn({ ...mn, day: e.target.value })} />
         <input style={{ minWidth: '18rem' }} placeholder="pl. Húsleves, rántott csirke, rizs" value={mn.text} onChange={e => setMn({ ...mn, text: e.target.value })} />
-        <button disabled={!mn.day || !mn.text} onClick={async () => { await run(supabase.from('menus').upsert({ school_id: d.id, ...mn }, { onConflict: 'school_id,day' })); setMn({ ...mn, text: '' }) }}>Mentés</button>
+        <button disabled={!mn.day || !mn.text} onClick={async () => {
+          const day = mn.day
+          const txt = mn.text.trim()
+          await run(supabase.from('menus').upsert({ school_id: d.id, day, text: txt }, { onConflict: 'school_id,day' }))
+          postToDiscord({ kind: 'menu', day, text: txt })
+          setMn({ ...mn, text: '' })
+        }}>Mentés</button>
         {(mn.text || mn.day !== todayStr) && <button type="button" onClick={() => setMn({ day: todayStr, text: '' })}>↺ Alaphelyzet</button>}</div>
       <div className="row">Ebédszünet: a(z) <input type="number" min={1} max={12} style={{ width: '4rem' }} defaultValue={d.settings.lunch_after ?? ''} key={'l' + d.settings.lunch_after}
         onBlur={e => setS({ lunch_after: e.target.value ? Number(e.target.value) : null })} />. óra után
@@ -631,8 +651,14 @@ function Panel() {
 
     {can('settings') && <section><h2>Kiemelt közlemény (teljes képernyős) és tanév</h2>
       <div className="row"><input style={{ minWidth: '22rem' }} placeholder="pl. Tűzriadó-gyakorlat 10:00-kor" defaultValue={d.settings.alert_text} key={'a' + d.settings.alert_text} onBlur={e => e.target.value !== d.settings.alert_text && setS({ alert_text: e.target.value })} />
-        <label><input type="checkbox" checked={d.settings.alert_active} onChange={e => setS({ alert_active: e.target.checked })} /> Megjelenítés az egész képernyőn</label>
-        <button disabled={!d.settings.alert_text} onClick={() => sendPush('Fontos közlemény', d.settings.alert_text)}>Értesítés küldése</button>
+        <label><input type="checkbox" checked={d.settings.alert_active} onChange={e => {
+          setS({ alert_active: e.target.checked })
+          if (e.target.checked && d.settings.alert_text) postToDiscord({ kind: 'alert', text: d.settings.alert_text })
+        }} /> Megjelenítés az egész képernyőn</label>
+        <button disabled={!d.settings.alert_text} onClick={() => {
+          sendPush('Fontos közlemény', d.settings.alert_text)
+          postToDiscord({ kind: 'alert', text: d.settings.alert_text })
+        }}>Értesítés küldése</button>
         {(d.settings.alert_text || d.settings.alert_active) && <button type="button" onClick={() => setS({ alert_text: '', alert_active: false })}>↺ Kikapcsolás és törlés</button>}</div>
       <div className="row">Tanév kezdete <input type="date" value={d.settings.year_start ?? ''} onChange={e => setS({ year_start: e.target.value || null })} />
         vége <input type="date" value={d.settings.year_end ?? ''} onChange={e => setS({ year_end: e.target.value || null })} />
@@ -756,8 +782,11 @@ function Panel() {
       {polls !== null && <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Kérdés (pl. Mi legyen a pénteki szünetben?)" value={pl.q} onChange={e => setPl({ ...pl, q: e.target.value })} />
         {pl.opts.map((o, i) => <input key={i} placeholder={`${i + 1}. válasz${i < 2 ? '' : ' (nem kötelező)'}`} value={o} onChange={e => setPl({ ...pl, opts: pl.opts.map((x, j) => j === i ? e.target.value : x) })} />)}
         <button disabled={!pl.q.trim() || pl.opts.filter(o => o.trim()).length < 2} onClick={async () => {
+          const q = pl.q.trim()
+          const opts = pl.opts.map(o => o.trim()).filter(Boolean)
           await supabase.from('polls').update({ active: false }).eq('school_id', d.id).eq('active', true)   // egyszerre egy szavazás él
-          await run(supabase.from('polls').insert({ school_id: d.id, question: pl.q.trim(), options: pl.opts.map(o => o.trim()).filter(Boolean) }))
+          await run(supabase.from('polls').insert({ school_id: d.id, question: q, options: opts }))
+          postToDiscord({ kind: 'poll', question: q, options: opts })
           setPl({ q: '', opts: ['', '', '', ''] })
         }}>Új szavazás indítása</button>
         {(pl.q || pl.opts.some(Boolean)) && <button type="button" onClick={() => setPl({ q: '', opts: ['', '', '', ''] })}>↺ Alaphelyzet</button>}</div>}

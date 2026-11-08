@@ -4,6 +4,7 @@ import { fxSound } from './lib/sound'
 import { parseVideo } from './lib/video'
 import { voterId } from './Poll'
 import { MusicVisualizer } from './BreakVideo'
+import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
 
 export type MediaKind = 'music' | 'video'
 
@@ -208,6 +209,35 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       })
     })
 
+    // Discord #🎵-zenekérés-ötletek szinkronizáció (20 másodpercenként)
+    const syncFromDiscord = async () => {
+      const res = await fetchDiscordSync()
+      if (!alive || !res.songs.length) return
+      const del = loadDeletedSet(day)
+      setSongs(prev => {
+        let next = prev.filter(s => !del.has(s.id))
+        for (const ds of res.songs) {
+          if (del.has(ds.id)) continue
+          // A mai vagy az elmúlt 36 órában Discordra beküldött zenéket megjelenítjük
+          if (ds.day !== day && Date.now() - ds.at > 36 * 3600_000) continue
+          next = mergeSong(next, {
+            id: ds.id,
+            day,
+            kind: mode,
+            title: ds.title,
+            by: ds.by,
+            ytId: ds.ytId,
+            votes: ds.votes,
+            at: ds.at,
+          }, del)
+        }
+        saveLocalSongs(day, next)
+        return next
+      })
+    }
+    syncFromDiscord()
+    const dcTimer = setInterval(syncFromDiscord, 20_000)
+
     // Realtime csatorna
     const ch = supabase.channel(`sulibell-jukebox-${schoolId}`, {
       config: { broadcast: { self: false } },
@@ -318,6 +348,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
     return () => {
       alive = false
+      clearInterval(dcTimer)
       supabase.removeChannel(ch)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }
@@ -387,6 +418,16 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
     if (soundRef.current) fxSound('pop', 0)
     broadcastSong(created)
+
+    if (!existing) {
+      postToDiscord({
+        kind: 'jukebox',
+        title: created.title,
+        by: created.by || 'Névtelen',
+        ytId: created.ytId,
+        mediaKind: created.kind,
+      })
+    }
 
     if (schoolId) {
       supabase.rpc('submit_jukebox_song', {
@@ -562,17 +603,29 @@ export default function Jukebox({
           </div>
           <p className="meta" style={{ margin: 0 }}>
             {isVideoDay
-              ? 'Ma a szünetekben videók mennek! Küldj be egy jó videót vagy szavazz a kedvencedre — holnap pedig a zenéké a főszerep.'
-              : 'Ma a szünetekben zenék szólnak! Küldd be a kedvenc számodat vagy szavazz a listán — holnap pedig a videóké a főszerep.'}
+              ? 'Ma a szünetekben videók mennek! Küldj be videót itt vagy a Discord #🎵-zenekérés-ötletek szobában — automatikusan megjelenik az oldalon!'
+              : 'Ma a szünetekben zenék szólnak! Küldd be a kedvenc számodat itt vagy a Discord #🎵-zenekérés-ötletek szobában — automatikusan szinkronizálódik!'}
           </p>
         </div>
-        <button
-          type="button"
-          className={showForm ? 'on' : 'cta'}
-          onClick={() => { setShowForm(v => !v); setErr('') }}
-        >
-          {showForm ? '✕ Bezárás' : isVideoDay ? '➕ Videó beküldése' : '➕ Zene beküldése'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <a
+            href={DISCORD_INVITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: '1px solid var(--line)', background: 'rgba(88,101,242,.18)' }}
+            title="Zenekérés a hivatalos SuliBell Discord szerveren"
+          >
+            💬 Discord
+          </a>
+          <button
+            type="button"
+            className={showForm ? 'on' : 'cta'}
+            onClick={() => { setShowForm(v => !v); setErr('') }}
+          >
+            {showForm ? '✕ Bezárás' : isVideoDay ? '➕ Videó beküldése' : '➕ Zene beküldése'}
+          </button>
+        </div>
       </div>
 
       {showForm && (

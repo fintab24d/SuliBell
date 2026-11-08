@@ -14,6 +14,7 @@ import Jukebox, { mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
 import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/partners'
+import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
 import { KIND } from './lib/kinds'
@@ -263,6 +264,17 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const maint = sandbox && (sb.maintMain || sb.maintTv)
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText }
     : liveMaint
+  const [discordNotes, setDiscordNotes] = useState<DiscordAnnouncementItem[]>([])
+  useEffect(() => {
+    let alive = true
+    const loadDc = async () => {
+      const res = await fetchDiscordSync()
+      if (alive) setDiscordNotes(res.announcements)
+    }
+    loadDc()
+    const t = setInterval(loadDc, 20_000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
   const [dismissed, setDismissed] = useState('')   // a kiemelt közleményt a látogató bezárhatja (a TV-n nem)
   useEffect(() => { if (audioOn) preload(data?.settings.bell_sound_url) }, [audioOn, data?.settings.bell_sound_url])   // saját csengőhang előtöltése
   // Telepítés gomb (Chrome, Edge, Android): a böngésző jelzi, ha az oldal telepíthető
@@ -344,6 +356,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
   const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[])
     .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
+    .concat(discordNotes.map(dn => ({ id: dn.id, text: dn.text, active_until: null })))
   const partners = parsePartnersFromAnnouncements(data.announcements)
   const partnersBox = !tv && partners.length > 0 && <section className="panel partners-panel"><div className="tag">🤝 Társoldalak és hasznos linkek</div><div className="partners-grid">{partners.map(p => <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="partner-card"><span className="p-ico" aria-hidden="true">{p.icon || '🌐'}</span><div className="p-info"><b>{p.name}</b>{p.desc && <small>{p.desc}</small>}</div><span className="p-arr" aria-hidden="true">↗</span></a>)}</div></section>
   const note = notes.length ? notes[Math.floor(now.getTime() / 10000) % notes.length] : null
@@ -556,6 +569,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                 ? <button className="cta" onClick={async () => { installEv.prompt(); await installEv.userChoice; setInstallEv(null) }}>Telepítés</button>
                 : <button onClick={() => location.assign('/telepites')}>Telepítés</button>
             )}
+            <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRadius: 12, border: '1px solid var(--line)', background: 'rgba(88,101,242,.2)' }} title="Csatlakozz a SuliBell Discord szerverhez">💬 Discord</a>
             <button className={hasMySchedule ? 'on' : ''} onClick={() => setMyModalOpen(true)} title="Saját tantárgyak és termek beállítása">📚 Saját óráim</button>
             <NotifyButton schoolId={data.id} />
             {data.settings.particles !== false && (

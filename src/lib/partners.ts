@@ -42,6 +42,21 @@ function normalizeList(raw: unknown): PartnerSite[] {
   return out
 }
 
+export const DEFAULT_DISCORD_PARTNER: PartnerSite = {
+  id: 'p-discord-sulibell',
+  icon: '💬',
+  name: 'SuliBell Discord',
+  url: 'https://discord.gg/uHhbhFB5rC',
+  desc: 'Csatlakozz a diák közösséghez, zenekéréshez és hírekhez!',
+}
+
+function withDefaultDiscord(list: PartnerSite[]): PartnerSite[] {
+  if (list.some(p => p.url.includes('discord.gg') || p.url.includes('discord.com'))) {
+    return list
+  }
+  return [DEFAULT_DISCORD_PARTNER, ...list]
+}
+
 export function parsePartnersFromAnnouncements(
   announcements?: { id?: string; text: string; active_until?: string | null }[] | null
 ): PartnerSite[] {
@@ -51,17 +66,17 @@ export function parsePartnersFromAnnouncements(
       try {
         const list = normalizeList(JSON.parse(row.text.slice(PARTNERS_PREFIX.length)))
         try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)) } catch { /* ignore */ }
-        return list
+        return withDefaultDiscord(list)
       } catch {
-        return []
+        return [DEFAULT_DISCORD_PARTNER]
       }
     }
-    return []
+    return [DEFAULT_DISCORD_PARTNER]
   }
   try {
-    return normalizeList(JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]'))
+    return withDefaultDiscord(normalizeList(JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]')))
   } catch {
-    return []
+    return [DEFAULT_DISCORD_PARTNER]
   }
 }
 
