@@ -1,5 +1,94 @@
 // SuliBell NSFW & Káromkodás Szűrő (Iskolabaráttá tétel)
-// Kiszűri a trágár szavakat, 18+ / felnőtt tartalmakat, és tiltja a névtelen beküldést.
+// Kiszűri a trágár szavakat, 18+ / felnőtt tartalmakat, az admin által egyénileg tiltott szavakat, és tiltja a névtelen beküldést.
+
+import { supabase } from './supabase'
+
+export const BANNED_WORDS_PREFIX = '__BANNED_WORDS__:'
+const CUSTOM_BANNED_KEY = 'csengeto-custom-banned-v1'
+let cachedCustomWords: string[] | null = null
+
+export function isBannedWordsAnnouncement(text?: string | null): boolean {
+  return typeof text === 'string' && text.startsWith(BANNED_WORDS_PREFIX)
+}
+
+function sanitizeCustomWordList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const clean = item.trim().toLowerCase().slice(0, 48)
+    if (!clean || clean.length < 2 || seen.has(clean)) continue
+    seen.add(clean)
+    out.push(clean)
+  }
+  return out
+}
+
+export function getCustomBannedWords(): string[] {
+  if (cachedCustomWords !== null) return cachedCustomWords
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_BANNED_KEY) ?? '[]')
+    cachedCustomWords = sanitizeCustomWordList(raw)
+    return cachedCustomWords
+  } catch {
+    cachedCustomWords = []
+    return []
+  }
+}
+
+export function parseBannedWordsFromAnnouncements(
+  announcements?: { id?: string; text: string; active_until?: string | null }[] | null
+): string[] {
+  if (Array.isArray(announcements)) {
+    const row = announcements.find(a => isBannedWordsAnnouncement(a?.text))
+    if (row) {
+      try {
+        const list = sanitizeCustomWordList(JSON.parse(row.text.slice(BANNED_WORDS_PREFIX.length)))
+        cachedCustomWords = list
+        try { localStorage.setItem(CUSTOM_BANNED_KEY, JSON.stringify(list)) } catch { /* ignore */ }
+        return list
+      } catch {
+        cachedCustomWords = []
+        return []
+      }
+    }
+    cachedCustomWords = []
+    try { localStorage.setItem(CUSTOM_BANNED_KEY, '[]') } catch { /* ignore */ }
+    return []
+  }
+  return getCustomBannedWords()
+}
+
+export async function saveBannedWordsToDb(schoolId: string, words: string[]) {
+  const clean = sanitizeCustomWordList(words)
+  cachedCustomWords = clean
+  try { localStorage.setItem(CUSTOM_BANNED_KEY, JSON.stringify(clean)) } catch { /* ignore */ }
+  const payload = BANNED_WORDS_PREFIX + JSON.stringify(clean)
+
+  const { data: existing } = await supabase
+    .from('announcements')
+    .select('id')
+    .eq('school_id', schoolId)
+    .like('text', `${BANNED_WORDS_PREFIX}%`)
+
+  if (existing && existing.length > 0) {
+    const firstId = existing[0].id
+    if (existing.length > 1) {
+      await supabase
+        .from('announcements')
+        .delete()
+        .in('id', existing.slice(1).map((r: any) => r.id))
+    }
+    if (clean.length === 0) {
+      return supabase.from('announcements').delete().eq('id', firstId)
+    }
+    return supabase.from('announcements').update({ text: payload, active_until: null }).eq('id', firstId)
+  } else if (clean.length > 0) {
+    return supabase.from('announcements').insert({ school_id: schoolId, text: payload, active_until: null })
+  }
+  return { error: null }
+}
 
 /**
  * Szöveg normalizálása (kisbetű, ékezetek feloldása, elmaszkolt leet-speak karakterek cseréje)
@@ -105,6 +194,40 @@ export function checkProfanity(input: string): { clean: boolean; matchedWord?: s
       const matchedStr = match[0]
       if (!SAFE_WHITELIST.has(matchedStr)) {
         return { clean: false, matchedWord: matchedStr }
+      }
+    }
+  }
+
+  // Admin által megadott egyéni tiltott szavak ellenőrzése (Discord AutoMod stílusban)
+  const customWords = getCustomBannedWords()
+  if (customWords.length > 0) {
+    const compactNorm = normalized.replace(/\s+/g, '')
+    for (const rawCustom of customWords) {
+      const cleanCustom = normalizeText(rawCustom.replace(/\*/g, ''))
+      if (!cleanCustom || cleanCustom.length < 2) continue
+
+      // Többszavas kifejezés
+      if (cleanCustom.includes(' ')) {
+        if (normalized.includes(cleanCustom)) {
+          return { clean: false, matchedWord: rawCustom }
+        }
+        continue
+      }
+
+      // Csillagos minta (pl. *szó*) vagy részszó keresés
+      const hasWildcard = rawCustom.includes('*')
+      if (hasWildcard && (normalized.includes(cleanCustom) || compactNorm.includes(cleanCustom))) {
+        return { clean: false, matchedWord: rawCustom }
+      }
+
+      for (const w of words) {
+        if (
+          w === cleanCustom ||
+          w.startsWith(cleanCustom) ||
+          (cleanCustom.length >= 4 && w.includes(cleanCustom))
+        ) {
+          return { clean: false, matchedWord: rawCustom }
+        }
       }
     }
   }

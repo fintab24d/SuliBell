@@ -263,9 +263,20 @@ async function main() {
 
   await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
     name: '💡-ötletek-javaslatok',
-    type: 0,
+    type: 15, // GUILD_FORUM
     parent_id: commCat.id,
-    topic: 'Van egy jó ötleted a Számláló oldalhoz? Oszd meg a fejlesztőkkel!',
+    topic: 'Oszd meg az ötleteidet a Számláló oldalhoz! Nyiss egy új bejegyzést a megfelelő címkével, szavazzatok és vitassátok meg!',
+    available_tags: [
+      { name: '✨ Új funkció', emoji_name: '✨' },
+      { name: '🎵 Zenegép & Videó', emoji_name: '🎵' },
+      { name: '🎮 Játék & Ranglista', emoji_name: '🎮' },
+      { name: '🎨 Kinézet & Design', emoji_name: '🎨' },
+      { name: '📱 Mobil & PWA', emoji_name: '📱' },
+      { name: '💡 Egyéb ötlet', emoji_name: '💡' },
+    ],
+    default_reaction_emoji: { emoji_name: '👍' },
+    default_sort_order: 0,
+    default_forum_layout: 1,
   })
 
   await api(`/guilds/${GUILD_ID}/channels`, 'POST', {

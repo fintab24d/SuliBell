@@ -45,6 +45,7 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 - **🛡️ Automatikus Moderációs & NSFW Szűrő**:
   - **Nincs névtelen beküldés**: Kötelező megadni a diák nevét vagy becenevét, anonim módon sem zene, sem videó nem küldhető be.
   - **Káromkodás- és tartalomvédelem**: Beépített magyar és angol nyelvű leetspeak- és ékezetnormalizált szűrő védi a felületet a trágár, alpári vagy kétértelmű kifejezésektől.
+  - **Admin AutoMod (Egyéni tiltott szavak)**: Pont úgy, mint a Discord AutoModban, az adminok saját tiltott szavakat, neveket vagy `*minta*` kifejezéseket adhatnak hozzá az admin felületen, amelyeket a rendszer valós időben azonnal letilt az egész oldalon (Zenegépben, játékosnevekben és a toplistán), élő tesztelő mezővel.
   - **YouTube korhatár és beágyazás-ellenőrzés**: Valós idejű YouTube oEmbed vizsgálat szűri ki a korhatáros (NSFW / 18+) tartalmakat még a közzététel előtt.
 - **🔒 Adminisztrátori Előnézet**: A főoldalról a diákok számára az előnézet / belehallgatás teljesen el van távolítva; a beküldött számokat és 4K videókat kizárólag az admin tudja az adminisztrációs felületen előnézetben megnézni, belehallgatni és ellenőrizni.
 - **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus szüneti lejátszás.
@@ -77,7 +78,8 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
   - `💬 DIÁK KÖZÖSSÉG`:
     - `#🎵-zenekérés-ötletek`: Zenei javaslatok beküldése és szavazás (Discord reakciók = weboldali szavazat).
     - `#🎬-videóbeküldés`: Külön dedikált videóbeküldő szoba sulis és szüneti videóknak.
-    - `#💡-ötletek-és-javaslatok`, `#🐛-hibajelentés`, `#🔊-szüneti-társalgó`
+    - `#💡-ötletek-javaslatok`: Fórum csatorna külön bejegyzésekkel, szavazással és címkékkel (✨ Új funkció, 🎵 Zenegép, 🎮 Játékok, 🎨 Design, 📱 Mobil, 💡 Egyéb).
+    - `#🐛-hibajelentés`, `#🔊-szüneti-társalgó`
   - `🔒 FEJLESZTŐI ZÓNA (DEV)`:
     - `#🚀-deploy-és-git`: Valós idejű GitHub commit és automatikus Vercel deploy értesítések commit üzenettel és szerzővel.
     - `#🆕-frissítések`: Automatikus értesítés verzióváltáskor a weboldal újdonságaival és a [sulibell.vercel.app](https://sulibell.vercel.app) közvetlen hivatkozásával.

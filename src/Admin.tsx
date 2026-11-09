@@ -7,6 +7,7 @@ import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from '.
 import { useArenaLeaderboard } from './Arena'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
+import { checkProfanity, isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements, saveBannedWordsToDb } from './lib/moderation'
 import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
 import AdminAi from './AdminAi'
@@ -93,6 +94,8 @@ function Panel() {
   const { songs: jbSongs, mode: todayMode, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
   const { board: arenaBoard, removeLeaderEntry, clearLeaderboard } = useArenaLeaderboard(d?.id, todayStr)
   const [previewWishId, setPreviewWishId] = useState<string | null>(null)
+  const [newBannedWord, setNewBannedWord] = useState('')
+  const [testWordInput, setTestWordInput] = useState('')
   const { maint, updateMaint } = useMaintenance(d?.id, d?.announcements)
   const { notifyAllClients } = useAdminBroadcaster()
   const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
@@ -352,7 +355,7 @@ function Panel() {
           }} />
         Megjegyzés <input style={{ minWidth: '18rem' }} placeholder="pl. Új közlemények" defaultValue={d.settings.version_note ?? ''} key={'n' + d.settings.version_note}
           onBlur={e => e.target.value !== (d.settings.version_note ?? '') && setS({ version_note: e.target.value })} />
-        <button type="button" onClick={() => setS({ version_note: 'Neon óra, háttérzene visualizerrel, váltakozó zene/videó napok, elmaradó órák okos átugrása' })}>✨ Legújabb újítások beírása</button>
+        <button type="button" onClick={() => setS({ version_note: '5 szavazatos szüneti zene/videó, 1 játék szünetenként, kötelező név és okos szószűrő' })}>✨ Legújabb újítások beírása</button>
         <button type="button" title="Közvetlen közzététel a Discord #🆕-frissítések szobában" onClick={async () => {
           const ver = d.settings.site_version || '1.0.0'
           const note = d.settings.version_note || ''
@@ -523,9 +526,9 @@ function Panel() {
     {can('announcements') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h2>Közlemények (főoldal és TV)</h2>
-        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%'))}>↺ Összes közlemény törlése</button>}
+        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%').not('text', 'like', '__BANNED_WORDS__:%'))}>↺ Összes közlemény törlése</button>}
       </div>
-      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
+      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
         <button onClick={() => setAn({ text: n.text, until: n.active_until ?? '' })}>Szerkesztés</button>
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />
@@ -884,6 +887,122 @@ function Panel() {
         )}
       </section>
     )}
+
+    {(can('videos') || can('settings')) && (() => {
+      const bannedWords = parseBannedWordsFromAnnouncements(d.announcements)
+      const saveBanned = async (next: string[]) => {
+        await run(saveBannedWordsToDb(d.id, next) as any)
+      }
+      const addWords = async () => {
+        const parts = newBannedWord
+          .split(/[,;\n]+/)
+          .map(s => s.trim().toLowerCase())
+          .filter(s => s.length >= 2)
+        if (parts.length === 0) return
+        const merged = Array.from(new Set([...bannedWords, ...parts]))
+        await saveBanned(merged)
+        setNewBannedWord('')
+        setMsg(`Hozzáadva ${parts.length} tiltott szó a szűrőhöz.`)
+      }
+      const testRes = testWordInput.trim() ? checkProfanity(testWordInput) : null
+      return (
+        <section>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2>🛡️ Tiltott szavak szűrője (AutoMod)</h2>
+            {bannedWords.length > 0 && (
+              <button
+                type="button"
+                onClick={() => confirm('Biztosan törlöd az összes egyénileg hozzáadott tiltott szót?') && saveBanned([])}
+              >
+                ↺ Összes egyéni szó törlése
+              </button>
+            )}
+          </div>
+          <p>
+            Pont úgy működik, mint a Discord AutoMod: az ide beírt szavakat, neveket vagy kifejezéseket a rendszer <b>azonnal letiltja az egész oldalon</b> (Zenegép zene- és videócímekben, beküldő nevekben, Mini-Aréna és Pihenő mód játékosnevekben, valamint a toplistán). A szűrő automatikusan felismeri az ékezet nélküli és számokkal trükköző (leetspeak, pl. <code>4=a, 3=e, 1=i, 0=o</code>) változatokat is. Használhatsz <code>*szó*</code> csillagos helyettesítést is!
+          </p>
+
+          <div className="row" style={{ marginBottom: 10 }}>
+            <input
+              style={{ minWidth: '20rem', flex: 1 }}
+              placeholder="Írj be tiltott szavakat (vesszővel elválasztva is lehet, pl. szó1, szó2, *minta*)"
+              value={newBannedWord}
+              onChange={e => setNewBannedWord(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addWords()
+                }
+              }}
+            />
+            <button type="button" disabled={!newBannedWord.trim()} onClick={addWords}>
+              ➕ Tiltólistára helyezés
+            </button>
+            {newBannedWord && (
+              <button type="button" onClick={() => setNewBannedWord('')}>
+                ↺ Törlés
+              </button>
+            )}
+          </div>
+
+          {bannedWords.length === 0 ? (
+            <p><i>Jelenleg csak a beépített alapértelmezett (káromkodás és 18+/NSFW) szótár aktív. Adj hozzá egyéni szavakat fent!</i></p>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {bannedWords.map(w => (
+                <span
+                  key={w}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: 'rgba(255, 59, 92, 0.14)',
+                    border: '1px solid rgba(255, 59, 92, 0.35)',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  🚫 {w}
+                  <button
+                    type="button"
+                    title={`"${w}" eltávolítása a tiltólistáról`}
+                    style={{
+                      padding: '0 4px',
+                      background: 'transparent',
+                      border: 0,
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      lineHeight: 1,
+                    }}
+                    onClick={() => saveBanned(bannedWords.filter(x => x !== w))}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="row" style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+            <input
+              style={{ minWidth: '16rem' }}
+              placeholder="🔍 Szűrő tesztelése (írj be egy próbacímet vagy nevet)..."
+              value={testWordInput}
+              onChange={e => setTestWordInput(e.target.value)}
+            />
+            {testRes && (
+              <span style={{ fontWeight: 600, color: testRes.clean ? '#4ade80' : '#ff3b5c' }}>
+                {testRes.clean
+                  ? '✅ Engedélyezett (átmegy a szűrőn)'
+                  : `🚫 Letiltva! (fennakadt kifejezés: "${testRes.matchedWord}")`}
+              </span>
+            )}
+          </div>
+        </section>
+      )
+    })()}
 
     {can('polls') && <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>
       {polls === null && <p>A szavazás még nincs bekapcsolva: futtasd le a <code>supabase/update11.sql</code> fájlt.</p>}

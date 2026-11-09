@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { voterId } from './Poll'
-import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
+import { PLAYER_NAME_KEY, checkProfanity, isAnonymousName, validatePlayerName } from './lib/moderation'
 
 export interface LeaderEntry {
   playerId: string
@@ -189,7 +189,7 @@ const LB_PREFIX = 'csengeto-arena-lb-'
 function loadLocalLb(day: string): LeaderEntry[] {
   try {
     const raw = JSON.parse(localStorage.getItem(LB_PREFIX + day) ?? '[]') || []
-    return Array.isArray(raw) ? raw.filter(item => item && item.name && !isAnonymousName(item.name)) : []
+    return Array.isArray(raw) ? raw.filter(item => item && item.name && !isAnonymousName(item.name) && checkProfanity(item.name).clean) : []
   } catch {
     return []
   }
@@ -197,7 +197,7 @@ function loadLocalLb(day: string): LeaderEntry[] {
 
 function saveLocalLb(day: string, list: LeaderEntry[]) {
   try {
-    const cleanList = list.filter(item => item && item.name && !isAnonymousName(item.name))
+    const cleanList = list.filter(item => item && item.name && !isAnonymousName(item.name) && checkProfanity(item.name).clean)
     localStorage.setItem(LB_PREFIX + day, JSON.stringify(cleanList))
   } catch { /* ignore */ }
 }
@@ -205,7 +205,7 @@ function saveLocalLb(day: string, list: LeaderEntry[]) {
 function mergeLeaderboard(existing: LeaderEntry[], incoming: LeaderEntry): LeaderEntry[] {
   const map = new Map<string, LeaderEntry>()
   for (const item of [...existing, incoming]) {
-    if (!item || !item.name || isAnonymousName(item.name) || item.score <= 0) continue
+    if (!item || !item.name || isAnonymousName(item.name) || !checkProfanity(item.name).clean || item.score <= 0) continue
     const key = `${item.playerId || item.name}-${item.mode}`
     const prev = map.get(key)
     if (!prev || item.score > prev.score) {
