@@ -5,6 +5,7 @@ import { parseVideo } from './lib/video'
 import { voterId } from './Poll'
 import { MusicVisualizer } from './BreakVideo'
 import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
+import { validateMediaSubmission } from './lib/moderation'
 
 export type MediaKind = 'music' | 'video'
 
@@ -369,6 +370,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     const cleanTitle = rawTitle.trim().slice(0, 60)
     if (!cleanTitle) return false
     const cleanBy = rawBy.trim().slice(0, 24)
+    if (!cleanBy) return false
     const parsed = rawUrl?.trim() ? parseVideo(rawUrl.trim()) : parseVideo(rawTitle.trim())
     const ytId = explicitYtId || (parsed?.kind === 'yt' ? parsed.id : undefined)
     const mp4Url = parsed?.kind === 'file' ? parsed.src : undefined
@@ -521,11 +523,13 @@ export default function Jukebox({
   day,
   tv,
   sound,
+  previewDisabled = false,
 }: {
   schoolId?: string
   day: string
   tv?: boolean
   sound?: boolean
+  previewDisabled?: boolean
 }) {
   const { songs, voted, mode, addSong, voteSong } = useJukebox(schoolId, day, sound)
   const isVideoDay = mode === 'video'
@@ -539,24 +543,41 @@ export default function Jukebox({
   const [showForm, setShowForm] = useState(false)
   const [playingId, setPlayingId] = useState<string | null>(null)
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     setErr('')
     if (!title.trim()) return
-    if (isVideoDay && !pickedYtId && !ytUrl.trim() && !parseVideo(title.trim())) {
+
+    const parsed = ytUrl.trim() ? parseVideo(ytUrl.trim()) : parseVideo(title.trim())
+    const explicitOrParsedYt = pickedYtId || (parsed?.kind === 'yt' ? parsed.id : undefined)
+
+    if (isVideoDay && !pickedYtId && !ytUrl.trim() && !parsed) {
       setErr('Videó-napon adj meg egy YouTube / videó linket, vagy válassz a gyors tippek közül!')
       return
     }
-    if (ytUrl.trim() && !parseVideo(ytUrl.trim())) {
+    if (ytUrl.trim() && !parsed) {
       setErr('Érvényes YouTube-linket (watch, youtu.be, shorts) vagy .mp4 linket adj meg!')
       return
     }
-    if (by.trim()) {
-      try { localStorage.setItem('csengeto-arena-name', by.trim()) } catch { /* ignore */ }
+
+    // 1. Névtelen beküldés tiltása + 2. Káromkodás & NSFW szűrő
+    const check = await validateMediaSubmission({
+      title: title.trim(),
+      by: by.trim(),
+      ytId: explicitOrParsedYt,
+    })
+
+    if (!check.valid) {
+      setErr(check.error || 'A beküldés nem felel meg az iskolai szabályzatnak.')
+      return
     }
-    const ok = addSong(title, by, ytUrl, pickedYtId)
+
+    const cleanBy = check.cleanBy || by.trim()
+    try { localStorage.setItem('csengeto-arena-name', cleanBy) } catch { /* ignore */ }
+
+    const ok = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
     if (!ok) {
-      setErr('Érvénytelen videó link.')
+      setErr('A videó vagy zene nem menthető el.')
       return
     }
     setTitle('')
@@ -667,10 +688,11 @@ export default function Jukebox({
             <div className="jb-row2">
               <input
                 type="text"
-                placeholder="Ki küldi? (pl. 10.B / Dani)"
+                placeholder="Ki küldi? (pl. 10.B / Dani) *"
                 maxLength={24}
+                required
                 value={by}
-                onChange={e => setBy(e.target.value)}
+                onChange={e => { setBy(e.target.value); setErr('') }}
               />
               <input
                 type="url"
@@ -683,11 +705,14 @@ export default function Jukebox({
                   setErr('')
                 }}
               />
-              <button type="submit" className="cta" disabled={!title.trim()}>
+              <button type="submit" className="cta" disabled={!title.trim() || !by.trim()}>
                 🚀 Beküldés
               </button>
             </div>
             {err && <small style={{ color: 'var(--warn)', fontWeight: 600 }}>{err}</small>}
+            <small style={{ color: 'var(--mut)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
+              🛡️ Iskolabarát szűrő: A név megadása kötelező (névtelenül nem küldhető be). A káromkodást és nem megfelelő tartalmat a rendszer automatikusan elutasítja.
+            </small>
           </div>
         </form>
       )}
@@ -722,7 +747,7 @@ export default function Jukebox({
                     <b>{s.title}</b>
                     <div className="jb-sub">
                       {s.by && <small>Küldi: {s.by}</small>}
-                      {s.ytId || s.mp4Url ? (
+                      {!previewDisabled && (s.ytId || s.mp4Url) ? (
                         <button
                           type="button"
                           className="jb-link"
@@ -740,6 +765,7 @@ export default function Jukebox({
                           target="_blank"
                           rel="noopener noreferrer"
                           className="jb-link"
+                          title="Keresés a YouTube-on"
                         >
                           🔍 YouTube
                         </a>
@@ -758,7 +784,7 @@ export default function Jukebox({
                   </button>
                 </div>
 
-                {isPlaying && (s.ytId || s.mp4Url) && (!isVideoDay || s.kind === 'music') && (
+                {isPlaying && !previewDisabled && (s.ytId || s.mp4Url) && (!isVideoDay || s.kind === 'music') && (
                   <MusicVisualizer
                     compact
                     title={s.title}
@@ -770,7 +796,7 @@ export default function Jukebox({
                     onClose={() => setPlayingId(null)}
                   />
                 )}
-                {isPlaying && isVideoDay && s.kind !== 'music' && s.ytId && (
+                {isPlaying && !previewDisabled && isVideoDay && s.kind !== 'music' && s.ytId && (
                   <div className="jb-player">
                     <iframe
                       src={`https://www.youtube-nocookie.com/embed/${s.ytId}?autoplay=1&mute=1&rel=0`}
@@ -781,7 +807,7 @@ export default function Jukebox({
                     />
                   </div>
                 )}
-                {isPlaying && isVideoDay && s.kind !== 'music' && !s.ytId && s.mp4Url && (
+                {isPlaying && !previewDisabled && isVideoDay && s.kind !== 'music' && !s.ytId && s.mp4Url && (
                   <div className="jb-player">
                     <video src={s.mp4Url} controls autoPlay muted playsInline style={{ width: '100%', height: '100%' }} />
                   </div>

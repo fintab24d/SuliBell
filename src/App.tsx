@@ -731,7 +731,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <div className="dash-col col-side">
             <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
 
-            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} />
+            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} previewDisabled={!!data.settings.preview_disabled} />
 
             <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
 

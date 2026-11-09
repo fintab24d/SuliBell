@@ -373,6 +373,13 @@ async function searchYoutube(query: string): Promise<{ ytId: string; title: stri
   }
 }
 
+function isProfane(text: string): boolean {
+  if (!text) return false
+  const norm = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[@4]/g, 'a').replace(/[3]/g, 'e').replace(/[1!|]/g, 'i').replace(/[0]/g, 'o').replace(/[$5]/g, 's')
+  const bad = ['fasz', 'geci', 'kurva', 'picsa', 'pina', 'ribanc', 'kocsog', 'seggfej', 'anyadat', 'fuck', 'bitch', 'cunt', 'dick', 'pussy', 'porn', 'xxx', 'hentai', 'nude']
+  return bad.some(w => norm.includes(w))
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
@@ -415,7 +422,9 @@ Deno.serve(async (req: Request) => {
             }
           }
 
-          if (!cleanTitle) continue
+          if (!cleanTitle || isProfane(cleanTitle)) continue
+          const senderName = (m.member?.nick || m.author?.global_name || m.author?.username || 'Diák').slice(0, 20)
+          if (isProfane(senderName)) continue
 
           let extraVotes = 0
           let botReacted = false
@@ -435,7 +444,6 @@ Deno.serve(async (req: Request) => {
             discordApi(`/channels/${chMap.music}/messages/${m.id}/reactions/${encodeURIComponent('🎵')}/@me`, 'PUT').catch(() => {})
           }
 
-          const senderName = (m.member?.nick || m.author?.global_name || m.author?.username || 'Diák').slice(0, 20)
           const createdMs = Date.parse(m.timestamp) || Date.now()
           const msgDay = new Date(createdMs).toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' })
 

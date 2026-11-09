@@ -31,6 +31,7 @@ export interface SchoolData {
     break_videos?: boolean
     rest_mode?: boolean
     ask_enabled?: boolean
+    preview_disabled?: boolean
   }
   schedules: Schedule[]
   closed: { day: string; reason: string }[]

@@ -14,7 +14,7 @@ import { DISCORD_INVITE_URL, postToDiscord } from './lib/discord'
 
 interface Full {
   id: string; name: string
-  settings: { timezone: string; theme: string; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null; break_videos?: boolean; rest_mode?: boolean; ask_enabled?: boolean }
+  settings: { timezone: string; theme: string; sound_enabled: boolean; logo_url: string | null; tv_show_seconds: boolean; tv_show_next: boolean; tv_scale: number; site_version: string; version_note: string; alert_text: string; alert_active: boolean; lunch_after: number | null; year_start: string | null; year_end: string | null; weather_enabled: boolean; weather_city: string; weather_lat: number | null; weather_lon: number | null; tv_show_qr: boolean; bell_sound_url: string | null; break_videos?: boolean; rest_mode?: boolean; ask_enabled?: boolean; preview_disabled?: boolean }
   countdowns: Countdown[]; announcements: { id: string; text: string; active_until: string | null }[]; schedule_dates: { id: string; day: string; schedule_id: string }[]; changes: { id: string; day: string; kind: string; lesson_label: string; text: string }[]; menus: { id: string; day: string; text: string }[]; schedules: Schedule[]; closed_days: { id: string; day: string; reason: string }[]
 }
 type Res = PromiseLike<{ error: { message: string } | null }>
@@ -723,6 +723,16 @@ function Panel() {
                 onChange={e => setS({ break_videos: e.target.checked })}
               />{' '}
               Szüneti videók / zenék lejátszása a szünetekben (naponta váltakozva: egyik nap videó, másik nap zene)
+            </label>
+          </div>
+          <div className="row">
+            <label>
+              <input
+                type="checkbox"
+                checked={!d.settings.preview_disabled}
+                onChange={e => setS({ preview_disabled: !e.target.checked })}
+              />{' '}
+              Zene- és videó-előnézet engedélyezése az oldalon (belehallgatás / megnézés)
             </label>
           </div>
           <p>
