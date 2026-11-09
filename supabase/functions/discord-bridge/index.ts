@@ -606,7 +606,7 @@ Deno.serve(async (req: Request) => {
                 },
                 {
                   name: '🌐 Weboldal',
-                  value: '[sulibell.hu](https://sulibell.hu)',
+                  value: '[sulibell.vercel.app](https://sulibell.vercel.app)',
                   inline: true,
                 },
               ],
