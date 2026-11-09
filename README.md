@@ -1,6 +1,6 @@
 # SuliBell 🔔
 > **Iskolai Valós Idejű Csengetési, Tájékoztatási és Közösségi Rendszer**  
-> *Copyright © 2024–2026 SuliBell. Minden jog fenntartva (All Rights Reserved).*
+> *Copyright © 2026 SuliBell. Minden jog fenntartva (All Rights Reserved).*
 
 A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi webalkalmazás, amely másodperc pontosan mutatja a tanítási órákat, szüneteket, órarendi változásokat, és élménnyé teszi az iskolai mindennapokat a diákok, a tanárok és az iskola vezetősége számára.
 
