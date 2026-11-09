@@ -1,6 +1,6 @@
 # SuliBell 🔔
 > **Iskolai Valós Idejű Csengetési, Tájékoztatási és Közösségi Rendszer**  
-> *Copyright © 2024–2026 SuliBell. Minden jog fenntartva (All Rights Reserved).*
+> *Copyright © 2026 Finta Benjámin (SuliBell). Minden jog fenntartva (All Rights Reserved).*
 
 A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi webalkalmazás, amely másodperc pontosan mutatja a tanítási órákat, szüneteket, órarendi változásokat, és élménnyé teszi az iskolai mindennapokat a diákok, a tanárok és az iskola vezetősége számára.
 
@@ -86,10 +86,11 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 
 ## 🔒 Szerzői Jogi és Licenc Nyilatkozat
 
-**Ez a projekt zárt forráskódú, saját tulajdonú szoftver (Proprietary / All Rights Reserved).**
+**Ez a projekt zárt forráskódú, saját tulajdonú szoftver (Proprietary / All Rights Reserved).**  
+**Szerző és kizárólagos tulajdonos:** Finta Benjámin (2026)
 
 A SuliBell teljes forráskódja, felhasználói felülete, designja, egyedi grafikái és adatbázis-struktúrája szerzői jogi védelem alatt áll.
 
-- **SZIGORÚAN TILOS** a forráskód vagy annak részeinek másolása, sokszorosítása, forkolása, újrahasznosítása vagy újrahostolása a szerző előzetes írásos engedélye nélkül.
+- **SZIGORÚAN TILOS** a forráskód vagy annak részeinek másolása, sokszorosítása, forkolása, újrahasznosítása vagy újrahostolása a szerző (**Finta Benjámin**) előzetes írásos engedélye nélkül.
 - A GitHub repository megtekinthetősége kizárólag a kód áttekintésére szolgál, **nem jelent nyílt forráskódú licencet (Open Source)**, és nem jogosít fel a projekt használatára vagy terjesztésére.
 - Részletes jogi nyilatkozat a [LICENSE](LICENSE) fájlban olvasható.

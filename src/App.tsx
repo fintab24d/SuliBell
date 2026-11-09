@@ -743,7 +743,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <footer className="foot">
           {data.settings.site_version && <span className="ver">Verzió {data.settings.site_version}</span>}
           {data.settings.version_note && <span>{data.settings.version_note}</span>}
-          <span className="copy">© {new Date().getFullYear()} SuliBell • Minden jog fenntartva (All Rights Reserved)</span>
+          <span className="copy">© 2026 Finta Benjámin • SuliBell • Minden jog fenntartva (All Rights Reserved)</span>
         </footer>
         {data.settings.ask_enabled && <Ask />}
         <MyScheduleModal

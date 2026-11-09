@@ -78,6 +78,22 @@ async function main() {
 
   // 1. Rangok létrehozása
   console.log('🎨 Rangok létrehozása...')
+  const ownerRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {
+    name: '👑 Tulajdonos',
+    color: 0xff1744, // Élénk vörös-neon
+    hoist: true,
+    mentionable: true,
+    permissions: Perm.ADMINISTRATOR,
+  })
+
+  const headAdminRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {
+    name: '⭐ Főadmin',
+    color: 0xff9100, // Kiemelt arany-borostyán
+    hoist: true,
+    mentionable: true,
+    permissions: Perm.ADMINISTRATOR,
+  })
+
   const leadDevRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {
     name: '👑 Lead Dev',
     color: 0xff4fc3, // Neon pink
@@ -128,7 +144,7 @@ async function main() {
     mentionable: false,
   })
 
-  console.log('  ✔ Rangok kész: 👑 Lead Dev, 🛠️ Fejlesztő (Dev), 🛡️ Moderátor, 🧑‍🏫 Tanár, 🎓 Diák')
+  console.log('  ✔ Rangok kész: 👑 Tulajdonos, ⭐ Főadmin, 👑 Lead Dev, 🛠️ Fejlesztő (Dev), 🛡️ Moderátor, 🧑‍🏫 Tanár, 🎓 Diák')
 
   // Jogosultság-sablonok:
   // A) Csak olvasható (Információs szobák: @everyone látja, de nem írhat; Dev írhat)
