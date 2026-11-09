@@ -2,6 +2,8 @@
   "name": "csengeto",
   "private": true,
   "version": "1.0.0",
+  "license": "UNLICENSED",
+  "author": "SuliBell Team",
   "type": "module",
   "scripts": {
     "dev": "vite",

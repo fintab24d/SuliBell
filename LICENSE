@@ -1,0 +1,45 @@
+PROPRIETARY LICENSE / SZERZŐI JOGI NYILATKOZAT
+==============================================================
+Copyright (c) 2024-2026 SuliBell. Minden jog fenntartva.
+All Rights Reserved.
+==============================================================
+
+[MAGYAR NYELVŰ VERZIÓ]
+
+A jelen szoftver ("SuliBell"), annak teljes forráskódja, felhasználói felülete, grafikai elemei, adatbázis-szerkezete és dokumentációja szerzői jogi védelem alatt áll.
+
+1. TULAJDONJOG ÉS VÉDELEM
+A SuliBell szoftver és annak minden alkotóeleme kizárólag a szerző(k) szellemi tulajdonát képezi. 
+
+2. HASZNÁLATI ÉS MÁSOLÁSI TILALOM
+Kifejezett előzetes írásbeli engedély nélkül SZIGORÚAN TILOS:
+- A forráskód vagy bármely részének másolása, többszörözése, más projektekbe való beépítése;
+- A szoftver forkolása, klónozása vagy újrahostolása más domainen, szerveren vagy webtárhelyen;
+- A kód módosítása, származtatott munkák készítése vagy visszafejtése;
+- A szoftver kereskedelmi vagy nem kereskedelmi célú terjesztése, értékesítése, bérbeadása vagy licencelése harmadik fél számára.
+
+3. NYILVÁNOS MEGTEKINTÉS
+A forráskód nyilvános tárhelyen (pl. GitHub) való megjelenése KIZÁRÓLAG a kód megtekintését teszi lehetővé. Semmilyen körülmények között NEM minősül nyílt forráskódú (Open Source) licencnek, és nem ruház fel semmilyen jogot a kód futtatására, átvételére vagy újrafelhasználására.
+
+4. JOGKÖVETKEZMÉNYEK
+A jelen szerzői jogi feltételek megsértése, a kód jogosulatlan eltulajdonítása vagy felhasználása polgári és büntetőjogi eljárást von maga után a hatályos magyar és nemzetközi szerzői jogi törvények alapján.
+
+--------------------------------------------------------------
+
+[ENGLISH VERSION]
+
+1. COPYRIGHT & PROPRIETARY NOTICE
+This software ("SuliBell"), including its entire source code, user interface, graphics, design, architecture, and documentation, is the exclusive proprietary property of the author(s).
+
+2. RESTRICTIONS
+Without prior explicit written permission from the copyright holder, it is STRICTLY FORBIDDEN to:
+- Copy, reproduce, redistribute, or reuse the source code or any portion thereof;
+- Fork, clone, re-host, mirror, or deploy this software on any server, domain, or hosting provider;
+- Modify, adapt, alter, reverse-engineer, or create derivative works;
+- Sell, license, sub-license, rent, or exploit the software for commercial or non-commercial purposes.
+
+3. NO IMPLIED LICENSE
+The availability of this repository on GitHub or any public platform is for review and viewing purposes only. It DOES NOT constitute an open-source license, public domain dedication, or grant of rights.
+
+4. LEGAL ACTION
+Any unauthorized use, copying, theft, or distribution will be prosecuted to the maximum extent permitted by applicable civil and criminal intellectual property laws.

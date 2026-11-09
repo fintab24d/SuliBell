@@ -1,74 +1,95 @@
-# SuliBell
+# SuliBell 🔔
+> **Iskolai Valós Idejű Csengetési, Tájékoztatási és Közösségi Rendszer**  
+> *Copyright © 2024–2026 SuliBell. Minden jog fenntartva (All Rights Reserved).*
 
-A SuliBell az iskola élő csengetési oldala. Megmutatja, hány óra van, melyik óra vagy szünet tart éppen, és mennyi idő van hátra a következő csengetésig. Nem kell frissítened, magától pörög.
+A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi webalkalmazás, amely másodperc pontosan mutatja a tanítási órákat, szüneteket, órarendi változásokat, és élménnyé teszi az iskolai mindennapokat a diákok, a tanárok és az iskola vezetősége számára.
 
-## Hol találod?
-- **Főoldal:** a teljes napi áttekintés, telefonon és számítógépen is.
-- **/display:** a folyosói kijelzőre szánt, nagy betűs nézet.
+---
 
-## Hogyan olvasd?
+## 🚀 Főbb Elérhetőségek és Nézetek
 
-**Az óra** az oldal tetején látszik, másodperc pontosan, magyar idő szerint (nyári és téli időszámítással is).
+- **Főoldal (`/`)**: 3 oszlopos Bento Dashboard élmény telefonon, tableten és asztali böngészőben.
+- **Folyosói Kijelző / TV Mód (`/display`)**: Fix 100svh felbontású, görgetésmentes nézet folyosói és aulában elhelyezett TV-kijelzőkre, óriási számlappal és QR-kóddal a telefonos megnyitáshoz.
+- **Adminisztrátori Felület (`/admin`)**: Jelszóval és szerepkörökkel védett vezérlőpult a csengetési rendek, változások, menük, zenék és rendszerbeállítások kezelésére.
+- **Privát Admin Tesztlabor (`/teszt`)**: Valósághű szimulációs környezet az adminoknak időléptetéssel, hó/eső és változások kockázatmentes teszteléséhez (a látogatók nem látják).
+- **Alkalmazás Telepítés (`/telepites`)**: Útmutató az alkalmazás kezdőképernyőre való telepítéséhez (PWA).
 
-**A "Most" panel** közepén a számlap mutatja a visszaszámlálót:
-- **neonzöld** gyűrű: óra van, az ív az óra előrehaladását mutatja;
-- **türkiz** gyűrű: szünet van;
-- **sárgászöld** gyűrű: még nem kezdődött el a tanítás.
+---
 
-Az utolsó percben a számok villognak, és kiírja, hogy hamarosan csengetés lesz. Alatta a következő óra és a következő csengetések időpontjai láthatók.
+## ✨ Kiemelt Funkciók
 
-**A mai napirend** az összes órát és szünetet felsorolja. A "most" jelölésű sor az éppen zajló óra, a "következő" a soron következő, a halványak már véget értek.
+### 🕒 Élő Csengetési Számláló & Napsáv
+- **LED Neon számlap**: Színkódolt analóg-digitális ív (óra, szünet, tanítás előtt/után), finoman váltó neon számjegyekkel.
+- **10 másodperces finis**: Az utolsó 10 másodpercben pulzáló animáció és csengetési fényhullám.
+- **Okos órarend-követés**: Az elmaradó órákat áthúzva jelöli, és a szünet-visszaszámláló automatikusan átugorja őket a következő tényleges óráig.
+- **Nap haladása & Csengetési lista**: Arányos grafikus idősáv és a következő csengetések pontos listája.
 
-**A nap egy pillantásra** összefoglalja, hány óra telt el, mennyi tanítási idő van még hátra, hol tart a nap, és milyen hosszú lesz a következő szünet. A sávon az órák és szünetek arányosan látszanak, a vonal a pillanatnyi időt jelzi.
+### 📚 Személyes Órarend (Saját óráim)
+- A diákok és tanárok beállíthatják saját tantárgyaikat és tantermeiket a hét minden napjára.
+- **AI-alapú intelligens felismerés**: Bemásolt órarend-szövegből vagy fotó leírásából egy kattintással kitölti a heti órákat és termeket.
+- A számlap és a napirend ezután a saját tantárgyat és a terem jelzését (pl. `📍 204. terem`) mutatja.
 
-**E heti rend:** a hét minden napján látszik, hány óra van és mikor kezdődik, illetve melyik nap ünnepnap vagy tanítás nélküli.
+### 🎵 Szüneti Zenegép (Jukebox) & Háttér Visualizer
+- **Diák kívánságműsor**: Zenék beküldése YouTube / MP3 linkkel vagy kereséssel, szavazás a legjobb számokra.
+- **Váltakozó tematikus napok**: Zenei napok vs. 4K természetfilm-videók a szünetekben.
+- **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus dalszöveg-megjelenítés.
 
-**Közlemények:** az iskola fontos üzenetei.
+### 💬 Élő Hangulatfal & Reakciók (Emoji-eső)
+- A diákok egyetlen kattintással élő reakciókat küldhetnek be (🔥, 🎉, 😴, 🤯, ☕, ❤️).
+- A reakciók valós időben úsznak fel az oldalon és a folyosói TV-kijelzőkön, a statisztika pedig mutatja a suli aktuális hangulatát.
 
-**Szünetek és ünnepek:** visszaszámláló a következő szünetekig, azzal együtt, hogy hány tanítási nap van még hátra.
+### ⚡ Szüneti Mini-Aréna & Napi Ranglista
+- **⚡ Neon Reflex**: Reakcióidő-fejlesztő pörgős játék bónuszokkal és kerülendő bombákkal.
+- **🧠 Napi Villám-Kvíz**: 60+ kérdéses tudásbázis, naponta determinisztikusan generált egyedi kérdéssor (történelem, földrajz, irodalom, reál tárgyak, logika és fejszámolás) napi iskolai toplistával.
+- Tanítási óra közben automatikusan összezárul, hogy ne vonja el a figyelmet a tanulásról.
 
-## Ha nincs tanítás
-Hétvégén, ünnepnapon és tanítási idő után az oldal kiírja, hogy ma nincs tanítás (vagy hogy vége a tanításnak), és megmutatja, mikor kezdődik legközelebb a tanítás, valamint a következő tanítási nap rendjét.
+### 🎮 Pihenő Mód & Szezonális Mini-játékok
+- Hétvégén, ünnepnapokon és tanítási szünetekben a visszaszámláló Pihenő módra vált.
+- **4 nehézségi fokozatú Snake**: Könnyű, Normál, Nehéz és Extrém sebességbeállítás a Snake játékban.
+- **Szezonális játékok**: Ősszel Halloween édességfogó, télen Karácsonyi ajándékfogó, tavasszal Húsvéti tojásvadászat.
 
-## Gombok
-- **Téma:** átváltás sötét és világos megjelenés között. Az oldal megjegyzi a választásodat.
-- **Hang engedélyezése:** ha az iskola bekapcsolta a csengetési hangot, a böngésző biztonsági okból csak akkor engedi lejátszani, ha egyszer rákattintasz erre a gombra.
+### 🌧️ Valós Idejű Időjárás & Fizikai Csapadékeffektek
+- Helyi meteorológiai adatok az **Open-Meteo** szolgáltatásból (hőmérséklet, csapadékvalószínűség, időjárási ikonok).
+- Valódi csapadék szimuláció: esőcseppek becsapódása, sűrű havazás megmaradó, a kártyák tetején lebegő hórétegekkel, vihar villámlással.
 
-## Effektek és szavazás
+### 💬 Hivatalos Discord Integráció
+- Kétirányú adatkapcsolat a SuliBell és a hivatalos Discord szerver között Supabase Edge Function segítségével.
+- Automatikus közlemény-, étlap- és órarendváltozás-posztolás Discord csatornákra.
+- Teljes szerver-struktúra kialakítva:
+  - `📌 INFORMÁCIÓK` (üdvözlő, szabályzat, hírek, belépési napló)
+  - `💬 DIÁK KÖZÖSSÉG` (csevegő, zenekérés, ötletek, hibajelentés, hangtársalgó)
+  - `🧑‍🏫 TANÁRI SZOBA & VEZETŐSÉG` (privát oktatói megbeszélő és órarend-egyeztetés)
+  - `🛡️ MODERÁTORI ZÓNA` (privát moderátori szobák és szankció-napló)
+  - `🔒 FEJLESZTŐI ZÓNA (DEV)` (belső fejlesztői chat, git és szervernapló)
 
-- A **Neon** stílusban mozgó fényfoltok, kattintásra szikrák, csengetéskor fényhullám és felirat, az utolsó 10 másodpercben nagy számlálás látszik. A fejléc ✨ gombjával eszközönként kikapcsolható.
-- Ha be van kapcsolva az időjárás, a háttérben a valódi idő látszik: eső, hó vagy vihar villámlással.
-- Nagy pillanatokon tűzijáték és konfetti jön: amikor egy visszaszámláló nullára ér, és amikor hétvége vagy ünnep előtt véget ér az utolsó óra. A logóra ötször kattintva kipróbálható (parti mód).
-- Szünetben (ha az iskola megadott videókat) néma videó játszódik a főoldalon és a TV-n.
-- A tűzijátéknak és a konfettinek hangja van, ha a **Hang engedélyezése** gombot megnyomtad.
-- Ha nincs tanítás (hétvége, ünnep, szünet), az oldal Pihenő módra vált: vicces üzenet, hátralévő idő a következő szünetig és egy Snake-játék. A játék a szünethez igazodik: őszi szünetben Halloween-os édességfogó, télen karácsonyi ajándékfogó, tavasszal húsvéti tojásvadászat, nyáron nincs játék, egyébkor (hétvége, ünnep) Snake. A TV-n a gép játszik, a főoldalon te is kipróbálhatod.
-- Ha be van kapcsolva, a jobb alsó **Kérdezz** gombbal az AI-asszisztenst kérdezheted a csengetésről, szünetekről, ebédről. Egy gép válaszol, ezért fontos dolgot ellenőrizz.
-- Ha az iskola szavazást indít, az eredmény élőben látszik, a TV-n QR-kóddal. Telefonról egyszer lehet szavazni.
-- **Személyes órarend (📚 Saját óráim):** a diákok napokra bontva beállíthatják saját tantárgyaikat és termeiket (gyorsválasztó gombokkal is). A számlap, a következő óra jelzője és a mai napirend ezután a saját órájukat és termüket (pl. 📍 204) mutatja.
-- **Élő Hangulat- és Reakciófal (Emoji-eső):** egy gombnyomással küldhetők élő reakciók (🔥, 🎉, 😴, 🤯, ☕, ❤️), amelyek valós időben felúsznak minden megnyitott oldalon és a folyosói TV-n is, miközben a hangulatsáv mutatja az iskola aktuális hangulatát.
-- **Szüneti Mini-Aréna & Napi Toplista:** két gyors, 20–30 másodperces kihívás (**⚡ Neon Reflex** és **🧠 Napi Villám-Kvíz**, ahol mindenki ugyanazt a napi kérdéssort kapja), élőben frissülő napi iskolai toplistával. Tanóra közben automatikusan összecsukódik, hogy ne vonja el a figyelmet.
+### 🔄 Rendszerfrissítés / Karbantartási Képernyő
+- Az adminisztrátorok külön aktiválhatják a főoldalra és a TV-kijelzőre.
+- **10 másodperces felkészülési visszaszámláló**: Bekapcsoláskor egy lebegő sáv figyelmezteti a diákokat a hátralévő másodpercekre.
+- Leteltével automatikusan homályosított (`is-updating`) állapotba kapcsol a felület a frissítés idejére.
 
-## Telepítés alkalmazásként
-Az oldalt telepítheted a telefonodra vagy a számítógépedre, és onnantól külön ikonról indul, internet nélkül is megnyílik (az utoljára betöltött adatokkal). A folyosói kijelzőn lévő QR-kód közvetlenül a telepítési oldalra visz, ott lépésről lépésre végigvezet az oldal.
-- **Android, Chrome, Edge (számítógép):** ha megjelenik a **Telepítés** gomb az oldal tetején, nyomd meg. Ha nem, a böngésző menüjében keresd a "Telepítés" vagy az "Alkalmazás telepítése" pontot.
-- **iPhone, iPad (Safari):** koppints a Megosztás ikonra, majd a **Főképernyőhöz adás** pontra.
+### 📱 PWA & Web Push Értesítések
+- Önálló alkalmazásként telepíthető Androidra, iOS-re és asztali operációs rendszerekre.
+- Azonnali Web Push értesítések az órarendi változásokról (elmaradó órák, helyettesítés).
+- Teljes offline működés hálózati kimaradás esetén a legfrissebb gyorsítótárazott adatokkal.
 
-## Értesítések
-Ha az iskola bekapcsolta, az oldal tetején megjelenik az **Értesítések** gomb. Engedélyezd, és a telefonod értesít a fontos közleményekről és a mai változásokról (például elmaradó óra). Bármikor kikapcsolhatod ugyanazzal a gombbal. iPhone-on előbb telepítsd az alkalmazást a főképernyőre.
+---
 
-## Gyakori kérdések
+## 🛠️ Technológiai Háttér
 
-**Miért nem látom azonnal, ha az iskola megváltoztatta a csengetési rendet?**
-Az oldal néhány percenként frissíti az adatokat. Ha sietsz, töltsd újra az oldalt.
+- **Frontend keretrendszer:** React 18, TypeScript, Vite
+- **Adatbázis & Backend:** Supabase (PostgreSQL, Realtime WebSocket csatornák, Row-Level Security, Edge Functions, Storage)
+- **Stílus és Megjelenés:** Tiszta, optimalizált CSS3 (Glassmorphism, Neon glow, Tabular numbers, Responsive Bento Grid)
+- **Fizikai Effektek:** Kétrétegű HTML5 Canvas részecskemotor DOM-elemekhez rögzített ütközésvizsgálattal
+- **Időjárás:** Open-Meteo Geocoding & Forecast API
 
-**Mit jelent az "Offline mód" felirat?**
-Megszakadt az internetkapcsolat. Az oldal ilyenkor a legutóbb betöltött csengetési renddel megy tovább, és amint visszatér a net, magától szinkronizál.
+---
 
-**Nem szól a csengő.**
-A hangot az iskolának be kell kapcsolnia, neked pedig egyszer rá kell kattintanod a "Hang engedélyezése" gombra.
+## 🔒 Szerzői Jogi és Licenc Nyilatkozat
 
-**Az oldal alján látok egy verziószámot. Mi ez?**
-Az oldal aktuális verziója, a mellette lévő megjegyzés pedig röviden leírja, mi változott.
+**Ez a projekt zárt forráskódú, saját tulajdonú szoftver (Proprietary / All Rights Reserved).**
 
-**Hibát találtam, rossz az időpont vagy hiányzik valami.**
-Jelezd az iskolában az oldal üzemeltetőjének.
+A SuliBell teljes forráskódja, felhasználói felülete, designja, egyedi grafikái és adatbázis-struktúrája szerzői jogi védelem alatt áll.
+
+- **SZIGORÚAN TILOS** a forráskód vagy annak részeinek másolása, sokszorosítása, forkolása, újrahasznosítása vagy újrahostolása a szerző előzetes írásos engedélye nélkül.
+- A GitHub repository megtekinthetősége kizárólag a kód áttekintésére szolgál, **nem jelent nyílt forráskódú licencet (Open Source)**, és nem jogosít fel a projekt használatára vagy terjesztésére.
+- Részletes jogi nyilatkozat a [LICENSE](LICENSE) fájlban olvasható.

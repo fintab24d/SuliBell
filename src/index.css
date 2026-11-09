@@ -275,7 +275,9 @@ body::before{animation:drift 20s ease-in-out infinite alternate}@keyframes drift
 .stat,.wd,.ev,.bells li{transition:transform .25s,border-color .25s,background-color .4s}
 body,.panel{transition:background-color .4s,color .4s,border-color .4s}
 @media(hover:hover){.ev:hover,.stat:hover,.wd:hover{transform:translateY(-3px);border-color:var(--lesson)}.bells li:hover{transform:translateX(4px)}}
-.foot{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;padding:6px 0 14px;color:var(--mut);font-size:.85rem}.ver{padding:1px 10px;border:1px solid var(--line);border-radius:99px}
+.foot{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;align-items:center;padding:6px 0 14px;color:var(--mut);font-size:.85rem}
+.ver{padding:1px 10px;border:1px solid var(--line);border-radius:99px}
+.foot .copy{opacity:.85;font-weight:500}
 @media(prefers-reduced-motion:reduce){main>*,.tile,.bell-fx,.ticks,body::before,.l.now .chip,.mark,.cta{animation:none!important}button{transition:none}}
 
 /* Neonzöld hatások */

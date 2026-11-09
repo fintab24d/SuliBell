@@ -114,6 +114,13 @@ async function main() {
     ).toString(),
   })
 
+  const teacherRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {
+    name: '🧑‍🏫 Tanár',
+    color: 0x3498db, // Elegáns kék
+    hoist: true,
+    mentionable: true,
+  })
+
   const studentRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {
     name: '🎓 Diák',
     color: 0x39ff7a, // Neon green
@@ -121,7 +128,7 @@ async function main() {
     mentionable: false,
   })
 
-  console.log('  ✔ Rangok kész: 👑 Lead Dev, 🛠️ Fejlesztő (Dev), 🛡️ Moderátor, 🎓 Diák')
+  console.log('  ✔ Rangok kész: 👑 Lead Dev, 🛠️ Fejlesztő (Dev), 🛡️ Moderátor, 🧑‍🏫 Tanár, 🎓 Diák')
 
   // Jogosultság-sablonok:
   // A) Csak olvasható (Információs szobák: @everyone látja, de nem írhat; Dev írhat)
