@@ -4,6 +4,7 @@ import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
 import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
+import { useArenaLeaderboard } from './Arena'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
 import { useAdminBroadcaster } from './lib/useSchool'
@@ -90,6 +91,8 @@ function Panel() {
   const [vids, setVids] = useState<any[] | null>(null)   // null: az update12.sql még nem futott le
   const [dbWishes, setDbWishes] = useState<SongWish[]>([])
   const { songs: jbSongs, mode: todayMode, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
+  const { board: arenaBoard, removeLeaderEntry, clearLeaderboard } = useArenaLeaderboard(d?.id, todayStr)
+  const [previewWishId, setPreviewWishId] = useState<string | null>(null)
   const { maint, updateMaint } = useMaintenance(d?.id, d?.announcements)
   const { notifyAllClients } = useAdminBroadcaster()
   const [pl, setPl] = useState({ q: '', opts: ['', '', '', ''] })
@@ -725,18 +728,11 @@ function Panel() {
               Szüneti videók / zenék lejátszása a szünetekben (naponta váltakozva: egyik nap videó, másik nap zene)
             </label>
           </div>
-          <div className="row">
-            <label>
-              <input
-                type="checkbox"
-                checked={!d.settings.preview_disabled}
-                onChange={e => setS({ preview_disabled: !e.target.checked })}
-              />{' '}
-              Zene- és videó-előnézet engedélyezése az oldalon (belehallgatás / megnézés)
-            </label>
-          </div>
+          <p style={{ color: 'var(--mut)', fontSize: '0.9rem' }}>
+            🔒 <b>Előnézet védelem</b>: A főoldalon a diákok számára az előnézet le van tiltva. A beküldött számokba és videókba kizárólag az admin tud belehallgatni és megnézni az alábbi listában az ellenőrzéshez.
+          </p>
           <p>
-            A videókat és zenéket a diákok küldik be és szavazzák meg a főoldalon. Ha valaki iskolába nem illő videót vagy zenét küldött be, itt egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
+            A videókat és zenéket a diákok küldik be és szavazzák meg a főoldalon (minimum 5 szavazat kell a lejátszáshoz). Ha valaki iskolába nem illő videót vagy zenét küldött be, itt előnézetben ellenőrizheted és egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
           </p>
 
           {mergedWishes.length === 0 && (!vids || vids.length === 0) ? (
@@ -745,30 +741,67 @@ function Panel() {
             <>
               {mergedWishes.map(w => {
                 const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : w.mp4Url
+                const isPreviewing = previewWishId === w.id
                 return (
-                  <div className="row" key={w.id} style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
-                    <div>
-                      <b>{w.kind === 'video' ? '🎬 Videó:' : '🎵 Zene:'} {w.title}</b>
-                      {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
-                      {' '}• <span>🔥 {w.votes} szavazat</span>
-                      {' '}• <small>{w.day}</small>
-                      {mediaLink && (
-                        <>
-                          {' '}• <a href={mediaLink} target="_blank" rel="noopener noreferrer">🔗 Link megnyitása</a>
-                        </>
-                      )}
+                  <div key={w.id} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8, marginBottom: 8 }}>
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <b>{w.kind === 'video' ? '🎬 Videó:' : '🎵 Zene:'} {w.title}</b>
+                        {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
+                        {' '}• <span>🔥 {w.votes} szavazat</span>
+                        {' '}• <small>{w.day}</small>
+                        {mediaLink && (
+                          <>
+                            {' '}• <a href={mediaLink} target="_blank" rel="noopener noreferrer">🔗 Link megnyitása</a>
+                          </>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {(w.ytId || w.mp4Url) && (
+                          <button
+                            type="button"
+                            className={isPreviewing ? 'on' : ''}
+                            onClick={() => setPreviewWishId(isPreviewing ? null : w.id)}
+                          >
+                            {isPreviewing ? '⏹ Előnézet bezárása' : w.kind === 'video' ? '▶ Videó előnézet' : '🎧 Zene belehallgatás'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await removeSong(w.id, w.day)
+                            setDbWishes(prev => prev.filter(x => x.id !== w.id))
+                            if (previewWishId === w.id) setPreviewWishId(null)
+                            setMsg(`Törölve: ${w.title}`)
+                            notifyAllClients()
+                          }}
+                        >
+                          🗑️ Törlés
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await removeSong(w.id, w.day)
-                        setDbWishes(prev => prev.filter(x => x.id !== w.id))
-                        setMsg(`Törölve: ${w.title}`)
-                        notifyAllClients()
-                      }}
-                    >
-                      🗑️ Törlés
-                    </button>
+                    {isPreviewing && (
+                      <div style={{ marginTop: 8, padding: 10, background: 'var(--card)', borderRadius: 10, border: '1px solid var(--line)', maxWidth: 500 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <b>{w.kind === 'video' ? '🎬 Admin Videó előnézet:' : '🎵 Admin Zene előnézet:'} {w.title}</b>
+                          <button type="button" onClick={() => setPreviewWishId(null)}>✕ Bezárás</button>
+                        </div>
+                        {w.ytId ? (
+                          <iframe
+                            width="100%"
+                            height="240"
+                            src={`https://www.youtube-nocookie.com/embed/${w.ytId}?autoplay=1&controls=1&rel=0`}
+                            title={w.title}
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            sandbox="allow-scripts allow-same-origin allow-presentation"
+                            referrerPolicy="strict-origin-when-cross-origin"
+                            style={{ borderRadius: 8, border: 0 }}
+                          />
+                        ) : w.mp4Url ? (
+                          <video src={w.mp4Url} controls autoPlay style={{ width: '100%', maxHeight: 240, borderRadius: 8 }} />
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -793,6 +826,64 @@ function Panel() {
         </section>
       )
     })()}
+
+    {(can('videos') || can('settings')) && (
+      <section>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>⚡ Szüneti Aréna & Toplista moderálása</h2>
+          {arenaBoard.length > 0 && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm('Biztosan törlöd a teljes mai napi toplistát? Ez azonnal eltávolítja az összes nevet és pontszámot a folyosói TV-ről és a főoldalról is.')) return
+                await clearLeaderboard()
+                setMsg('A mai napi toplista sikeresen kiürítve.')
+              }}
+            >
+              ↺ Teljes napi toplista ürítése
+            </button>
+          )}
+        </div>
+        <p>
+          A diákok által elért Reflex- és Kvíz-eredmények napi ranglistája. Ha valaki iskolába nem illő névvel, csalással vagy trágár kifejezéssel került fel, itt egy kattintással kitörölheted a nevét és pontszámát a ranglistáról (azonnal eltűnik a folyosói TV-ről és minden diák kijelzőjéről).
+        </p>
+
+        {arenaBoard.length === 0 ? (
+          <p><i>Jelenleg nincs bejegyzés a mai toplistán.</i></p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {arenaBoard.map((entry, idx) => (
+              <div
+                className="row"
+                key={`${entry.playerId}-${entry.mode}-${idx}`}
+                style={{
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid var(--line)',
+                  paddingBottom: 6,
+                }}
+              >
+                <div>
+                  <b>#{idx + 1} {entry.mode === 'quiz' ? '🧠 Kvíz' : '⚡ Reflex'}: {entry.name}</b>
+                  {' '}• <span className="pts" style={{ fontWeight: 600 }}>{entry.score} pont</span>
+                  {' '}• <small>{new Date(entry.at).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</small>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm(`Biztosan törlöd "${entry.name}" (${entry.score} pont, ${entry.mode === 'quiz' ? 'Kvíz' : 'Reflex'}) eredményét a toplistáról?`)) return
+                    await removeLeaderEntry(entry.playerId, entry.mode, entry.name)
+                    setMsg(`Törölve a toplistáról: ${entry.name}`)
+                  }}
+                >
+                  🗑️ Név törlése a toplistáról
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    )}
 
     {can('polls') && <section><h2>Szavazás (a TV-n eredmény és QR-kód, telefonról szavaznak)</h2>
       {polls === null && <p>A szavazás még nincs bekapcsolva: futtasd le a <code>supabase/update11.sql</code> fájlt.</p>}

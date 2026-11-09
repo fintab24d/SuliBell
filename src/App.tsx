@@ -259,7 +259,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     z?.date ?? '',
     !!data?.settings.sound_enabled && audioOn
   )
-  const { songs: jbWishes } = useJukebox(data?.id, z?.date ?? '', false)
+  const { songs: jbWishes, removeSong } = useJukebox(data?.id, z?.date ?? '', false)
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
   const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
@@ -461,9 +461,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   )
 
   const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: sb.breakMediaKind, title: sb.breakMediaKind === 'music' ? 'Cartoon – On & On (Szüneti Zene Mix)' : 'Teszt szüneti videó (4K természetfilm)', by: 'Admin Tesztlabor', ytId: sb.breakMediaKind === 'music' ? 'K4DyBUG242c' : 'LXb3EKWsInQ', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
-  const hasPlayableWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
-  const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasPlayableWish || videos.length > 0) && (
-    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} />
+  const hasAnyWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
+  const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
+  const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasAnyWish || videos.length > 0) && (
+    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={removeSong} />
   )
   const e0 = events[0]
   const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}
@@ -543,7 +544,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <div className="tv-subgrid">
                     {!vid && lunchBox}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
-                    <Arena schoolId={data.id} day={z.date} phase={s.phase} tv />
+                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} tv />
                     <Jukebox schoolId={data.id} day={z.date} tv />
                   </div>
                 </>
@@ -555,7 +556,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <div className="tv-subgrid">
                     {offCard}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
-                    <Arena schoolId={data.id} day={z.date} phase={s.phase} tv />
+                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} tv />
                     <Jukebox schoolId={data.id} day={z.date} tv />
                   </div>
                 </>
@@ -731,9 +732,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <div className="dash-col col-side">
             <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
 
-            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} previewDisabled={!!data.settings.preview_disabled} />
+            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} />
 
-            <Arena schoolId={data.id} day={z.date} phase={s.phase} sound={!!data.settings.sound_enabled && audioOn} />
+            <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} sound={!!data.settings.sound_enabled && audioOn} />
 
             {pollCard}
             {partnersBox}

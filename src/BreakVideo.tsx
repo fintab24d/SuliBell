@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { supabase } from './lib/supabase'
 import { pickVideos, type Vid } from './lib/video'
-import { mediaModeForDay, type SongWish } from './Jukebox'
+import { mediaModeForDay, MIN_VOTES_TO_PLAY, type SongWish } from './Jukebox'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
 
 /** Az iskola régi szünet-videói (ha még van a break_videos táblában); 5 percenként frissül. */
@@ -46,6 +46,7 @@ export function MusicVisualizer({
   initialMuted = false,
   compact = false,
   onClose,
+  onFinished,
 }: {
   title: string
   by?: string
@@ -55,6 +56,7 @@ export function MusicVisualizer({
   initialMuted?: boolean
   compact?: boolean
   onClose?: () => void
+  onFinished?: () => void
 }) {
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(initialMuted)
@@ -96,9 +98,14 @@ export function MusicVisualizer({
     setTimeout(forceUnmuteAndPlay, 1600)
   }, [muted, forceUnmuteAndPlay])
 
-  // Lejátszási idő követése (a YouTube "infoDelivery" üzeneteiből), a feliratok időzítéséhez
+  // Lejátszási idő követése és befejezés (YouTube "infoDelivery" / "onStateChange" események)
   const [time, setTime] = useState(0)
   const lyrics = useLyrics(title)
+  const finishedFiredRef = useRef(false)
+  useEffect(() => {
+    finishedFiredRef.current = false
+  }, [ytId, mp4Url])
+
   useEffect(() => {
     if (!ytId) return
     const onMsg = (ev: MessageEvent) => {
@@ -108,11 +115,17 @@ export function MusicVisualizer({
         const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
         const t = d?.info?.currentTime
         if (typeof t === 'number') setTime(t)
+
+        const state = d?.info?.playerState ?? (d?.event === 'onStateChange' ? d?.info : undefined)
+        if (state === 0 && !finishedFiredRef.current) {
+          finishedFiredRef.current = true
+          onFinished?.()
+        }
       } catch { /* nem JSON */ }
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
-  }, [ytId])
+  }, [ytId, onFinished])
   const lyricIdx = currentLyricIndex(lyrics, time)
   const lyricNow = lyricIdx >= 0 ? lyrics[lyricIdx].text : ''
   const lyricNext = lyrics[lyricIdx + 1]?.text ?? ''
@@ -199,7 +212,7 @@ export function MusicVisualizer({
 
   const origin = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
   const ytSrc = ytId
-    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&rel=0&playsinline=1&loop=1&playlist=${ytId}&enablejsapi=1&origin=${origin}`
+    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&rel=0&playsinline=1&enablejsapi=1&origin=${origin}`
     : undefined
 
   const thumbUrl = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : undefined
@@ -228,9 +241,14 @@ export function MusicVisualizer({
             src={mp4Url}
             autoPlay
             muted={muted}
-            loop
             playsInline
             onTimeUpdate={e => setTime(e.currentTarget.currentTime)}
+            onEnded={() => {
+              if (!finishedFiredRef.current) {
+                finishedFiredRef.current = true
+                onFinished?.()
+              }
+            }}
           />
         )}
       </div>
@@ -340,6 +358,83 @@ export function MusicVisualizer({
   )
 }
 
+function BreakVideoPlayer({
+  chosen,
+  onFinished,
+}: {
+  chosen: SongWish
+  onFinished?: (songId: string) => void
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const finishedRef = useRef(false)
+
+  useEffect(() => {
+    finishedRef.current = false
+  }, [chosen.id])
+
+  useEffect(() => {
+    if (!chosen.ytId) return
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.source !== iframeRef.current?.contentWindow) return
+      if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(String(ev.origin))) return
+      try {
+        const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+        const state = d?.info?.playerState ?? (d?.event === 'onStateChange' ? d?.info : undefined)
+        if (state === 0 && !finishedRef.current) {
+          finishedRef.current = true
+          onFinished?.(chosen.id)
+        }
+      } catch { /* ignore */ }
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [chosen.id, chosen.ytId, onFinished])
+
+  const handleLoad = () => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+      '*'
+    )
+  }
+
+  const origin = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
+  const ytSrc = chosen.ytId
+    ? `https://www.youtube.com/embed/${chosen.ytId}?autoplay=1&mute=1&controls=1&rel=0&playsinline=1&enablejsapi=1&origin=${origin}`
+    : undefined
+
+  return (
+    <div className="vframe">
+      {ytSrc ? (
+        <iframe
+          ref={iframeRef}
+          key={ytSrc}
+          src={ytSrc}
+          title={chosen.title}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          loading="lazy"
+          onLoad={handleLoad}
+        />
+      ) : (
+        <video
+          key={chosen.mp4Url}
+          src={chosen.mp4Url}
+          autoPlay
+          muted
+          controls
+          playsInline
+          onEnded={() => {
+            if (!finishedRef.current) {
+              finishedRef.current = true
+              onFinished?.(chosen.id)
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 /**
  * Szünetben lejátszott videó vagy zene:
  * - Videó-napon a diákok által beküldött és megszavazott szüneti videók mennek.
@@ -352,6 +447,7 @@ export default function BreakVideo({
   breakKey,
   soundOn: _soundOn,
   userMuted = false,
+  onFinished,
 }: {
   list: Vid[]
   wishes?: SongWish[]
@@ -359,11 +455,12 @@ export default function BreakVideo({
   breakKey: string
   soundOn?: boolean
   userMuted?: boolean
+  onFinished?: (songId: string) => void
 }) {
   const mode = mediaModeForDay(day)
 
-  // Lejátszható diák-kívánságok (szavazatszám szerint rendezve)
-  const playableWishes = wishes.filter(w => w.ytId || w.mp4Url)
+  // Lejátszható diák-kívánságok: csak akkor játszható le, ha legalább MIN_VOTES_TO_PLAY (5) szavazat érkezett rá!
+  const playableWishes = wishes.filter(w => (w.ytId || w.mp4Url) && w.votes >= MIN_VOTES_TO_PLAY)
 
   if (playableWishes.length > 0) {
     const topVotes = playableWishes[0].votes
@@ -374,7 +471,7 @@ export default function BreakVideo({
 
     const isChosenMusic = chosen.kind === 'music' || (chosen.kind !== 'video' && mode === 'music')
 
-    // Ha Zene-nap van (vagy zene kívánság), NE videót mutassunk, hanem a háttérlejátszót + Visualizert!
+    // Ha Zene-nap van (vagy zene kívánság), a háttérlejátszót + Visualizert indítjuk el
     if (isChosenMusic) {
       return (
         <section className="panel full vid music-panel">
@@ -385,16 +482,13 @@ export default function BreakVideo({
             ytId={chosen.ytId}
             mp4Url={chosen.mp4Url}
             initialMuted={userMuted}
+            onFinished={() => onFinished?.(chosen.id)}
           />
         </section>
       )
     }
 
-    // Videó-napon a videók mindig némítva indulnak
-    const ytSrc = chosen.ytId
-      ? `https://www.youtube.com/embed/${chosen.ytId}?autoplay=1&mute=1&controls=1&rel=0&playsinline=1&loop=1&playlist=${chosen.ytId}`
-      : undefined
-
+    // Videó-napon némítva indul a videó, és lejátszás után törlődik
     return (
       <section className="panel full vid">
         <div className="tag" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -404,59 +498,74 @@ export default function BreakVideo({
           </span>
           <span className="pill">🔥 {chosen.votes} szavazat</span>
         </div>
+        <BreakVideoPlayer chosen={chosen} onFinished={onFinished} />
+      </section>
+    )
+  }
+
+  // Tartalék 1: ha még nincs 5 szavazatot elért kívánság, de van admin által feltöltött break_videos elem
+  const p = pickVideos(list, breakKey)
+  if (p) {
+    if (mode === 'music') {
+      const ytMatch = p.yt?.match(/\/embed\/([^?&/]+)/)
+      return (
+        <section className="panel full vid music-panel">
+          <MusicVisualizer
+            title={p.title || 'Szüneti zene'}
+            ytId={ytMatch?.[1]}
+            mp4Url={p.src}
+            initialMuted={userMuted}
+          />
+        </section>
+      )
+    }
+    return (
+      <section className="panel full vid">
+        <div className="tag">
+          🎬 Szüneti Videó{p.title ? `: ${p.title}` : ''}
+        </div>
         <div className="vframe">
-          {ytSrc ? (
+          {p.yt ? (
             <iframe
-              key={ytSrc}
-              src={ytSrc}
-              title={chosen.title}
+              key={p.yt}
+              src={p.yt}
+              title={p.title || 'Szünet-videó'}
               allow="autoplay; encrypted-media; picture-in-picture"
               referrerPolicy="strict-origin-when-cross-origin"
               loading="lazy"
             />
           ) : (
-            <video key={chosen.mp4Url} src={chosen.mp4Url} autoPlay muted controls loop playsInline />
+            <video key={p.src} src={p.src} autoPlay muted loop playsInline />
           )}
         </div>
       </section>
     )
   }
 
-  // Tartalék: ha még nincs lejátszható diák-beküldés, de van régi break_videos elem
-  const p = pickVideos(list, breakKey)
-  if (!p) return null
-  if (mode === 'music') {
-    const ytMatch = p.yt?.match(/\/embed\/([^?&/]+)/)
+  // Tartalék 2: diákok küldtek be kívánságot, de még egyik sem érte el az 5 szavazatot
+  if (wishes.length > 0) {
+    const topWish = [...wishes].sort((a, b) => b.votes - a.votes)[0]
     return (
       <section className="panel full vid music-panel">
-        <MusicVisualizer
-          title={p.title || 'Szüneti zene'}
-          ytId={ytMatch?.[1]}
-          mp4Url={p.src}
-          initialMuted={userMuted}
-        />
+        <div className="tag">
+          {mode === 'video' ? '🎬 Szüneti Videó — Várakozás szavazatokra' : '🎵 Szüneti Zene — Várakozás szavazatokra'}
+        </div>
+        <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', marginBottom: 8 }}>⏳</div>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>
+            Még egyetlen {mode === 'video' ? 'videó' : 'zene'} sem érte el az 5 szavazatot!
+          </h3>
+          <p className="meta" style={{ margin: 0, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
+            A szüneti lejátszáshoz legalább <b>{MIN_VOTES_TO_PLAY} szavazat</b> szükséges.
+            {topWish ? (
+              <> Jelenleg a legnépszerűbb: <b>{topWish.title}</b> ({topWish.votes}/{MIN_VOTES_TO_PLAY} szavazat).</>
+            ) : null}
+            {' '}Szavazzatok a Zenegépben a kedvencetekre!
+          </p>
+        </div>
       </section>
     )
   }
-  return (
-    <section className="panel full vid">
-      <div className="tag">
-        🎬 Szüneti Videó{p.title ? `: ${p.title}` : ''}
-      </div>
-      <div className="vframe">
-        {p.yt ? (
-          <iframe
-            key={p.yt}
-            src={p.yt}
-            title={p.title || 'Szünet-videó'}
-            allow="autoplay; encrypted-media; picture-in-picture"
-            referrerPolicy="strict-origin-when-cross-origin"
-            loading="lazy"
-          />
-        ) : (
-          <video key={p.src} src={p.src} autoPlay muted loop playsInline />
-        )}
-      </div>
-    </section>
-  )
+
+  return null
 }

@@ -3,7 +3,6 @@ import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { parseVideo } from './lib/video'
 import { voterId } from './Poll'
-import { MusicVisualizer } from './BreakVideo'
 import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
 import { validateMediaSubmission } from './lib/moderation'
 
@@ -52,6 +51,29 @@ const STORAGE_PREFIX = 'csengeto-jukebox-'
 const VOTED_PREFIX = 'csengeto-jukebox-voted-'
 const DELETED_PREFIX = 'csengeto-jukebox-del-'
 
+/** A szüneti lejátszáshoz szükséges minimális szavazatszám */
+export const MIN_VOTES_TO_PLAY = 5
+
+/**
+ * Napváltáskor eltávolítja az összes korábbi napról megmaradt helyi kívánságot,
+ * szavazatot és törölt elemet, így az új nap mindig tiszta lappal indul.
+ */
+export function pruneOldJukeboxDays(currentDay: string) {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (!k) continue
+      if (
+        (k.startsWith(STORAGE_PREFIX) && k !== STORAGE_PREFIX + currentDay) ||
+        (k.startsWith(VOTED_PREFIX) && k !== VOTED_PREFIX + currentDay) ||
+        (k.startsWith(DELETED_PREFIX) && k !== DELETED_PREFIX + currentDay)
+      ) {
+        localStorage.removeItem(k)
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 function loadDeletedSet(day: string): Set<string> {
   try {
     const arr = JSON.parse(localStorage.getItem(DELETED_PREFIX + day) ?? '[]')
@@ -69,11 +91,12 @@ function saveDeletedSet(day: string, set: Set<string>) {
 
 export function loadLocalSongs(day: string): SongWish[] {
   try {
+    pruneOldJukeboxDays(day)
     const del = loadDeletedSet(day)
     const raw: SongWish[] = JSON.parse(localStorage.getItem(STORAGE_PREFIX + day) ?? '[]') || []
     const fallbackKind = mediaModeForDay(day)
     return raw
-      .filter(s => s && s.id && !del.has(s.id))
+      .filter(s => s && s.id && (s.day === day || !s.day) && !del.has(s.id))
       .map(s => ({
         ...s,
         day: s.day || day,
@@ -164,6 +187,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   songsRef.current = songs
 
   useEffect(() => {
+    pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
     setVoted(loadVotedSet(day))
   }, [day])
@@ -219,8 +243,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         let next = prev.filter(s => !del.has(s.id))
         for (const ds of res.songs) {
           if (del.has(ds.id)) continue
-          // A mai vagy az elmúlt 36 órában Discordra beküldött zenéket megjelenítjük
-          if (ds.day !== day && Date.now() - ds.at > 36 * 3600_000) continue
+          // Napváltáskor a korábbi napokról beküldött elemek törlődnek/nem jelennek meg a mai napon!
+          if (ds.day !== day) continue
           next = mergeSong(next, {
             id: ds.id,
             day,
@@ -381,6 +405,11 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     }
 
     const existing = songs.find(x => x.title.trim().toLowerCase() === cleanTitle.toLowerCase())
+    if (existing && voted.has(existing.id)) {
+      // Erre a számra már szavazott a felhasználó, többször nem szavazhat rá!
+      return false
+    }
+
     const created: SongWish = existing
       ? {
           ...existing,
@@ -523,13 +552,11 @@ export default function Jukebox({
   day,
   tv,
   sound,
-  previewDisabled = false,
 }: {
   schoolId?: string
   day: string
   tv?: boolean
   sound?: boolean
-  previewDisabled?: boolean
 }) {
   const { songs, voted, mode, addSong, voteSong } = useJukebox(schoolId, day, sound)
   const isVideoDay = mode === 'video'
@@ -541,7 +568,6 @@ export default function Jukebox({
   const [pickedYtId, setPickedYtId] = useState<string | undefined>(undefined)
   const [err, setErr] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [playingId, setPlayingId] = useState<string | null>(null)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -577,7 +603,7 @@ export default function Jukebox({
 
     const ok = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
     if (!ok) {
-      setErr('A videó vagy zene nem menthető el.')
+      setErr('Erre a számra vagy videóra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
       return
     }
     setTitle('')
@@ -603,7 +629,9 @@ export default function Jukebox({
                 <b>{s.title}</b>
                 {s.by && <small>küldi: {s.by}</small>}
               </div>
-              <span className="jb-votes">🔥 {s.votes}</span>
+              <span className="jb-votes">
+                {s.votes >= MIN_VOTES_TO_PLAY ? `🔥 ${s.votes} (✅ Kész)` : `⏳ ${s.votes}/${MIN_VOTES_TO_PLAY}`}
+              </span>
             </li>
           ))}
         </ol>
@@ -711,7 +739,7 @@ export default function Jukebox({
             </div>
             {err && <small style={{ color: 'var(--warn)', fontWeight: 600 }}>{err}</small>}
             <small style={{ color: 'var(--mut)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-              🛡️ Iskolabarát szűrő: A név megadása kötelező (névtelenül nem küldhető be). A káromkodást és nem megfelelő tartalmat a rendszer automatikusan elutasítja.
+              🛡️ Szabályok: A név megadása kötelező (névtelenül nem küldhető be). A szüneti lejátszáshoz legalább {MIN_VOTES_TO_PLAY} szavazat szükséges. Egy ember csak egyszer szavazhat egy számra. Lejátszás után automatikusan törlődik a listából, napváltáskor pedig az összes megmaradt kívánság törlődik.
             </small>
           </div>
         </form>
@@ -729,7 +757,6 @@ export default function Jukebox({
         <ol className="jb-list">
           {songs.slice(0, 8).map((s, i) => {
             const isVoted = voted.has(s.id)
-            const isPlaying = playingId === s.id
             const ytSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(s.title)}`
             return (
               <li key={s.id} className={`jb-item ${i === 0 ? 'lead' : ''}`}>
@@ -747,29 +774,28 @@ export default function Jukebox({
                     <b>{s.title}</b>
                     <div className="jb-sub">
                       {s.by && <small>Küldi: {s.by}</small>}
-                      {!previewDisabled && (s.ytId || s.mp4Url) ? (
-                        <button
-                          type="button"
-                          className="jb-link"
-                          onClick={() => setPlayingId(isPlaying ? null : s.id)}
-                        >
-                          {isPlaying
-                            ? '⏹ Leállítás'
-                            : (!isVideoDay || s.kind === 'music')
-                              ? '🎧 Belehallgatás'
-                              : '▶ Előnézet'}
-                        </button>
-                      ) : (
-                        <a
-                          href={ytSearchUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="jb-link"
-                          title="Keresés a YouTube-on"
-                        >
-                          🔍 YouTube
-                        </a>
-                      )}
+                      <span
+                        className="pill"
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '1px 6px',
+                          background: s.votes >= MIN_VOTES_TO_PLAY ? 'rgba(34,197,94,0.18)' : 'rgba(234,179,8,0.18)',
+                          color: s.votes >= MIN_VOTES_TO_PLAY ? '#4ade80' : '#facc15',
+                          border: `1px solid ${s.votes >= MIN_VOTES_TO_PLAY ? 'rgba(34,197,94,0.35)' : 'rgba(234,179,8,0.35)'}`,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {s.votes >= MIN_VOTES_TO_PLAY ? '✅ Lejátszásra kész' : `⏳ ${s.votes}/${MIN_VOTES_TO_PLAY} szavazat`}
+                      </span>
+                      <a
+                        href={ytSearchUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="jb-link"
+                        title="Keresés a YouTube-on"
+                      >
+                        🔍 YouTube
+                      </a>
                     </div>
                   </div>
                   <button
@@ -783,35 +809,6 @@ export default function Jukebox({
                     <b>{s.votes}</b>
                   </button>
                 </div>
-
-                {isPlaying && !previewDisabled && (s.ytId || s.mp4Url) && (!isVideoDay || s.kind === 'music') && (
-                  <MusicVisualizer
-                    compact
-                    title={s.title}
-                    by={s.by}
-                    votes={s.votes}
-                    ytId={s.ytId}
-                    mp4Url={s.mp4Url}
-                    initialMuted={false}
-                    onClose={() => setPlayingId(null)}
-                  />
-                )}
-                {isPlaying && !previewDisabled && isVideoDay && s.kind !== 'music' && s.ytId && (
-                  <div className="jb-player">
-                    <iframe
-                      src={`https://www.youtube-nocookie.com/embed/${s.ytId}?autoplay=1&mute=1&rel=0`}
-                      title={s.title}
-                      allow="autoplay; encrypted-media; picture-in-picture"
-                      sandbox="allow-scripts allow-same-origin allow-presentation"
-                      referrerPolicy="strict-origin-when-cross-origin"
-                    />
-                  </div>
-                )}
-                {isPlaying && !previewDisabled && isVideoDay && s.kind !== 'music' && !s.ytId && s.mp4Url && (
-                  <div className="jb-player">
-                    <video src={s.mp4Url} controls autoPlay muted playsInline style={{ width: '100%', height: '100%' }} />
-                  </div>
-                )}
               </li>
             )
           })}

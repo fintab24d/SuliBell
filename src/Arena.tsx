@@ -261,19 +261,58 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
         saveLocalLb(day, next)
         return next
       })
-    }).subscribe()
+    })
+    ch.on('broadcast', { event: 'delete_score' }, (msg: any) => {
+      const { playerId, name, mode } = msg?.payload || {}
+      if (!alive) return
+      setBoard(prev => {
+        const next = prev.filter(x => {
+          if (playerId && x.playerId === playerId && (!mode || x.mode === mode)) return false
+          if (name && x.name.toLowerCase() === name.toLowerCase() && (!mode || x.mode === mode)) return false
+          return true
+        })
+        saveLocalLb(day, next)
+        return next
+      })
+    })
+    ch.on('broadcast', { event: 'clear_scores' }, () => {
+      if (!alive) return
+      setBoard([])
+      saveLocalLb(day, [])
+    })
+    ch.subscribe()
     chanRef.current = ch
 
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel(`sulibell-arena-${schoolId}`)
       bc.onmessage = ev => {
-        if (!alive || !ev.data?.entry) return
-        setBoard(prev => {
-          const next = mergeLeaderboard(prev, ev.data.entry)
-          saveLocalLb(day, next)
-          return next
-        })
+        if (!alive || !ev.data) return
+        if (ev.data.type === 'delete_score') {
+          const { playerId, name, mode } = ev.data
+          setBoard(prev => {
+            const next = prev.filter(x => {
+              if (playerId && x.playerId === playerId && (!mode || x.mode === mode)) return false
+              if (name && x.name.toLowerCase() === name.toLowerCase() && (!mode || x.mode === mode)) return false
+              return true
+            })
+            saveLocalLb(day, next)
+            return next
+          })
+          return
+        }
+        if (ev.data.type === 'clear_scores') {
+          setBoard([])
+          saveLocalLb(day, [])
+          return
+        }
+        if (ev.data.entry) {
+          setBoard(prev => {
+            const next = mergeLeaderboard(prev, ev.data.entry)
+            saveLocalLb(day, next)
+            return next
+          })
+        }
       }
       bcRef.current = bc
     } catch { /* ignore */ }
@@ -329,7 +368,50 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
     }
   }, [schoolId, day])
 
-  return { board, submitScore }
+  const removeLeaderEntry = useCallback(async (playerId?: string, mode?: string, name?: string) => {
+    setBoard(prev => {
+      const next = prev.filter(x => {
+        if (playerId && x.playerId === playerId && (!mode || x.mode === mode)) return false
+        if (name && x.name.toLowerCase() === name.toLowerCase() && (!mode || x.mode === mode)) return false
+        return true
+      })
+      saveLocalLb(day, next)
+      return next
+    })
+
+    chanRef.current?.send({
+      type: 'broadcast',
+      event: 'delete_score',
+      payload: { playerId, name, mode },
+    }).catch?.(() => {})
+    try { bcRef.current?.postMessage({ type: 'delete_score', playerId, name, mode }) } catch { /* ignore */ }
+
+    if (schoolId) {
+      let q = supabase.from('arena_scores').delete().eq('school_id', schoolId).eq('day', day)
+      if (playerId) q = q.eq('player_id', playerId)
+      if (mode) q = q.eq('mode', mode)
+      if (name && !playerId) q = q.eq('player_name', name)
+      await q.then(() => {})
+    }
+  }, [schoolId, day])
+
+  const clearLeaderboard = useCallback(async () => {
+    setBoard([])
+    saveLocalLb(day, [])
+
+    chanRef.current?.send({
+      type: 'broadcast',
+      event: 'clear_scores',
+      payload: {},
+    }).catch?.(() => {})
+    try { bcRef.current?.postMessage({ type: 'clear_scores' }) } catch { /* ignore */ }
+
+    if (schoolId) {
+      await supabase.from('arena_scores').delete().eq('school_id', schoolId).eq('day', day).then(() => {})
+    }
+  }, [schoolId, day])
+
+  return { board, submitScore, removeLeaderEntry, clearLeaderboard }
 }
 
 interface CellTarget {
@@ -338,16 +420,35 @@ interface CellTarget {
   born: number
 }
 
+const PLAYED_PREFIX = 'csengeto-arena-played-'
+
+function loadPlayedBreaks(day: string): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PLAYED_PREFIX + day) ?? '[]') || []
+    return new Set(Array.isArray(raw) ? raw : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function savePlayedBreaks(day: string, set: Set<string>) {
+  try {
+    localStorage.setItem(PLAYED_PREFIX + day, JSON.stringify(Array.from(set)))
+  } catch { /* ignore */ }
+}
+
 export default function Arena({
   schoolId,
   day,
   phase,
+  breakKey,
   tv,
   sound,
 }: {
   schoolId?: string
   day: string
   phase: string
+  breakKey?: string
   tv?: boolean
   sound?: boolean
 }) {
@@ -364,6 +465,26 @@ export default function Arena({
   const [nameError, setNameError] = useState('')
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [openDuringLesson, setOpenDuringLesson] = useState(false)
+
+  const [playedBreaks, setPlayedBreaks] = useState<Set<string>>(() => loadPlayedBreaks(day))
+
+  useEffect(() => {
+    setPlayedBreaks(loadPlayedBreaks(day))
+  }, [day])
+
+  const isBreak = phase === 'break'
+  const currentBreakId = isBreak && breakKey ? breakKey : ''
+  const hasPlayedThisBreak = !!currentBreakId && playedBreaks.has(currentBreakId)
+
+  const markBreakPlayed = useCallback(() => {
+    if (!currentBreakId) return
+    setPlayedBreaks(prev => {
+      const next = new Set(prev)
+      next.add(currentBreakId)
+      savePlayedBreaks(day, next)
+      return next
+    })
+  }, [day, currentBreakId])
 
   // --- Reflex játék állapot ---
   const [rState, setRState] = useState<'idle' | 'play' | 'over'>('idle')
@@ -433,12 +554,17 @@ export default function Arena({
   }, [rState, rScore, name, submitScore])
 
   const startReflex = () => {
+    if (hasPlayedThisBreak) {
+      setNameError('Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett.')
+      return
+    }
     const val = validatePlayerName(name)
     if (!val.valid) {
       setNameError(val.error || 'A játékhoz add meg a neved vagy osztályod!')
       nameInputRef.current?.focus()
       return
     }
+    markBreakPlayed()
     setNameError('')
     rSubmitted.current = false
     setRScore(0)
@@ -494,12 +620,17 @@ export default function Arena({
   }, [qState, qScore, name, submitScore])
 
   const startQuiz = () => {
+    if (hasPlayedThisBreak) {
+      setNameError('Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett.')
+      return
+    }
     const val = validatePlayerName(name)
     if (!val.valid) {
       setNameError(val.error || 'A kvízhez add meg a neved vagy osztályod!')
       nameInputRef.current?.focus()
       return
     }
+    markBreakPlayed()
     setNameError('')
     qSubmitted.current = false
     setQScore(0)
@@ -648,8 +779,17 @@ export default function Arena({
                           🔒 Add meg a neved a játék indításához (névtelen játék nem engedélyezett)!
                         </p>
                       )}
-                      <button type="button" className="cta" onClick={startReflex}>
-                        {rState === 'over' ? '🔄 Újra próbálom' : '⚡ Játék indítása (20 mp)'}
+                      {hasPlayedThisBreak && (
+                        <p style={{ color: '#facc15', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
+                          ⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!
+                        </p>
+                      )}
+                      <button type="button" className="cta" onClick={startReflex} disabled={hasPlayedThisBreak}>
+                        {hasPlayedThisBreak
+                          ? '⏸️ Ebben a szünetben már játszottál'
+                          : rState === 'over'
+                            ? '🔄 Újra próbálom'
+                            : '⚡ Játék indítása (20 mp)'}
                       </button>
                     </div>
                   )}
@@ -687,8 +827,17 @@ export default function Arena({
                           🔒 Add meg a neved a kvíz indításához (névtelen játék nem engedélyezett)!
                         </p>
                       )}
-                      <button type="button" className="cta" onClick={startQuiz}>
-                        {qState === 'over' ? '🔄 Újra próbálom' : '🧠 Kvíz indítása (30 mp)'}
+                      {hasPlayedThisBreak && (
+                        <p style={{ color: '#facc15', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
+                          ⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!
+                        </p>
+                      )}
+                      <button type="button" className="cta" onClick={startQuiz} disabled={hasPlayedThisBreak}>
+                        {hasPlayedThisBreak
+                          ? '⏸️ Ebben a szünetben már játszottál'
+                          : qState === 'over'
+                            ? '🔄 Újra próbálom'
+                            : '🧠 Kvíz indítása (30 mp)'}
                       </button>
                     </div>
                   )}

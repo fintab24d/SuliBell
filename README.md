@@ -37,11 +37,16 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 
 ### 🎵 Szüneti Zenegép & 🎬 Videólejátszó (Jukebox)
 - **Különválasztott zene- és videóbeküldés**: Zenéket és 4K videókat külön dedikált űrlapon és Discord csatornán keresztül lehet beküldeni.
+- **🗳️ 5 szavazatos aktiválás & 1 ember 1 szavazat**:
+  - A szüneti lejátszáshoz **legalább 5 szavazat** szükséges egy zenére vagy videóra. Amíg nem éri el az 5 szavazatot, nem indul el, a felület jelzi a szavazás állását.
+  - **1 ember = 1 szavazat**: Egy diák egy számra csak egyetlen szavazatot adhat le (egyedi szavazóazonosítóval a Supabase `jukebox_votes` táblában és helyi tárhelyen védve; az újraküldés sem duplázhat szavazatot).
+- **🗑️ Lejátszás utáni automatikus törlés**: Miután egy szám vagy videó lement a szünetben, automatikusan kikerül a beküldött listából, hogy ne ismétlődjön, és helyet adjon az új kívánságoknak.
+- **🌅 Napváltáskor tiszta lap**: Éjfélkor / új tanítási nap kezdetén a rendszer automatikusan törli az összes előző napról megmaradt kívánságot, szavazatot és gyorsítótárat — minden nap tiszta listával indul.
 - **🛡️ Automatikus Moderációs & NSFW Szűrő**:
   - **Nincs névtelen beküldés**: Kötelező megadni a diák nevét vagy becenevét, anonim módon sem zene, sem videó nem küldhető be.
   - **Káromkodás- és tartalomvédelem**: Beépített magyar és angol nyelvű leetspeak- és ékezetnormalizált szűrő védi a felületet a trágár, alpári vagy kétértelmű kifejezésektől.
   - **YouTube korhatár és beágyazás-ellenőrzés**: Valós idejű YouTube oEmbed vizsgálat szűri ki a korhatáros (NSFW / 18+) tartalmakat még a közzététel előtt.
-- **Adminisztrátori Előnézet-kapcsoló (`preview_disabled`)**: Az adminok egy kattintással letilthatják a beágyazott videó- és zene-előnézeteket az oldalon, így a diákok csak a jóváhagyott listát és címeket látják.
+- **🔒 Adminisztrátori Előnézet**: A főoldalról a diákok számára az előnézet / belehallgatás teljesen el van távolítva; a beküldött számokat és 4K videókat kizárólag az admin tudja az adminisztrációs felületen előnézetben megnézni, belehallgatni és ellenőrizni.
 - **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus szüneti lejátszás.
 
 ### 💬 Élő Hangulatfal & Reakciók (Emoji-eső)
@@ -51,7 +56,9 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 ### ⚡ Szüneti Mini-Aréna & Napi Ranglista
 - **⚡ Neon Reflex**: Reakcióidő-fejlesztő pörgős játék bónuszokkal és kerülendő bombákkal.
 - **🧠 Napi Villám-Kvíz**: 60+ kérdéses tudásbázis, naponta determinisztikusan generált egyedi kérdéssor (történelem, földrajz, irodalom, reál tárgyak, logika és fejszámolás) napi iskolai toplistával.
+- **⏱️ Szünetenként 1 játék**: Egy diák egy szünetben legfeljebb 1 játékot indíthat, így mindenkinek egyenlő esélye van felkerülni a toplistára, és a játék nem vonja el a figyelmet. A következő szünetben a rendszer automatikusan újra engedélyezi a játékot.
 - **🛡️ Nincs névtelen játék**: A játékok indítása előtt kötelező megadni a diák nevét vagy osztályát (pl. Dani 10.B). Névtelen vagy káromkodást tartalmazó névvel nem lehet játszani, és a pontszámok sem kerülhetnek fel anonim módon a ranglistára.
+- **🗑️ Admin Toplista & Név Moderáció**: Az adminisztrációs felületen az adminok egy kattintással kitörölhetnek bármilyen nem odaillő nevet vagy csaló pontszámot a toplistáról (azonnal eltűnik a folyosói TV-ről és minden kijelzőről), vagy egy gombnyomással üríthetik a teljes napi toplistát.
 - Tanítási óra közben automatikusan összezárul, hogy ne vonja el a figyelmet a tanulásról.
 
 ### 🎮 Pihenő Mód & Szezonális Mini-játékok
