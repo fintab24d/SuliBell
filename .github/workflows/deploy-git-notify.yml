@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Send Discord Embed Notification
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK || 'https://discord.com/api/webhooks/1569391595110011060/91gpUcmcHbKr1rayTmFMH7Dk7udIkzxR1y2MToGk0MCoP9eJrUBn1vRrEU7MO5_m6Ek2' }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
           COMMIT_URL: ${{ github.event.head_commit.url }}
           COMMIT_SHA: ${{ github.event.head_commit.id }}

@@ -1,8 +1,13 @@
 /**
  * Moderátori és Tanári zóna beállítása a SuliBell Discord szerveren
+ * Használat: $env:DISCORD_TOKEN="bot_token"; node --experimental-strip-types scripts/setup-moderator-and-teacher.ts
  */
-const TOKEN = 'MTU2OTA5MDUyNzI5MzYxMjE0Ng.GOgkEk.Di0D2DEruDlHFsraTHUaMwHZfbXJvlMLlqZTs0'
-const GUILD_ID = '1569090182802575571'
+const TOKEN = (process.argv[2] || process.env.DISCORD_TOKEN)?.trim()
+const GUILD_ID = (process.argv[3] || process.env.GUILD_ID || '1569090182802575571')?.trim()
+if (!TOKEN) {
+  console.error('❌ Hiányzó DISCORD_TOKEN környezeti változó!')
+  process.exit(1)
+}
 const API = 'https://discord.com/api/v10'
 
 const Perm = {

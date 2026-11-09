@@ -13,10 +13,9 @@ const reply = (b: unknown, status = 200) =>
 
 const API = 'https://discord.com/api/v10'
 const DEFAULT_GUILD = '1569090182802575571'
-const DEFAULT_TOKEN = 'MTU2OTA5MDUyNzI5MzYxMjE0Ng.GOgkEk.Di0D2DEruDlHFsraTHUaMwHZfbXJvlMLlqZTs0'
 const SNAPSHOT_PREFIX = '__SULIBELL_MEMBERS_V1__:'
 
-const getToken = () => (Deno.env.get('DISCORD_BOT_TOKEN') || DEFAULT_TOKEN).trim()
+const getToken = () => (Deno.env.get('DISCORD_BOT_TOKEN') || '').trim()
 const getGuild = () => (Deno.env.get('DISCORD_GUILD_ID') || DEFAULT_GUILD).trim()
 
 interface ChannelMap {
