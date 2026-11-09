@@ -20,7 +20,7 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 
 ### 🕒 Élő Csengetési Számláló & Napsáv
 - **LED Neon számlap**: Színkódolt analóg-digitális ív (óra, szünet, tanítás előtt/után), finoman váltó neon számjegyekkel.
-- **10 másodperces finis**: Az utolsó 10 másodpercben pulzáló animáció és csengetési fényhullám.
+- **10 másodperces finish**: Az utolsó 10 másodpercben pulzáló animáció és csengetési fényhullám.
 - **Okos órarend-követés**: Az elmaradó órákat áthúzva jelöli, és a szünet-visszaszámláló automatikusan átugorja őket a következő tényleges óráig.
 - **Nap haladása & Csengetési lista**: Arányos grafikus idősáv és a következő csengetések pontos listája.
 
