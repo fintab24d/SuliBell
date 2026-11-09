@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { voterId } from './Poll'
+import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
 
 export interface LeaderEntry {
   playerId: string
@@ -184,11 +185,11 @@ function makeDailyQuestion(day: string, index: number): QuizQ {
 }
 
 const LB_PREFIX = 'csengeto-arena-lb-'
-const NAME_KEY = 'csengeto-arena-name'
 
 function loadLocalLb(day: string): LeaderEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(LB_PREFIX + day) ?? '[]') || []
+    const raw = JSON.parse(localStorage.getItem(LB_PREFIX + day) ?? '[]') || []
+    return Array.isArray(raw) ? raw.filter(item => item && item.name && !isAnonymousName(item.name)) : []
   } catch {
     return []
   }
@@ -196,14 +197,15 @@ function loadLocalLb(day: string): LeaderEntry[] {
 
 function saveLocalLb(day: string, list: LeaderEntry[]) {
   try {
-    localStorage.setItem(LB_PREFIX + day, JSON.stringify(list))
+    const cleanList = list.filter(item => item && item.name && !isAnonymousName(item.name))
+    localStorage.setItem(LB_PREFIX + day, JSON.stringify(cleanList))
   } catch { /* ignore */ }
 }
 
 function mergeLeaderboard(existing: LeaderEntry[], incoming: LeaderEntry): LeaderEntry[] {
   const map = new Map<string, LeaderEntry>()
   for (const item of [...existing, incoming]) {
-    if (!item || !item.name || item.score <= 0) continue
+    if (!item || !item.name || isAnonymousName(item.name) || item.score <= 0) continue
     const key = `${item.playerId || item.name}-${item.mode}`
     const prev = map.get(key)
     if (!prev || item.score > prev.score) {
@@ -287,7 +289,9 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
 
   const submitScore = useCallback((name: string, mode: 'reflex' | 'quiz', score: number) => {
     if (score <= 0) return
-    const cleanName = (name.trim() || 'Névtelen Diák').slice(0, 22)
+    const validation = validatePlayerName(name)
+    if (!validation.valid || !validation.cleanName) return
+    const cleanName = validation.cleanName
     const entry: LeaderEntry = {
       playerId: voterId(),
       name: cleanName,
@@ -350,8 +354,15 @@ export default function Arena({
   const { board, submitScore } = useArenaLeaderboard(schoolId, day)
   const [tab, setTab] = useState<'reflex' | 'quiz'>('reflex')
   const [name, setName] = useState(() => {
-    try { return localStorage.getItem(NAME_KEY) ?? '' } catch { return '' }
+    try {
+      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
+      return isAnonymousName(v) ? '' : v
+    } catch {
+      return ''
+    }
   })
+  const [nameError, setNameError] = useState('')
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [openDuringLesson, setOpenDuringLesson] = useState(false)
 
   // --- Reflex játék állapot ---
@@ -371,7 +382,11 @@ export default function Arena({
 
   const saveName = (v: string) => {
     setName(v)
-    try { localStorage.setItem(NAME_KEY, v) } catch { /* ignore */ }
+    if (nameError) {
+      const val = validatePlayerName(v)
+      if (val.valid) setNameError('')
+    }
+    try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
   }
 
   // Reflex játék időzítő és célpont-generálás
@@ -418,6 +433,13 @@ export default function Arena({
   }, [rState, rScore, name, submitScore])
 
   const startReflex = () => {
+    const val = validatePlayerName(name)
+    if (!val.valid) {
+      setNameError(val.error || 'A játékhoz add meg a neved vagy osztályod!')
+      nameInputRef.current?.focus()
+      return
+    }
+    setNameError('')
     rSubmitted.current = false
     setRScore(0)
     setRCombo(1)
@@ -472,6 +494,13 @@ export default function Arena({
   }, [qState, qScore, name, submitScore])
 
   const startQuiz = () => {
+    const val = validatePlayerName(name)
+    if (!val.valid) {
+      setNameError(val.error || 'A kvízhez add meg a neved vagy osztályod!')
+      nameInputRef.current?.focus()
+      return
+    }
+    setNameError('')
     qSubmitted.current = false
     setQScore(0)
     setQStreak(0)
@@ -566,15 +595,25 @@ export default function Arena({
                   🧠 Napi Villámkvíz (30 mp)
                 </button>
               </div>
-              <input
-                type="text"
-                className="arena-name"
-                placeholder="Becenév / osztály (pl. Dani 10.B)"
-                maxLength={20}
-                value={name}
-                onChange={e => saveName(e.target.value)}
-              />
+              <div className="arena-name-wrap">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  className={`arena-name ${nameError ? 'err' : ''}`}
+                  placeholder="Becenév / osztály (kötelező!)"
+                  maxLength={20}
+                  value={name}
+                  onChange={e => saveName(e.target.value)}
+                  aria-label="Játékosnév (kötelező)"
+                />
+              </div>
             </div>
+
+            {nameError && (
+              <div className="arena-name-warn" role="alert" style={{ color: '#ff3b5c', padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600, background: 'rgba(255, 59, 92, 0.1)', borderRadius: 8, marginBottom: 8 }}>
+                ⚠️ {nameError}
+              </div>
+            )}
 
             {tab === 'reflex' ? (
               <div className="reflex-box">
@@ -604,6 +643,11 @@ export default function Arena({
                     <div className="arena-over">
                       {rState === 'over' && <h3>🎉 Vége! Pontszámod: {rScore}</h3>}
                       <p>Kapd el a felvillanó ⚡ (+10) és ⭐ (+25) csempéket, de kerüld a 💣 bombát!</p>
+                      {!validatePlayerName(name).valid && (
+                        <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
+                          🔒 Add meg a neved a játék indításához (névtelen játék nem engedélyezett)!
+                        </p>
+                      )}
                       <button type="button" className="cta" onClick={startReflex}>
                         {rState === 'over' ? '🔄 Újra próbálom' : '⚡ Játék indítása (20 mp)'}
                       </button>
@@ -638,6 +682,11 @@ export default function Arena({
                     <div className="arena-over static">
                       {qState === 'over' && <h3>🎉 Szép munka! Pontszámod: {qScore}</h3>}
                       <p>Mindenki ugyanazt a napi feladatsort kapja! Hány kérdésre tudsz helyesen válaszolni 30 mp alatt?</p>
+                      {!validatePlayerName(name).valid && (
+                        <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
+                          🔒 Add meg a neved a kvíz indításához (névtelen játék nem engedélyezett)!
+                        </p>
+                      )}
                       <button type="button" className="cta" onClick={startQuiz}>
                         {qState === 'over' ? '🔄 Újra próbálom' : '🧠 Kvíz indítása (30 mp)'}
                       </button>

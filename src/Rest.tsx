@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as PE } from 'react'
 import { botDir, newGame, step, type G, type P } from './lib/snake'
 import { botTarget, H, newCatch, stepCatch, W, type C } from './lib/catch'
+import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
 
 const COLS = 22, ROWS = 14
 const KEYS: Record<string, P> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, w: { x: 0, y: -1 }, s: { x: 0, y: 1 }, a: { x: -1, y: 0 }, d: { x: 1, y: 0 } }
@@ -33,13 +34,37 @@ function Snake({ tv }: { tv: boolean }) {
   const [best, setBest] = useState(bestGet)
   const [diff, setDiff] = useState<SnakeDiff>(diffGet)
   const wait = useRef(0)
+  const [playerName, setPlayerName] = useState(() => {
+    try {
+      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
+      return isAnonymousName(v) ? '' : v
+    } catch { return '' }
+  })
+  const [nameErr, setNameErr] = useState('')
+
+  const savePlayerName = (v: string) => {
+    setPlayerName(v)
+    if (nameErr) {
+      const val = validatePlayerName(v)
+      if (val.valid) setNameErr('')
+    }
+    try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
+  }
 
   const changeDiff = (d: SnakeDiff) => {
     setDiff(d)
     try { localStorage.setItem('snake-diff', d) } catch { /* ignore */ }
   }
 
-  const start = () => { g.current = newGame(COLS, ROWS); q.current = []; setScore(0); setMode('play') }
+  const start = () => {
+    const val = validatePlayerName(playerName)
+    if (!val.valid) {
+      setNameErr(val.error || 'A játékhoz add meg a neved!')
+      return
+    }
+    setNameErr('')
+    g.current = newGame(COLS, ROWS); q.current = []; setScore(0); setMode('play')
+  }
 
   useEffect(() => {
     const draw = () => {
@@ -112,6 +137,7 @@ function Snake({ tv }: { tv: boolean }) {
   return <div className="snake">
     <div className="snakehud">
       <span>Snake</span>
+      {playerName && <span>Játékos: <b>{playerName}</b></span>}
       <span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{score}</b></span>
       <span>Rekord: <b>{best}</b></span>
     </div>
@@ -135,6 +161,27 @@ function Snake({ tv }: { tv: boolean }) {
       {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
       {!tv && mode !== 'play' && <div className="snakeover">
         {mode === 'over' && <b>Vége! {score} pont</b>}
+        <div style={{ margin: '8px 0' }}>
+          <input
+            type="text"
+            placeholder="Becenév / osztály (kötelező!)"
+            value={playerName}
+            onChange={e => savePlayerName(e.target.value)}
+            maxLength={20}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: nameErr ? '1px solid #ff3b5c' : '1px solid rgba(255,255,255,0.25)',
+              background: 'rgba(0,0,0,0.5)',
+              color: '#fff',
+              textAlign: 'center',
+              fontSize: '0.9rem',
+              width: '80%',
+              maxWidth: 240,
+            }}
+          />
+          {nameErr && <small style={{ color: '#ff3b5c', display: 'block', marginTop: 4 }}>⚠️ {nameErr}</small>}
+        </div>
         <button className="cta" onClick={start}>{mode === 'over' ? 'Újra' : '▶ Játssz te is'}</button>
         <small>Nyilak / WASD, vagy húzd az ujjad</small></div>}
     </div>
@@ -166,7 +213,34 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
   const [best, setBest] = useState(() => { try { return +(localStorage.getItem(bk) ?? 0) } catch { return 0 } })
   const keys = useRef({ l: false, r: false })
   const wait = useRef(0)
-  const start = () => { c.current = newCatch(); setHud({ score: 0, lives: 5 }); setMode('play') }
+  const [playerName, setPlayerName] = useState(() => {
+    try {
+      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
+      return isAnonymousName(v) ? '' : v
+    } catch { return '' }
+  })
+  const [nameErr, setNameErr] = useState('')
+
+  const savePlayerName = (v: string) => {
+    setPlayerName(v)
+    if (nameErr) {
+      const val = validatePlayerName(v)
+      if (val.valid) setNameErr('')
+    }
+    try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
+  }
+
+  const start = () => {
+    const val = validatePlayerName(playerName)
+    if (!val.valid) {
+      setNameErr(val.error || 'A játékhoz add meg a neved!')
+      return
+    }
+    setNameErr('')
+    c.current = newCatch()
+    setHud({ score: 0, lives: 5 })
+    setMode('play')
+  }
 
   useEffect(() => {
     let raf = 0, last = performance.now()
@@ -228,12 +302,39 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
   const aim = (e: PE<HTMLCanvasElement>) => { if (m.current !== 'play' || tv) return; const r = e.currentTarget.getBoundingClientRect(); c.current.tx = (e.clientX - r.left) / r.width * W }
 
   return <div className="snake">
-    <div className="snakehud"><span>{T.title}</span><span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{hud.score}</b></span><span>{'❤️'.repeat(Math.max(0, hud.lives))}</span><span>Rekord: <b>{best}</b></span></div>
+    <div className="snakehud">
+      <span>{T.title}</span>
+      {playerName && <span>Játékos: <b>{playerName}</b></span>}
+      <span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{hud.score}</b></span>
+      <span>{'❤️'.repeat(Math.max(0, hud.lives))}</span>
+      <span>Rekord: <b>{best}</b></span>
+    </div>
     <div className="snakescreen">
       <canvas ref={cv} onPointerMove={aim} onPointerDown={e => { if (m.current !== 'play' && !tv) start(); else aim(e) }} aria-label={T.title} />
       {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
       {!tv && mode !== 'play' && <div className="snakeover">
         {mode === 'over' && <b>Vége! {hud.score} pont</b>}
+        <div style={{ margin: '8px 0' }}>
+          <input
+            type="text"
+            placeholder="Becenév / osztály (kötelező!)"
+            value={playerName}
+            onChange={e => savePlayerName(e.target.value)}
+            maxLength={20}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: nameErr ? '1px solid #ff3b5c' : '1px solid rgba(255,255,255,0.25)',
+              background: 'rgba(0,0,0,0.5)',
+              color: '#fff',
+              textAlign: 'center',
+              fontSize: '0.9rem',
+              width: '80%',
+              maxWidth: 240,
+            }}
+          />
+          {nameErr && <small style={{ color: '#ff3b5c', display: 'block', marginTop: 4 }}>⚠️ {nameErr}</small>}
+        </div>
         <button className="cta" onClick={start}>{mode === 'over' ? 'Újra' : '▶ Játssz te is'}</button>
         <small>{T.hint}. Egér / ujj vagy nyilak</small></div>}
     </div>

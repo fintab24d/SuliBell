@@ -151,6 +151,81 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
   }
 }
 
+export const PLAYER_NAME_KEY = 'csengeto-arena-name'
+
+/**
+ * Ellenőrzi, hogy a megadott név névtelen / anonim változat-e.
+ */
+export function isAnonymousName(name: string): boolean {
+  if (!name || typeof name !== 'string') return true
+  const norm = name
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+
+  if (norm.length < 2) return true
+
+  const bannedVariants = [
+    'nevtelen',
+    'nevtelen diak',
+    'nevtelen jatekos',
+    'nevtelen ember',
+    'anonim',
+    'anonim diak',
+    'anonim jatekos',
+    'anonymous',
+    'senki',
+    'nobody',
+    'ismeretlen',
+    'diak',
+    'jatekos',
+    'vendeg',
+    'user',
+  ]
+
+  return bannedVariants.includes(norm)
+}
+
+/**
+ * Játékos- és beküldőnév szigorú ellenőrzése:
+ * - Nem lehet üres / névtelen
+ * - Legalább 2 karakter
+ * - Nem tartalmazhat káromkodást / tiltott szót
+ */
+export function validatePlayerName(name: string): { valid: boolean; error?: string; cleanName?: string } {
+  const clean = (name || '').trim().slice(0, 22)
+  if (!clean) {
+    return {
+      valid: false,
+      error: 'A név megadása kötelező! Névtelenül nem lehet játszani vagy beküldeni.',
+    }
+  }
+  if (clean.length < 2) {
+    return {
+      valid: false,
+      error: 'A neved legalább 2 karakter hosszú legyen (pl. Név vagy Osztály)!',
+    }
+  }
+  if (isAnonymousName(clean)) {
+    return {
+      valid: false,
+      error: 'A „Névtelen” azonosító nem engedélyezett. Kérjük, add meg a valódi neved vagy osztályodat!',
+    }
+  }
+
+  const check = checkProfanity(clean)
+  if (!check.clean) {
+    return {
+      valid: false,
+      error: 'A megadott név nem felel meg az iskolai szabályzatnak.',
+    }
+  }
+
+  return { valid: true, cleanName: clean }
+}
+
 /**
  * Teljes körű beküldés-ellenőrzés:
  * 1. Név kötelező (névtelen beküldés tiltott)
@@ -163,36 +238,16 @@ export async function validateMediaSubmission(params: {
   ytId?: string
 }): Promise<{ valid: boolean; error?: string; cleanTitle?: string; cleanBy?: string }> {
   const cleanTitle = (params.title || '').trim().slice(0, 60)
-  const cleanBy = (params.by || '').trim().slice(0, 24)
 
   // 1. Név ellenőrzése (kötelező név, névtelen tiltva)
-  if (!cleanBy) {
+  const nameVal = validatePlayerName(params.by)
+  if (!nameVal.valid || !nameVal.cleanName) {
     return {
       valid: false,
-      error: 'A név megadása kötelező! Névtelenül nem lehet zenét vagy videót beküldeni.'
+      error: nameVal.error || 'A név megadása kötelező! Névtelen beküldés nem engedélyezett.',
     }
   }
-  if (cleanBy.length < 2) {
-    return {
-      valid: false,
-      error: 'A neved legalább 2 karakter hosszú legyen (pl. Név vagy Osztály)!'
-    }
-  }
-  if (cleanBy.toLowerCase() === 'nevtelen' || cleanBy.toLowerCase() === 'névtelen' || cleanBy.toLowerCase() === 'anonim' || cleanBy.toLowerCase() === 'anonymous') {
-    return {
-      valid: false,
-      error: 'A „Névtelen” beküldés nem engedélyezett. Kérjük, add meg a valódi neved vagy az osztályodat!'
-    }
-  }
-
-  // Név káromkodás ellenőrzése
-  const byCheck = checkProfanity(cleanBy)
-  if (!byCheck.clean) {
-    return {
-      valid: false,
-      error: 'A megadott név nem felel meg az iskolai szabályzatnak.'
-    }
-  }
+  const cleanBy = nameVal.cleanName
 
   // 2. Cím ellenőrzése
   if (!cleanTitle) {

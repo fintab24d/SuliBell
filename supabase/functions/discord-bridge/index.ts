@@ -27,6 +27,7 @@ interface ChannelMap {
   announcements?: string
   updates?: string
   music?: string
+  videos?: string
   ideas?: string
   bugs?: string
   logs?: string
@@ -206,6 +207,7 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     else if (n.includes('közlemény') || n.includes('kozlemeny')) map.announcements = c.id
     else if (n.includes('frissítés') || n.includes('frissites')) map.updates = c.id
     else if (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene')) map.music = c.id
+    else if (n.includes('videó') || n.includes('video')) map.videos = c.id
     else if (n.includes('ötlet') || n.includes('otlet')) map.ideas = c.id
     else if (n.includes('hiba')) map.bugs = c.id
     else if (n.includes('napló') || n.includes('naplo')) map.logs = c.id
@@ -450,6 +452,66 @@ Deno.serve(async (req: Request) => {
           songs.push({
             id: `dc-${m.id}`,
             day: msgDay,
+            kind: 'music',
+            title: cleanTitle.slice(0, 60),
+            by: `${senderName} 💬`,
+            ytId,
+            votes: 1 + extraVotes,
+            at: createdMs,
+          })
+        }
+      }
+
+      if (chMap.videos) {
+        const msgs: any[] = await discordApi(`/channels/${chMap.videos}/messages?limit=25`).catch(() => [])
+        for (const m of msgs) {
+          if (m.author?.bot) continue
+          const rawContent = String(m.content || '').trim()
+          if (!rawContent && (!m.embeds || !m.embeds.length)) continue
+          if (rawContent.length < 2) continue
+
+          let ytId = extractYtId(rawContent)
+          let cleanTitle = rawContent.replace(/https?:\/\/\S+/g, '').replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim()
+
+          if (ytId && !cleanTitle) {
+            cleanTitle = (await fetchYtTitle(ytId)) || `YouTube (${ytId})`
+          } else if (!ytId && cleanTitle.length >= 3) {
+            const found = await searchYoutube(cleanTitle)
+            if (found) {
+              ytId = found.ytId
+              if (cleanTitle.length < 5) cleanTitle = found.title
+            }
+          }
+
+          if (!cleanTitle || isProfane(cleanTitle)) continue
+          const senderName = (m.member?.nick || m.author?.global_name || m.author?.username || 'Diák').slice(0, 20)
+          if (isProfane(senderName)) continue
+
+          let extraVotes = 0
+          let botReacted = false
+          if (Array.isArray(m.reactions)) {
+            for (const rc of m.reactions) {
+              const cnt = Number(rc.count) || 0
+              if (rc.me) {
+                botReacted = true
+                extraVotes += Math.max(0, cnt - 1)
+              } else {
+                extraVotes += cnt
+              }
+            }
+          }
+
+          if (!botReacted) {
+            discordApi(`/channels/${chMap.videos}/messages/${m.id}/reactions/${encodeURIComponent('🎬')}/@me`, 'PUT').catch(() => {})
+          }
+
+          const createdMs = Date.parse(m.timestamp) || Date.now()
+          const msgDay = new Date(createdMs).toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' })
+
+          songs.push({
+            id: `dc-vid-${m.id}`,
+            day: msgDay,
+            kind: 'video',
             title: cleanTitle.slice(0, 60),
             by: `${senderName} 💬`,
             ytId,
@@ -488,26 +550,30 @@ Deno.serve(async (req: Request) => {
     if (action === 'post') {
       const kind = String(body.kind || '')
 
-      if (kind === 'jukebox' && chMap.music) {
+      if (kind === 'jukebox') {
         const title = String(body.title || '').trim()
-        const by = String(body.by || 'Névtelen').trim() || 'Névtelen'
+        const by = String(body.by || '').trim() || 'Diák'
         const ytId = body.ytId ? String(body.ytId).trim() : undefined
-        const mediaKind = body.mediaKind === 'video' ? '🎬 Videókérés' : '🎵 Zenekérés'
+        const isVideo = body.mediaKind === 'video'
+        const mediaKind = isVideo ? '🎬 Videókérés' : '🎵 Zenekérés'
         const ytUrl = ytId ? `https://youtu.be/${ytId}` : undefined
+        const targetCh = isVideo && chMap.videos ? chMap.videos : chMap.music
 
-        await discordApi(`/channels/${chMap.music}/messages`, 'POST', {
-          embeds: [
-            {
-              title: `${mediaKind} a SuliBell weboldalról!`,
-              description: ytUrl ? `**[${title}](${ytUrl})**\n🔗 ${ytUrl}` : `**${title}**`,
-              color: body.mediaKind === 'video' ? 0x2de2ff : 0xff4fc3,
-              thumbnail: ytId ? { url: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` } : undefined,
-              footer: { text: `Beküldte: ${by} • SuliBell Weboldal` },
-              timestamp: new Date().toISOString(),
-            },
-          ],
-        })
-        return reply({ ok: true })
+        if (targetCh) {
+          await discordApi(`/channels/${targetCh}/messages`, 'POST', {
+            embeds: [
+              {
+                title: `${mediaKind} a SuliBell weboldalról!`,
+                description: ytUrl ? `**[${title}](${ytUrl})**\n🔗 ${ytUrl}` : `**${title}**`,
+                color: isVideo ? 0x2de2ff : 0xff4fc3,
+                thumbnail: ytId ? { url: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` } : undefined,
+                footer: { text: `Beküldte: ${by} • SuliBell Weboldal` },
+                timestamp: new Date().toISOString(),
+              },
+            ],
+          })
+          return reply({ ok: true })
+        }
       }
 
       if (kind === 'announcement' && chMap.announcements) {

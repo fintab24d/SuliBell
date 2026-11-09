@@ -425,7 +425,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       postToDiscord({
         kind: 'jukebox',
         title: created.title,
-        by: created.by || 'Névtelen',
+        by: created.by,
         ytId: created.ytId,
         mediaKind: created.kind,
       })

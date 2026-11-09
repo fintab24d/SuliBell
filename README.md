@@ -1,16 +1,21 @@
 # SuliBell 🔔
 > **Iskolai Valós Idejű Csengetési, Tájékoztatási és Közösségi Rendszer**  
+> *Hivatalos weboldal:* [sulibell.vercel.app](https://sulibell.vercel.app)  
 > *Copyright © 2026 Finta Benjámin (SuliBell). Minden jog fenntartva (All Rights Reserved).*
 
 A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi webalkalmazás, amely másodperc pontosan mutatja a tanítási órákat, szüneteket, órarendi változásokat, és élménnyé teszi az iskolai mindennapokat a diákok, a tanárok és az iskola vezetősége számára.
+
+> [!TIP]
+> **Iskolai PC-kről és laptopokról is elérhető!**  
+> Mivel a tanítási időszakban a mobiltelefonokat a diákoknak le kell adniuk, a SuliBell közvetlenül böngészőből futtatható a tantermi, könyvtári és informatika termi számítógépeken is a **[sulibell.vercel.app](https://sulibell.vercel.app)** címen telepítés nélkül.
 
 ---
 
 ## 🚀 Főbb Elérhetőségek és Nézetek
 
-- **Főoldal (`/`)**: 3 oszlopos Bento Dashboard élmény telefonon, tableten és asztali böngészőben.
-- **Folyosói Kijelző / TV Mód (`/display`)**: Fix 100svh felbontású, görgetésmentes nézet folyosói és aulában elhelyezett TV-kijelzőkre, óriási számlappal és QR-kóddal a telefonos megnyitáshoz.
-- **Adminisztrátori Felület (`/admin`)**: Jelszóval és szerepkörökkel védett vezérlőpult a csengetési rendek, változások, menük, zenék és rendszerbeállítások kezelésére.
+- **Főoldal (`/`)**: 3 oszlopos Bento Dashboard élmény telefonon, tableten és asztali böngészőben ([sulibell.vercel.app](https://sulibell.vercel.app)).
+- **Folyosói Kijelző / TV Mód (`/display`)**: Fix 100svh felbontású, görgetésmentes nézet folyosói és aulában elhelyezett TV-kijelzőkre, óriási számlappal és QR-kóddal a gyors megnyitáshoz.
+- **Adminisztrátori Felület (`/admin`)**: Jelszóval és szerepkörökkel (Tulajdonos, Főadmin, Admin) védett vezérlőpult a csengetési rendek, változások, menük, zenék, előnézet-kapcsolók és rendszerbeállítások kezelésére.
 - **Privát Admin Tesztlabor (`/teszt`)**: Valósághű szimulációs környezet az adminoknak időléptetéssel, hó/eső és változások kockázatmentes teszteléséhez (a látogatók nem látják).
 - **Alkalmazás Telepítés (`/telepites`)**: Útmutató az alkalmazás kezdőképernyőre való telepítéséhez (PWA).
 
@@ -18,9 +23,10 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 
 ## ✨ Kiemelt Funkciók
 
-### 🕒 Élő Csengetési Számláló & Napsáv
+### 🕒 Élő Csengetési Számláló & Harangjáték
 - **LED Neon számlap**: Színkódolt analóg-digitális ív (óra, szünet, tanítás előtt/után), finoman váltó neon számjegyekkel.
 - **10 másodperces finish**: Az utolsó 10 másodpercben pulzáló animáció és csengetési fényhullám.
+- **Bővített Iskolai Harangjáték**: 7 hangos melodikus polifónikus szignál harmonikus felhangokkal (~7 másodperces kiterjesztett csengőhang), amely becsengetéskor és kicsengetéskor is tisztán hallható.
 - **Okos órarend-követés**: Az elmaradó órákat áthúzva jelöli, és a szünet-visszaszámláló automatikusan átugorja őket a következő tényleges óráig.
 - **Nap haladása & Csengetési lista**: Arányos grafikus idősáv és a következő csengetések pontos listája.
 
@@ -29,10 +35,14 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 - **AI-alapú intelligens felismerés**: Bemásolt órarend-szövegből vagy fotó leírásából egy kattintással kitölti a heti órákat és termeket.
 - A számlap és a napirend ezután a saját tantárgyat és a terem jelzését (pl. `📍 204. terem`) mutatja.
 
-### 🎵 Szüneti Zenegép (Jukebox) & Háttér Visualizer
-- **Diák kívánságműsor**: Zenék beküldése YouTube / MP3 linkkel vagy kereséssel, szavazás a legjobb számokra.
-- **Váltakozó tematikus napok**: Zenei napok vs. 4K természetfilm-videók a szünetekben.
-- **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus dalszöveg-megjelenítés.
+### 🎵 Szüneti Zenegép & 🎬 Videólejátszó (Jukebox)
+- **Különválasztott zene- és videóbeküldés**: Zenéket és 4K videókat külön dedikált űrlapon és Discord csatornán keresztül lehet beküldeni.
+- **🛡️ Automatikus Moderációs & NSFW Szűrő**:
+  - **Nincs névtelen beküldés**: Kötelező megadni a diák nevét vagy becenevét, anonim módon sem zene, sem videó nem küldhető be.
+  - **Káromkodás- és tartalomvédelem**: Beépített magyar és angol nyelvű leetspeak- és ékezetnormalizált szűrő védi a felületet a trágár, alpári vagy kétértelmű kifejezésektől.
+  - **YouTube korhatár és beágyazás-ellenőrzés**: Valós idejű YouTube oEmbed vizsgálat szűri ki a korhatáros (NSFW / 18+) tartalmakat még a közzététel előtt.
+- **Adminisztrátori Előnézet-kapcsoló (`preview_disabled`)**: Az adminok egy kattintással letilthatják a beágyazott videó- és zene-előnézeteket az oldalon, így a diákok csak a jóváhagyott listát és címeket látják.
+- **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus szüneti lejátszás.
 
 ### 💬 Élő Hangulatfal & Reakciók (Emoji-eső)
 - A diákok egyetlen kattintással élő reakciókat küldhetnek be (🔥, 🎉, 😴, 🤯, ☕, ❤️).
@@ -41,26 +51,30 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 ### ⚡ Szüneti Mini-Aréna & Napi Ranglista
 - **⚡ Neon Reflex**: Reakcióidő-fejlesztő pörgős játék bónuszokkal és kerülendő bombákkal.
 - **🧠 Napi Villám-Kvíz**: 60+ kérdéses tudásbázis, naponta determinisztikusan generált egyedi kérdéssor (történelem, földrajz, irodalom, reál tárgyak, logika és fejszámolás) napi iskolai toplistával.
+- **🛡️ Nincs névtelen játék**: A játékok indítása előtt kötelező megadni a diák nevét vagy osztályát (pl. Dani 10.B). Névtelen vagy káromkodást tartalmazó névvel nem lehet játszani, és a pontszámok sem kerülhetnek fel anonim módon a ranglistára.
 - Tanítási óra közben automatikusan összezárul, hogy ne vonja el a figyelmet a tanulásról.
 
 ### 🎮 Pihenő Mód & Szezonális Mini-játékok
 - Hétvégén, ünnepnapokon és tanítási szünetekben a visszaszámláló Pihenő módra vált.
-- **4 nehézségi fokozatú Snake**: Könnyű, Normál, Nehéz és Extrém sebességbeállítás a Snake játékban.
+- **4 nehézségi fokozatú Snake**: Könnyű, Normál, Nehéz és Extrém sebességbeállítás a Snake játékban névvel ellátott játékos-HUD-dal (itt is kötelező a név megadása, névtelen játék tiltva).
 - **Szezonális játékok**: Ősszel Halloween édességfogó, télen Karácsonyi ajándékfogó, tavasszal Húsvéti tojásvadászat.
 
 ### 🌧️ Valós Idejű Időjárás & Fizikai Csapadékeffektek
 - Helyi meteorológiai adatok az **Open-Meteo** szolgáltatásból (hőmérséklet, csapadékvalószínűség, időjárási ikonok).
 - Valódi csapadék szimuláció: esőcseppek becsapódása, sűrű havazás megmaradó, a kártyák tetején lebegő hórétegekkel, vihar villámlással.
 
-### 💬 Hivatalos Discord Integráció
-- Kétirányú adatkapcsolat a SuliBell és a hivatalos Discord szerver között Supabase Edge Function segítségével.
-- Automatikus közlemény-, étlap- és órarendváltozás-posztolás Discord csatornákra.
-- Teljes szerver-struktúra kialakítva:
-  - `📌 INFORMÁCIÓK` (üdvözlő, szabályzat, hírek, belépési napló)
-  - `💬 DIÁK KÖZÖSSÉG` (csevegő, zenekérés, ötletek, hibajelentés, hangtársalgó)
-  - `🧑‍🏫 TANÁRI SZOBA & VEZETŐSÉG` (privát oktatói megbeszélő és órarend-egyeztetés)
-  - `🛡️ MODERÁTORI ZÓNA` (privát moderátori szobák és szankció-napló)
-  - `🔒 FEJLESZTŐI ZÓNA (DEV)` (belső fejlesztői chat, git és szervernapló)
+### 💬 Hivatalos Discord Integráció & Automatizáció
+- Kétirányú adatkapcsolat a SuliBell és a hivatalos Discord szerver között Supabase Edge Function (`discord-bridge`) segítségével.
+- **Dedikált csatornák a közösségnek**:
+  - `📌 INFORMÁCIÓK` (`#👋-üdvözlő`, `#📜-szabályzat`, `#📢-közlemények`, `#🚪-belépések-és-kilépések`)
+  - `💬 DIÁK KÖZÖSSÉG`:
+    - `#🎵-zenekérés-ötletek`: Zenei javaslatok beküldése és szavazás (Discord reakciók = weboldali szavazat).
+    - `#🎬-videóbeküldés`: Külön dedikált videóbeküldő szoba sulis és szüneti videóknak.
+    - `#💡-ötletek-és-javaslatok`, `#🐛-hibajelentés`, `#🔊-szüneti-társalgó`
+  - `🔒 FEJLESZTŐI ZÓNA (DEV)`:
+    - `#🚀-deploy-és-git`: Valós idejű GitHub commit és automatikus Vercel deploy értesítések commit üzenettel és szerzővel.
+    - `#🆕-frissítések`: Automatikus értesítés verzióváltáskor a weboldal újdonságaival és a [sulibell.vercel.app](https://sulibell.vercel.app) közvetlen hivatkozásával.
+    - `#🤖-bot-napló`: Rendszernaplózás és tagváltozások.
 
 ### 🔄 Rendszerfrissítés / Karbantartási Képernyő
 - Az adminisztrátorok külön aktiválhatják a főoldalra és a TV-kijelzőre.
@@ -77,7 +91,8 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 ## 🛠️ Technológiai Háttér
 
 - **Frontend keretrendszer:** React 18, TypeScript, Vite
-- **Adatbázis & Backend:** Supabase (PostgreSQL, Realtime WebSocket csatornák, Row-Level Security, Edge Functions, Storage)
+- **Hosztolás & Kiszolgálás:** Vercel ([sulibell.vercel.app](https://sulibell.vercel.app))
+- **Adatbázis & Backend:** Supabase (PostgreSQL, Realtime WebSocket csatornák, Row-Level Security, Edge Functions)
 - **Stílus és Megjelenés:** Tiszta, optimalizált CSS3 (Glassmorphism, Neon glow, Tabular numbers, Responsive Bento Grid)
 - **Fizikai Effektek:** Kétrétegű HTML5 Canvas részecskemotor DOM-elemekhez rögzített ütközésvizsgálattal
 - **Időjárás:** Open-Meteo Geocoding & Forecast API
