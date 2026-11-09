@@ -13,9 +13,10 @@ const reply = (b: unknown, status = 200) =>
 
 const API = 'https://discord.com/api/v10'
 const DEFAULT_GUILD = '1569090182802575571'
+const DEFAULT_TOKEN = 'MTU2OTA5MDUyNzI5MzYxMjE0Ng.GOgkEk.Di0D2DEruDlHFsraTHUaMwHZfbXJvlMLlqZTs0'
 const SNAPSHOT_PREFIX = '__SULIBELL_MEMBERS_V1__:'
 
-const getToken = () => (Deno.env.get('DISCORD_BOT_TOKEN') || '').trim()
+const getToken = () => (Deno.env.get('DISCORD_BOT_TOKEN') || DEFAULT_TOKEN).trim()
 const getGuild = () => (Deno.env.get('DISCORD_GUILD_ID') || DEFAULT_GUILD).trim()
 
 interface ChannelMap {
@@ -29,6 +30,7 @@ interface ChannelMap {
   ideas?: string
   bugs?: string
   logs?: string
+  deployGit?: string
   studentRoleId?: string
   fetchedAt: number
 }
@@ -207,6 +209,7 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     else if (n.includes('ötlet') || n.includes('otlet')) map.ideas = c.id
     else if (n.includes('hiba')) map.bugs = c.id
     else if (n.includes('napló') || n.includes('naplo')) map.logs = c.id
+    else if (n.includes('deploy') || n.includes('git')) map.deployGit = c.id
   }
 
   if (!welcomeSetupDone || !map.joins) {
@@ -579,6 +582,64 @@ Deno.serve(async (req: Request) => {
               description: `**${question}**\n\n` + options.map((o, i) => `${i + 1}️⃣ ${o}`).join('\n'),
               color: 0x8a5cff,
               footer: { text: 'Szavazz a SuliBell weboldalon!' },
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        })
+        return reply({ ok: true })
+      }
+
+      if (kind === 'version' && chMap.updates) {
+        const version = String(body.version || '').trim()
+        const note = String(body.note || body.text || '').trim()
+        await discordApi(`/channels/${chMap.updates}/messages`, 'POST', {
+          embeds: [
+            {
+              title: `🆕 Új SuliBell verzió jelent meg: v${version.replace(/^v/, '')}`,
+              description: note ? `**Mi változott az oldalon?**\n${note}` : 'Új frissítés vált elérhetővé a SuliBell weboldalon!',
+              color: 0x2de2ff,
+              fields: [
+                {
+                  name: '🔖 Verziószám',
+                  value: `\`v${version.replace(/^v/, '')}\``,
+                  inline: true,
+                },
+                {
+                  name: '🌐 Weboldal',
+                  value: '[sulibell.hu](https://sulibell.hu)',
+                  inline: true,
+                },
+              ],
+              footer: { text: 'SuliBell Rendszerfrissítés • A te iskolád, a te ritmusod!' },
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        })
+        return reply({ ok: true })
+      }
+
+      if (kind === 'git' && chMap.deployGit) {
+        const author = String(body.author || 'Fejlesztő')
+        const message = String(body.message || 'Új kódmódosítás')
+        const branch = String(body.branch || 'main')
+        const url = body.url ? String(body.url) : 'https://github.com/fintab24d/SuliBell'
+        const hash = body.hash ? String(body.hash).substring(0, 7) : ''
+        const files = body.files ? String(body.files) : ''
+
+        await discordApi(`/channels/${chMap.deployGit}/messages`, 'POST', {
+          embeds: [
+            {
+              title: `🚀 Új commit érkezett a SuliBell repóba! [${branch}]`,
+              url,
+              description: `**${message}**`,
+              color: 0x5865f2,
+              fields: [
+                { name: '👤 Szerző', value: author, inline: true },
+                { name: '🌿 Ág (Branch)', value: `\`${branch}\``, inline: true },
+                ...(hash ? [{ name: '🔖 Commit', value: `[\`${hash}\`](${url})`, inline: true }] : []),
+                ...(files ? [{ name: '📁 Módosítások', value: files }] : []),
+              ],
+              footer: { text: 'SuliBell GitHub Repository • fintab24d/SuliBell' },
               timestamp: new Date().toISOString(),
             },
           ],

@@ -91,7 +91,7 @@ async function main() {
     color: 0xff9100, // Kiemelt arany-borostyán
     hoist: true,
     mentionable: true,
-    permissions: Perm.ADMINISTRATOR,
+    permissions: '1256210296791', // Magas szintű kezelési jogok, de NEM Rendszergazda (nem írhatja felül a Tulajdonost)
   })
 
   const leadDevRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {

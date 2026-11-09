@@ -1,0 +1,86 @@
+name: Discord Git & Deploy Értesítés
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  notify-discord:
+    name: Értesítés küldése Discordra (#🚀-deploy-és-git)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord Embed Notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK || 'https://discord.com/api/webhooks/1569391595110011060/91gpUcmcHbKr1rayTmFMH7Dk7udIkzxR1y2MToGk0MCoP9eJrUBn1vRrEU7MO5_m6Ek2' }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_SHA: ${{ github.event.head_commit.id }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name || github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          COMMIT_COUNT: ${{ length(github.event.commits) }}
+        run: |
+          node -e '
+            const webhook = process.env.DISCORD_WEBHOOK;
+            if (!webhook) process.exit(0);
+
+            const msg = (process.env.COMMIT_MSG || "").trim();
+            const firstLine = msg.split("\n")[0].slice(0, 200);
+            const remaining = msg.split("\n").slice(1).join("\n").trim().slice(0, 800);
+            const description = remaining ? `**${firstLine}**\n\n${remaining}` : `**${firstLine || "Új commit"}**`;
+
+            const payload = {
+              username: "GitHub SuliBell",
+              avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              embeds: [
+                {
+                  title: "🚀 Új commit érkezett a GitHub repóba!",
+                  url: process.env.COMMIT_URL || "https://github.com/" + process.env.REPO,
+                  description: description,
+                  color: 0x5865F2,
+                  fields: [
+                    {
+                      name: "👤 Szerző",
+                      value: process.env.COMMIT_AUTHOR || "Fejlesztő",
+                      inline: true
+                    },
+                    {
+                      name: "🌿 Ág (Branch)",
+                      value: "`" + (process.env.BRANCH || "main") + "`",
+                      inline: true
+                    },
+                    {
+                      name: "🔖 Commit azonosító",
+                      value: process.env.COMMIT_SHA ? `[\`${process.env.COMMIT_SHA.slice(0, 7)}\`](${process.env.COMMIT_URL})` : "N/A",
+                      inline: true
+                    },
+                    {
+                      name: "📦 Csomag mérete",
+                      value: `${process.env.COMMIT_COUNT || 1} commit`,
+                      inline: true
+                    }
+                  ],
+                  footer: {
+                    text: `SuliBell • ${process.env.REPO || "fintab24d/SuliBell"}`
+                  },
+                  timestamp: new Date().toISOString()
+                }
+              ]
+            };
+
+            fetch(webhook, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            }).then(r => {
+              if (!r.ok) {
+                console.error("Discord webhook status:", r.status);
+                process.exit(1);
+              }
+              console.log("Discord értesítés sikeresen elküldve!");
+            }).catch(err => {
+              console.error(err);
+              process.exit(1);
+            });
+          '

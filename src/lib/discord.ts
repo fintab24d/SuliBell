@@ -65,7 +65,7 @@ export async function fetchDiscordSync(force = false): Promise<DiscordSyncData> 
  * Weboldal esemény átküldése a Discord szerver megfelelő csatornájába.
  */
 export async function postToDiscord(payload: {
-  kind: 'jukebox' | 'announcement' | 'alert' | 'change' | 'menu' | 'poll'
+  kind: 'jukebox' | 'announcement' | 'alert' | 'change' | 'menu' | 'poll' | 'version' | 'git'
   [key: string]: unknown
 }): Promise<boolean> {
   try {

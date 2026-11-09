@@ -28,13 +28,40 @@ export async function ring(url?: string | null) {
     catch { /* a saját hang nem játszható le: jön a beépített csengő */ }
   }
   const t0 = c.currentTime
-  ;[880, 660, 880].forEach((f, i) => {
-    const o = c.createOscillator(), g = c.createGain(), t = t0 + i * 0.7
-    o.type = 'sine'; o.frequency.value = f
-    g.gain.setValueAtTime(0.0001, t)
-    g.gain.exponentialRampToValueAtTime(0.4, t + 0.02)
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65)
-    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.7)
+  // Iskolai dallamcsengő: hosszabb, teltebb hangzás harmonikus felhangokkal (~7 mp a korábbi 2 mp helyett)
+  const notes = [
+    { f: 880, delay: 0.0, dur: 1.1 },    // A5
+    { f: 659.25, delay: 0.75, dur: 1.1 }, // E5
+    { f: 880, delay: 1.5, dur: 1.3 },    // A5
+    { f: 659.25, delay: 2.4, dur: 1.1 }, // E5
+    { f: 880, delay: 3.15, dur: 1.1 },   // A5
+    { f: 1046.5, delay: 3.9, dur: 1.3 }, // C6
+    { f: 880, delay: 4.8, dur: 2.2 },    // A5 (hosszú, zengő záróhang)
+  ]
+
+  notes.forEach(({ f, delay, dur }) => {
+    const at = t0 + delay
+    // Alaphang (meleg, tiszta szinusz)
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'sine'
+    o.frequency.value = f
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.exponentialRampToValueAtTime(0.35, at + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + dur + 0.05)
+
+    // Fémcsengő / csőharang felhang (természetes csengő-fény a leütéskor)
+    const o2 = c.createOscillator(), g2 = c.createGain()
+    o2.type = 'triangle'
+    o2.frequency.value = f * 2
+    g2.gain.setValueAtTime(0.0001, at)
+    g2.gain.exponentialRampToValueAtTime(0.08, at + 0.015)
+    g2.gain.exponentialRampToValueAtTime(0.0001, at + Math.min(0.45, dur))
+    o2.connect(g2).connect(c.destination)
+    o2.start(at)
+    o2.stop(at + Math.min(0.5, dur))
   })
 }
 

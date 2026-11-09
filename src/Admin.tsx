@@ -337,10 +337,25 @@ function Panel() {
         <label>méret <input type="number" min={50} max={150} step={10} defaultValue={d.settings.tv_scale} key={d.settings.tv_scale} onBlur={e => setS({ tv_scale: Math.min(150, Math.max(50, +e.target.value || 100)) })} /> %</label>
         {d.settings.tv_scale !== 100 && <button type="button" onClick={() => setS({ tv_scale: 100 })}>↺ 100%</button>}</div>
       <div className="row">Oldal verziója <input size={8} placeholder="pl. 1.2.0" defaultValue={d.settings.site_version ?? ''} key={'v' + d.settings.site_version}
-          onBlur={e => e.target.value !== (d.settings.site_version ?? '') && setS({ site_version: e.target.value })} />
+          onBlur={async e => {
+            const newVer = e.target.value.trim()
+            if (newVer !== (d.settings.site_version ?? '')) {
+              await setS({ site_version: newVer })
+              if (newVer) {
+                postToDiscord({ kind: 'version', version: newVer, note: d.settings.version_note || '' })
+                setMsg('📢 Verziófrissítés (v' + newVer + ') elküldve a Discord #🆕-frissítések csatornába!')
+              }
+            }
+          }} />
         Megjegyzés <input style={{ minWidth: '18rem' }} placeholder="pl. Új közlemények" defaultValue={d.settings.version_note ?? ''} key={'n' + d.settings.version_note}
           onBlur={e => e.target.value !== (d.settings.version_note ?? '') && setS({ version_note: e.target.value })} />
         <button type="button" onClick={() => setS({ version_note: 'Neon óra, háttérzene visualizerrel, váltakozó zene/videó napok, elmaradó órák okos átugrása' })}>✨ Legújabb újítások beírása</button>
+        <button type="button" title="Közvetlen közzététel a Discord #🆕-frissítések szobában" onClick={async () => {
+          const ver = d.settings.site_version || '1.0.0'
+          const note = d.settings.version_note || ''
+          const ok = await postToDiscord({ kind: 'version', version: ver, note })
+          setMsg(ok ? '📢 Verziófrissítés (v' + ver + ') közzétéve a Discord #🆕-frissítések csatornában!' : '⚠️ Nem sikerült elküldeni a Discordra.')
+        }}>📢 Közzététel Discordon (#🆕-frissítések)</button>
         {d.settings.version_note && <button type="button" onClick={() => setS({ version_note: '' })}>↺ Megjegyzés törlése</button>}</div>
     </section>}
 
