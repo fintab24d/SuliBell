@@ -7,7 +7,7 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 
 > [!TIP]
 > **Iskolai PC-kről és laptopokról is elérhető!**  
-> Mivel a tanítási időszakban a mobiltelefonokat a diákoknak le kell adniuk, a SuliBell közvetlenül böngészőből futtatható a tantermi, könyvtári és informatika termi számítógépeken is a **[sulibell.vercel.app](https://sulibell.vercel.app)** címen telepítés nélkül.
+> Mivel a tanítási időszakban a mobiltelefonokat a diákoknak le kell adniuk, a SuliBell közvetlenül böngészőből futtatható az iskolai géptermek (informatikatermek) számítógépein és laptopokon is a **[sulibell.vercel.app](https://sulibell.vercel.app)** címen telepítés nélkül.
 
 ---
 
