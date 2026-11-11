@@ -122,9 +122,10 @@ export function loadAllLocalSongs(): SongWish[] {
       if (!k || !k.startsWith(STORAGE_PREFIX)) continue
       const day = k.slice(STORAGE_PREFIX.length)
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue
+      const del = loadDeletedSet(day)
       const items = loadLocalSongs(day)
       for (const item of items) {
-        if (!all.some(x => x.id === item.id)) all.push(item)
+        if (!del.has(item.id) && !all.some(x => x.id === item.id)) all.push(item)
       }
     }
   } catch { /* ignore */ }
@@ -207,34 +208,94 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   useEffect(() => {
     if (!schoolId || !day) return
     let alive = true
+    const recentCreatedAt = new Map<string, number>()
 
-    // Opcionális DB lekérés (update17.sql)
-    supabase.rpc('get_jukebox_songs', { p_school: schoolId, p_day: day }).then(({ data, error }: any) => {
-      if (!alive || error || !Array.isArray(data)) return
+    const syncFromDb = async () => {
+      const { data, error }: any = await supabase.rpc('get_jukebox_state', { p_school: schoolId, p_day: day })
+      if (!alive) return
+      if (error || !Array.isArray(data)) {
+        // Régebbi DB migráció esetén visszaesünk get_jukebox_songs-ra
+        const fallback: any = await supabase.rpc('get_jukebox_songs', { p_school: schoolId, p_day: day })
+        if (!alive || fallback.error || !Array.isArray(fallback.data)) return
+        const del = loadDeletedSet(day)
+        const dbIds = new Set<string>()
+        setSongs(prev => {
+          let next: SongWish[] = []
+          for (const r of fallback.data) {
+            const sid = String(r.song_id)
+            if (del.has(sid)) continue
+            dbIds.add(sid)
+            next = mergeSong(next, {
+              id: sid,
+              day,
+              kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mode,
+              title: String(r.title),
+              by: String(r.requester ?? ''),
+              ytId: r.yt_id ? String(r.yt_id) : undefined,
+              mp4Url: r.media_url ? String(r.media_url) : undefined,
+              votes: Number(r.votes) || 1,
+              at: Date.parse(r.created_at) || Date.now(),
+            }, del)
+          }
+          // Csak Discord vagy épp most beküldött (optimista) elemek maradnak helyben
+          const nowMs = Date.now()
+          for (const old of prev) {
+            if (del.has(old.id) || dbIds.has(old.id)) continue
+            if (old.id.startsWith('dc-') || nowMs - old.at < 8_000) {
+              next = mergeSong(next, old, del)
+            }
+          }
+          saveLocalSongs(day, next)
+          return next
+        })
+        return
+      }
+
       const del = loadDeletedSet(day)
+      const dbActive: SongWish[] = []
+      const dbIds = new Set<string>()
+
+      for (const r of data) {
+        const sid = String(r.song_id)
+        dbIds.add(sid)
+        if (r.deleted) {
+          del.add(sid)
+          continue
+        }
+        if (del.has(sid)) continue
+        dbActive.push({
+          id: sid,
+          day,
+          kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mode,
+          title: String(r.title),
+          by: String(r.requester ?? ''),
+          ytId: r.yt_id ? String(r.yt_id) : undefined,
+          mp4Url: r.media_url ? String(r.media_url) : undefined,
+          votes: Number(r.votes) || 1,
+          at: Date.parse(r.created_at) || Date.now(),
+        })
+      }
+      saveDeletedSet(day, del)
+
       setSongs(prev => {
-        let next = prev.filter(s => !del.has(s.id))
-        for (const r of data) {
-          const sid = String(r.song_id)
-          if (del.has(sid)) continue
-          next = mergeSong(next, {
-            id: sid,
-            day,
-            kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mode,
-            title: String(r.title),
-            by: String(r.requester ?? ''),
-            ytId: r.yt_id ? String(r.yt_id) : undefined,
-            mp4Url: r.media_url ? String(r.media_url) : undefined,
-            votes: Number(r.votes) || 1,
-            at: Date.parse(r.created_at) || Date.now(),
-          }, del)
+        let next: SongWish[] = []
+        for (const item of dbActive) {
+          next = mergeSong(next, item, del)
+        }
+        const nowMs = Date.now()
+        for (const old of prev) {
+          if (del.has(old.id) || dbIds.has(old.id)) continue
+          const createdTs = recentCreatedAt.get(old.id) ?? old.at
+          if (old.id.startsWith('dc-') || nowMs - createdTs < 8_000) {
+            next = mergeSong(next, old, del)
+          }
         }
         saveLocalSongs(day, next)
         return next
       })
-    })
+    }
 
-    // Discord #🎵-zenekérés-ötletek szinkronizáció (20 másodpercenként)
+    // Discord #🎵-zenekérés-ötletek szinkronizáció
     const syncFromDiscord = async () => {
       const res = await fetchDiscordSync()
       if (!alive || !res.songs.length) return
@@ -260,10 +321,26 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         return next
       })
     }
-    syncFromDiscord()
-    const dcTimer = setInterval(syncFromDiscord, 20_000)
 
-    // Realtime csatorna
+    const syncAll = async () => {
+      await syncFromDb()
+      await syncFromDiscord()
+    }
+
+    syncAll()
+    const pollTimer = setInterval(() => {
+      if (!document.hidden) syncAll()
+    }, 10_000)
+
+    const onResume = () => {
+      if (!document.hidden) syncAll()
+    }
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('focus', onResume)
+    window.addEventListener('pageshow', onResume)
+    window.addEventListener('sulibell:refresh', onResume)
+
+    // Realtime csatorna (Broadcast + DB postgres_changes)
     const ch = supabase.channel(`sulibell-jukebox-${schoolId}`, {
       config: { broadcast: { self: false } },
     })
@@ -275,6 +352,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       const del = loadDeletedSet(itemDay)
       if (del.has(incoming.id)) return
       if (itemDay === day) {
+        recentCreatedAt.set(incoming.id, Date.now())
         setSongs(prev => {
           const next = mergeSong(prev, incoming, del)
           saveLocalSongs(day, next)
@@ -325,6 +403,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         return next
       })
     })
+    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'jukebox_songs', filter: `school_id=eq.${schoolId}` }, () => {
+      if (!alive) return
+      syncFromDb()
+    })
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
         ch.send({ type: 'broadcast', event: 'sync_req', payload: { day } }).catch?.(() => {})
@@ -373,7 +455,11 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
     return () => {
       alive = false
-      clearInterval(dcTimer)
+      clearInterval(pollTimer)
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('focus', onResume)
+      window.removeEventListener('pageshow', onResume)
+      window.removeEventListener('sulibell:refresh', onResume)
       supabase.removeChannel(ch)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }
@@ -461,17 +547,35 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     }
 
     if (schoolId) {
-      supabase.rpc('submit_jukebox_song', {
-        p_school: schoolId,
-        p_day: day,
-        p_id: created.id,
-        p_title: created.title,
-        p_by: created.by,
-        p_yt: created.ytId ?? null,
-      }).then(() => {})
+      if (existing) {
+        supabase.rpc('vote_jukebox_wish', {
+          p_school: schoolId,
+          p_day: day,
+          p_id: created.id,
+          p_voter: voterId(),
+          p_title: created.title,
+          p_by: created.by,
+          p_yt: created.ytId ?? null,
+          p_media: created.mp4Url ?? null,
+          p_kind: created.kind,
+          p_base_votes: existing.votes,
+        }).then(() => {})
+      } else {
+        supabase.rpc('submit_jukebox_wish', {
+          p_school: schoolId,
+          p_day: day,
+          p_id: created.id,
+          p_title: created.title,
+          p_by: created.by,
+          p_yt: created.ytId ?? null,
+          p_media: created.mp4Url ?? null,
+          p_kind: created.kind,
+          p_voter: voterId(),
+        }).then(() => {})
+      }
     }
     return true
-  }, [schoolId, day, mode, songs, broadcastSong])
+  }, [schoolId, day, mode, songs, voted, broadcastSong])
 
   const voteSong = useCallback((songId: string) => {
     if (voted.has(songId)) return
@@ -497,16 +601,22 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     broadcastSong(updated)
 
     if (schoolId) {
-      supabase.rpc('vote_jukebox_song', {
+      supabase.rpc('vote_jukebox_wish', {
         p_school: schoolId,
         p_day: day,
         p_id: songId,
         p_voter: voterId(),
+        p_title: found.title,
+        p_by: found.by,
+        p_yt: found.ytId ?? null,
+        p_media: found.mp4Url ?? null,
+        p_kind: found.kind,
+        p_base_votes: found.votes,
       }).then(() => {})
     }
   }, [schoolId, day, songs, voted, broadcastSong])
 
-  const removeSong = useCallback(async (songId: string, targetDay?: string) => {
+  const removeSong = useCallback(async (songId: string, targetDay?: string): Promise<{ error?: string }> => {
     const d = targetDay || day
     applyDeleteLocal(songId, d)
     chanRef.current?.send({
@@ -517,15 +627,49 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     try { bcRef.current?.postMessage({ type: 'delete', id: songId, day: d }) } catch { /* ignore */ }
 
     if (schoolId) {
-      await supabase.rpc('delete_jukebox_song', { p_school: schoolId, p_id: songId }).then(() => {})
-      await supabase.from('jukebox_songs').delete().eq('school_id', schoolId).eq('song_id', songId).then(() => {})
-      await supabase.from('break_videos').delete().eq('id', songId).then(() => {})
+      const { error: rpcErr } = await supabase.rpc('admin_delete_jukebox_song', {
+        p_school: schoolId,
+        p_day: d,
+        p_id: songId,
+      })
+      if (rpcErr) {
+        // Tartalék régi DB esetén + RLS közvetlen törlés
+        await supabase.rpc('delete_jukebox_song', { p_school: schoolId, p_id: songId }).then(() => {})
+        const { error: delErr } = await supabase.from('jukebox_songs').update({ deleted: true }).eq('school_id', schoolId).eq('song_id', songId)
+        if (delErr) {
+          const { error: hardDelErr } = await supabase.from('jukebox_songs').delete().eq('school_id', schoolId).eq('song_id', songId)
+          if (hardDelErr) return { error: hardDelErr.message }
+        }
+      }
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(songId)) {
+        await supabase.from('break_videos').delete().eq('id', songId)
+      }
+    }
+    return {}
+  }, [schoolId, day, applyDeleteLocal])
+
+  const finishSong = useCallback(async (songId: string, targetDay?: string) => {
+    const d = targetDay || day
+    applyDeleteLocal(songId, d)
+    chanRef.current?.send({
+      type: 'broadcast',
+      event: 'delete',
+      payload: { id: songId, day: d },
+    }).catch?.(() => {})
+    try { bcRef.current?.postMessage({ type: 'delete', id: songId, day: d }) } catch { /* ignore */ }
+
+    if (schoolId) {
+      await supabase.rpc('mark_jukebox_played', {
+        p_school: schoolId,
+        p_day: d,
+        p_id: songId,
+      }).then(() => {})
     }
   }, [schoolId, day, applyDeleteLocal])
 
-  const clearAllSongs = useCallback(async (targetDay?: string) => {
+  const clearAllSongs = useCallback(async (targetDay?: string): Promise<{ error?: string }> => {
     const d = targetDay || day
-    const current = loadLocalSongs(d)
+    const current = [...songsRef.current, ...loadLocalSongs(d)]
     const del = loadDeletedSet(d)
     current.forEach(s => del.add(s.id))
     saveDeletedSet(d, del)
@@ -540,11 +684,21 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     try { bcRef.current?.postMessage({ type: 'clear_all', day: d }) } catch { /* ignore */ }
 
     if (schoolId) {
-      await supabase.from('jukebox_songs').delete().eq('school_id', schoolId).eq('day', d).then(() => {})
+      const { error: clrErr } = await supabase.rpc('admin_clear_jukebox_day', { p_school: schoolId, p_day: d })
+      if (clrErr) {
+        await supabase.from('jukebox_songs').delete().eq('school_id', schoolId).eq('day', d)
+      }
+      // A Discordról szinkronizált elemek tombstone mentése, hogy ne jelenjenek meg újra
+      for (const s of current) {
+        if (s.id.startsWith('dc-')) {
+          await supabase.rpc('admin_delete_jukebox_song', { p_school: schoolId, p_day: s.day || d, p_id: s.id }).then(() => {})
+        }
+      }
     }
+    return {}
   }, [schoolId, day])
 
-  return { songs, voted, mode, addSong, voteSong, removeSong, clearAllSongs }
+  return { songs, voted, mode, addSong, voteSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default function Jukebox({

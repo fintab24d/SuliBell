@@ -56,15 +56,29 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
   const { data, offline } = useSchool()
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
-    let t = 0
-    const tick = () => {
-      setNowSec(Math.floor(Date.now() / 1000))
-      if (!document.hidden) t = window.setTimeout(tick, 1015 - (Date.now() % 1000))
+    let lastSec = Math.floor(Date.now() / 1000)
+    const syncNow = () => {
+      const s = Math.floor(Date.now() / 1000)
+      if (s !== lastSec) {
+        lastSec = s
+        setNowSec(s)
+      }
     }
-    const onVis = () => { clearTimeout(t); if (!document.hidden) tick() }
-    t = window.setTimeout(tick, 1015 - (Date.now() % 1000))
-    document.addEventListener('visibilitychange', onVis)
-    return () => { clearTimeout(t); document.removeEventListener('visibilitychange', onVis) }
+    const onWake = () => {
+      if (!document.hidden) syncNow()
+    }
+    const t = window.setInterval(syncNow, 250)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
+    }
   }, [])
   return useMemo(() => {
     const now = new Date(nowSec * 1000)
@@ -260,22 +274,38 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     z?.date ?? '',
     !!data?.settings.sound_enabled && audioOn
   )
-  const { songs: jbWishes, removeSong } = useJukebox(data?.id, z?.date ?? '', false)
+  const { songs: jbWishes, finishSong } = useJukebox(data?.id, z?.date ?? '', false)
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
   const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
     : liveMaint
-  const maintSeenRef = useRef<{ on: boolean; deadline: number }>({ on: false, deadline: 0 })
+  const maintSeenRef = useRef<{ on: boolean; startsAt: number; deadline: number }>({ on: false, startsAt: 0, deadline: 0 })
   const [discordNotes, setDiscordNotes] = useState<DiscordAnnouncementItem[]>([])
   useEffect(() => {
     let alive = true
-    const loadDc = async () => {
+    const loadDc = async (force = false) => {
+      if (!force && document.hidden) return
       const res = await fetchDiscordSync()
       if (alive) setDiscordNotes(res.announcements)
     }
-    loadDc()
-    const t = setInterval(loadDc, 20_000)
-    return () => { alive = false; clearInterval(t) }
+    const onWake = () => { if (!document.hidden) loadDc(true) }
+    const onRefresh = () => { loadDc(true) }
+    loadDc(true)
+    const t = setInterval(() => loadDc(false), 20_000)
+    window.addEventListener('sulibell:refresh', onRefresh)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
+    return () => {
+      alive = false
+      clearInterval(t)
+      window.removeEventListener('sulibell:refresh', onRefresh)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
+    }
   }, [])
   const [dismissed, setDismissed] = useState('')   // a kiemelt közleményt a látogató bezárhatja (a TV-n nem)
   useEffect(() => { if (audioOn) preload(data?.settings.bell_sound_url) }, [audioOn, data?.settings.bell_sound_url])   // saját csengőhang előtöltése
@@ -405,13 +435,29 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
   const maintTargetOn = tv ? maint.tv : maint.main
   const rawStartsAt = tv ? maint.tvStartsAt : maint.mainStartsAt
+  const maintDlKey = 'csengeto-maint-dl-' + (tv ? 'tv' : 'main')
   if (!maintTargetOn) {
-    maintSeenRef.current = { on: false, deadline: 0 }
-  } else if (!maintSeenRef.current.on) {
-    const nowMs = Date.now()
-    const isRecentTrigger = !rawStartsAt || rawStartsAt > nowMs - 6_000
-    const deadline = isRecentTrigger ? Math.max(rawStartsAt ?? 0, nowMs + 10_000) : (rawStartsAt ?? 0)
-    maintSeenRef.current = { on: true, deadline }
+    if (maintSeenRef.current.on) {
+      try { localStorage.removeItem(maintDlKey) } catch { /* ignore */ }
+    }
+    maintSeenRef.current = { on: false, startsAt: 0, deadline: 0 }
+  } else {
+    const startsKey = typeof rawStartsAt === 'number' && rawStartsAt > 0 ? rawStartsAt : 0
+    if (!maintSeenRef.current.on || maintSeenRef.current.startsAt !== startsKey) {
+      const nowMs = Date.now()
+      let deadline = 0
+      try {
+        const saved = JSON.parse(localStorage.getItem(maintDlKey) ?? 'null')
+        if (saved && saved.startsAt === startsKey && typeof saved.deadline === 'number') {
+          deadline = saved.deadline
+        }
+      } catch { /* ignore */ }
+      if (!deadline) {
+        deadline = startsKey > 0 && startsKey <= nowMs + 15_000 ? startsKey : nowMs + 10_000
+        try { localStorage.setItem(maintDlKey, JSON.stringify({ startsAt: startsKey, deadline })) } catch { /* ignore */ }
+      }
+      maintSeenRef.current = { on: true, startsAt: startsKey, deadline }
+    }
   }
   const prepLeftSec = maintTargetOn ? Math.max(0, Math.ceil((maintSeenRef.current.deadline - Date.now()) / 1000)) : 0
   const isPrepCountdown = maintTargetOn && prepLeftSec > 0
@@ -466,7 +512,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const hasAnyWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
   const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
   const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasAnyWish || videos.length > 0) && (
-    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={removeSong} />
+    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
   )
   const e0 = events[0]
   const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}

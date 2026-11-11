@@ -4,7 +4,7 @@ import { pickVideos, type Vid } from './lib/video'
 import { mediaModeForDay, MIN_VOTES_TO_PLAY, type SongWish } from './Jukebox'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
 
-/** Az iskola régi szünet-videói (ha még van a break_videos táblában); 5 percenként frissül. */
+/** Az iskola régi szünet-videói (ha még van a break_videos táblában); szinkronizál valós időben, fókuszváltáskor és 30 mp-enként. */
 export function useVideos(schoolId?: string) {
   const [v, setV] = useState<Vid[]>(() => {
     try { return JSON.parse(localStorage.getItem('csengeto-videos') ?? '[]') } catch { return [] }
@@ -12,15 +12,37 @@ export function useVideos(schoolId?: string) {
   useEffect(() => {
     if (!schoolId) return
     let alive = true
-    const load = async () => {
+    const load = async (force = false) => {
+      if (!force && document.hidden) return
       const { data, error } = await supabase.from('break_videos').select('id, url, title').eq('school_id', schoolId).order('created_at')
       if (error || !alive) return
-      setV(data as Vid[])
-      try { localStorage.setItem('csengeto-videos', JSON.stringify(data)) } catch { /* nem baj */ }
+      const next = Array.isArray(data) ? (data as Vid[]) : []
+      setV(next)
+      try { localStorage.setItem('csengeto-videos', JSON.stringify(next)) } catch { /* nem baj */ }
     }
-    load()
-    const t = setInterval(load, 300_000)
-    return () => { alive = false; clearInterval(t) }
+    const onWake = () => { if (!document.hidden) load(true) }
+    const onRefresh = () => { load(true) }
+    load(true)
+    const t = setInterval(() => load(false), 30_000)
+    const ch = supabase
+      .channel(`sulibell-videos-${schoolId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'break_videos', filter: `school_id=eq.${schoolId}` }, () => load(true))
+      .subscribe()
+    window.addEventListener('sulibell:refresh', onRefresh)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
+    return () => {
+      alive = false
+      clearInterval(t)
+      supabase.removeChannel(ch)
+      window.removeEventListener('sulibell:refresh', onRefresh)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
+    }
   }, [schoolId])
   return v
 }

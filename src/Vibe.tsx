@@ -88,8 +88,10 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
     if (!schoolId || !day) return
     let alive = true
 
-    // Próbáljuk lekérni a napi összesítést, ha az update17.sql le van futtatva
-    supabase.rpc('get_vibe_counts', { p_school: schoolId, p_day: day }).then(({ data, error }) => {
+    // Napi összesítés lekérése induláskor, 25 mp-enként és ablakváltáskor
+    const loadDb = async (force = false) => {
+      if (!force && document.hidden) return
+      const { data, error } = await supabase.rpc('get_vibe_counts', { p_school: schoolId, p_day: day })
       if (!alive || error || !data) return
       const dbMap: Record<string, number> = {}
       for (const row of data as { vibe: string; cnt: number }[]) dbMap[row.vibe] = row.cnt
@@ -99,7 +101,16 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
         saveLocalCounts(day, merged)
         return merged
       })
-    })
+    }
+    loadDb(true)
+    const pollTimer = window.setInterval(() => loadDb(false), 25_000)
+    const onWake = () => { if (!document.hidden) loadDb(true) }
+    const onRefresh = () => { loadDb(true) }
+    window.addEventListener('sulibell:refresh', onRefresh)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
 
     // Supabase Realtime Broadcast csatorna (minden eszköz és a TV között élőben)
     const ch = supabase.channel(`sulibell-vibe-${schoolId}`, {
@@ -135,6 +146,12 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
 
     return () => {
       alive = false
+      clearInterval(pollTimer)
+      window.removeEventListener('sulibell:refresh', onRefresh)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
       supabase.removeChannel(ch)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }

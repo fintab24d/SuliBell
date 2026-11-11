@@ -14,7 +14,7 @@ export const voterId = () => {
   } catch { return 'anon-' + Math.random().toString(36).slice(2, 12) }
 }
 
-/** Az aktív szavazás és az állása (5 mp-enként frissül). */
+/** Az aktív szavazás és az állása (valós időben + 5 mp-enként + fókuszváltáskor frissül). */
 export function usePoll(schoolId?: string) {
   const [poll, setPoll] = useState<PollT | null>(null)
   const [counts, setCounts] = useState<number[]>([])
@@ -24,8 +24,34 @@ export function usePoll(schoolId?: string) {
     if (error) return                       // update11.sql még nincs lefuttatva: nincs szavazás
     setPoll(data as PollT | null)
     if (data) { const c = await supabase.rpc('poll_counts', { p_poll: data.id }); if (!c.error) setCounts((c.data as number[]) ?? []) }
+    else setCounts([])
   }, [schoolId])
-  useEffect(() => { refresh(); const t = setInterval(refresh, 5000); return () => clearInterval(t) }, [refresh])
+  useEffect(() => {
+    refresh()
+    const onWake = () => { if (!document.hidden) refresh() }
+    const onRefresh = () => { refresh() }
+    const t = setInterval(() => { if (!document.hidden) refresh() }, 5000)
+    const ch = schoolId
+      ? supabase
+          .channel(`sulibell-polls-${schoolId}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'polls', filter: `school_id=eq.${schoolId}` }, () => refresh())
+          .subscribe()
+      : null
+    window.addEventListener('sulibell:refresh', onRefresh)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
+    return () => {
+      clearInterval(t)
+      if (ch) supabase.removeChannel(ch)
+      window.removeEventListener('sulibell:refresh', onRefresh)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
+    }
+  }, [refresh, schoolId])
   return { poll, counts, refresh }
 }
 

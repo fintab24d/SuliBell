@@ -139,69 +139,74 @@ export function useSchool() {
   const [offline, setOffline] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fingerprintRef = useRef<string>('')
+  const versionRef = useRef<string>('')
   const reloadingRef = useRef(false)
 
   useEffect(() => {
     let alive = true
+    let retryTimer = 0
     const isAdminPage = location.pathname.startsWith('/admin') || location.pathname.startsWith('/teszt')
 
-    const triggerClientReload = async () => {
-      if (isAdminPage || reloadingRef.current) return
-      reloadingRef.current = true
-      await fetchFreshSchool()
-      location.reload()
-    }
-
-    const load = async (checkDiffForReload = false) => {
+    const load = async (broadcastRefresh = true, allowRetry = false) => {
+      clearTimeout(retryTimer)
       const d = await fetchFreshSchool()
       if (!alive) return
       if (!d) {
         setOffline(true)
         setError('Nincs kapcsolat')
+        if (allowRetry && !document.hidden) {
+          retryTimer = window.setTimeout(() => { if (alive) load(broadcastRefresh, false) }, 1500)
+        }
         return
       }
-      const fpData = {
-        ...d,
-        announcements: (d.announcements ?? []).filter(a => !a.text?.startsWith('__MAINT__:')),
-      }
-      const nextFp = JSON.stringify(fpData)
-      const prevFp = fingerprintRef.current
-      fingerprintRef.current = nextFp
 
-      if (checkDiffForReload && prevFp && prevFp !== nextFp && !isAdminPage) {
-        if (!reloadingRef.current) {
-          reloadingRef.current = true
-          location.reload()
-          return
-        }
+      const nextVer = String(d.settings?.site_version ?? '')
+      const prevVer = versionRef.current
+      versionRef.current = nextVer
+
+      // Csak akkor töltjük újra a teljes oldalt, ha az admin ténylegesen verziót frissített
+      if (prevVer && nextVer && prevVer !== nextVer && !isAdminPage && !reloadingRef.current) {
+        reloadingRef.current = true
+        setTimeout(() => { reloadingRef.current = false }, 5000)
+        location.reload()
+        return
       }
+
+      const nextFp = JSON.stringify(d)
+      const changed = fingerprintRef.current !== nextFp
+      fingerprintRef.current = nextFp
 
       setData(d)
       setOffline(false)
       setError(null)
-      window.dispatchEvent(new Event('sulibell:refresh'))
+      if (changed || broadcastRefresh) {
+        window.dispatchEvent(new Event('sulibell:refresh'))
+      }
     }
 
-    load(false)
+    load(true, true)
 
     // 10 másodpercenként háttér-ellenőrzés (csak ha az ablak látható, így kíméli a hálózatot és a CPU-t)
     const t = setInterval(() => {
-      if (!document.hidden) load(true)
+      if (!document.hidden) load(false)
     }, 10_000)
 
-    const onVisible = () => {
-      if (!document.hidden) load(true)
+    const onResume = () => {
+      if (!document.hidden) load(true, true)
     }
-    const onOnline = () => load(true)
+    const onOnline = () => load(true, true)
     const onStorage = (e: StorageEvent) => {
       if (e.key === REV_KEY && e.newValue) {
-        triggerClientReload()
+        load(true)
       }
     }
 
     window.addEventListener('online', onOnline)
+    window.addEventListener('focus', onResume)
+    window.addEventListener('pageshow', onResume)
     window.addEventListener('storage', onStorage)
-    document.addEventListener('visibilitychange', onVisible)
+    document.addEventListener('visibilitychange', onResume)
+    document.addEventListener('resume', onResume)
 
     // Élő Supabase Realtime csatorna az azonnali admin-frissítéshez
     const ch = supabase.channel(GLOBAL_CHANNEL, {
@@ -209,11 +214,11 @@ export function useSchool() {
     })
     ch.on('broadcast', { event: 'admin_change' }, () => {
       if (!alive) return
-      triggerClientReload()
+      load(true)
     })
     ch.on('postgres_changes', { event: '*', schema: 'public' }, () => {
       if (!alive) return
-      load(true)
+      load(false)
     })
     ch.subscribe()
 
@@ -223,7 +228,7 @@ export function useSchool() {
       bc.onmessage = ev => {
         if (!alive) return
         if (ev.data?.type === 'admin_change') {
-          triggerClientReload()
+          load(true)
         }
       }
     } catch { /* ignore */ }
@@ -231,9 +236,13 @@ export function useSchool() {
     return () => {
       alive = false
       clearInterval(t)
+      clearTimeout(retryTimer)
       window.removeEventListener('online', onOnline)
+      window.removeEventListener('focus', onResume)
+      window.removeEventListener('pageshow', onResume)
       window.removeEventListener('storage', onStorage)
-      document.removeEventListener('visibilitychange', onVisible)
+      document.removeEventListener('visibilitychange', onResume)
+      document.removeEventListener('resume', onResume)
       supabase.removeChannel(ch)
       try { bc?.close() } catch { /* ignore */ }
     }

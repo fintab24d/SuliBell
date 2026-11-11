@@ -124,12 +124,20 @@ function Panel() {
     supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }).eq('school_id', d.id)
       .then(({ count, error }) => setSubs(error ? null : count ?? 0))
   }, [d])
+  const [deletedWishIds, setDeletedWishIds] = useState<Set<string>>(() => new Set())
   useEffect(() => {   // szünet-videók és beküldött zenék/videók
     if (!d) return
     supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at').then(({ data, error }) => setVids(error ? null : data ?? []))
-    supabase.from('jukebox_songs').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(50).then(({ data, error }: any) => {
+    supabase.from('jukebox_songs').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(100).then(({ data, error }: any) => {
       if (error || !Array.isArray(data)) return
-      setDbWishes(data.map((r: any) => ({
+      const delIds = new Set<string>()
+      const active: any[] = []
+      for (const r of data) {
+        if (r.deleted) delIds.add(String(r.song_id))
+        else active.push(r)
+      }
+      setDeletedWishIds(delIds)
+      setDbWishes(active.map((r: any) => ({
         id: String(r.song_id),
         day: String(r.day),
         kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mediaModeForDay(String(r.day)),
@@ -697,7 +705,7 @@ function Panel() {
     {can('videos') && (() => {
       const mergedWishes: SongWish[] = [...jbSongs]
       for (const w of [...dbWishes, ...loadAllLocalSongs()]) {
-        if (!mergedWishes.some(x => x.id === w.id)) mergedWishes.push(w)
+        if (!deletedWishIds.has(w.id) && !mergedWishes.some(x => x.id === w.id)) mergedWishes.push(w)
       }
       return (
         <section>
@@ -708,13 +716,25 @@ function Panel() {
                 type="button"
                 onClick={async () => {
                   if (!confirm('Biztosan törlöd az összes beküldött szüneti videót és zenét?')) return
-                  await clearAllSongs(todayStr)
+                  const res = await clearAllSongs(todayStr)
+                  if (res?.error) {
+                    setMsg(`Törlési hiba: ${res.error}`)
+                    return
+                  }
+                  setDeletedWishIds(prev => {
+                    const next = new Set(prev)
+                    for (const w of mergedWishes) next.add(w.id)
+                    return next
+                  })
                   setDbWishes([])
                   if (vids && vids.length > 0) {
                     await run(supabase.from('break_videos').delete().eq('school_id', d.id))
+                    const { data, error } = await supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at')
+                    if (!error && Array.isArray(data)) setVids(data)
                   } else {
                     setMsg('Összes kívánság törölve.')
                   }
+                  notifyAllClients()
                 }}
               >
                 ↺ Összes videó és zene törlése
@@ -772,7 +792,12 @@ function Panel() {
                         <button
                           type="button"
                           onClick={async () => {
-                            await removeSong(w.id, w.day)
+                            const res = await removeSong(w.id, w.day)
+                            if (res?.error) {
+                              setMsg(`Törlési hiba: ${res.error}`)
+                              return
+                            }
+                            setDeletedWishIds(prev => new Set(prev).add(w.id))
                             setDbWishes(prev => prev.filter(x => x.id !== w.id))
                             if (previewWishId === w.id) setPreviewWishId(null)
                             setMsg(`Törölve: ${w.title}`)
@@ -818,7 +843,12 @@ function Panel() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => run(supabase.from('break_videos').delete().eq('id', v.id))}
+                    onClick={async () => {
+                      await run(supabase.from('break_videos').delete().eq('id', v.id))
+                      const { data, error } = await supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at')
+                      if (!error && Array.isArray(data)) setVids(data)
+                      notifyAllClients()
+                    }}
                   >
                     🗑️ Törlés
                   </button>

@@ -91,24 +91,34 @@ export function useMaintenance(
   })
   const chanRef = useRef<any>(null)
   const bcRef = useRef<BroadcastChannel | null>(null)
+  const initAnnRef = useRef(initialAnnouncements)
 
   const apply = useCallback((next: MaintState) => {
     setMaint(next)
     saveLocalMaint(next)
+    try {
+      if (!next.main) localStorage.removeItem('csengeto-maint-dl-main')
+      if (!next.tv) localStorage.removeItem('csengeto-maint-dl-tv')
+    } catch { /* ignore */ }
     maybeReload(next.reloadAt)
   }, [])
 
   useEffect(() => {
     if (!Array.isArray(initialAnnouncements)) return
-    apply(parseMaintFromAnnouncements(initialAnnouncements) ?? DEFAULT_MAINT)
+    const parsed = parseMaintFromAnnouncements(initialAnnouncements)
+    // Első rendereléskor a gyorsítótárból betöltött üres lista ne írja felül a helyi aktív karbantartást;
+    // amint friss hálózati adat érkezik (vagy van aktív karbantartás a listában), azonnal alkalmazzuk.
+    if (initialAnnouncements === initAnnRef.current && !parsed) return
+    initAnnRef.current = initialAnnouncements
+    apply(parsed ?? DEFAULT_MAINT)
   }, [initialAnnouncements, apply])
 
   useEffect(() => {
     if (!schoolId) return
     let alive = true
 
-    const fetchLatest = async () => {
-      if (document.hidden) return
+    const fetchLatest = async (force = false) => {
+      if (!force && document.hidden) return
       const { data, error } = await supabase
         .from('announcements')
         .select('id, text')
@@ -118,8 +128,8 @@ export function useMaintenance(
       apply(parseMaintFromAnnouncements(data as any) ?? DEFAULT_MAINT)
     }
 
-    fetchLatest()
-    const timer = setInterval(fetchLatest, 4_000)
+    fetchLatest(true)
+    const timer = setInterval(() => fetchLatest(false), 4_000)
 
     const ch = supabase.channel(`sulibell-maint-${schoolId}`, {
       config: { broadcast: { self: false } },
@@ -127,6 +137,8 @@ export function useMaintenance(
     ch.on('broadcast', { event: 'maint' }, (msg: any) => {
       if (!alive || !msg?.payload) return
       apply(normalize(msg.payload))
+    }).on('postgres_changes', { event: '*', schema: 'public', table: 'announcements', filter: `school_id=eq.${schoolId}` }, () => {
+      fetchLatest(true)
     }).subscribe()
     chanRef.current = ch
 
@@ -140,9 +152,22 @@ export function useMaintenance(
       bcRef.current = bc
     } catch { /* ignore */ }
 
+    const onWake = () => { if (!document.hidden) fetchLatest(true) }
+    const onRefresh = () => { fetchLatest(true) }
+    window.addEventListener('sulibell:refresh', onRefresh)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
+
     return () => {
       alive = false
       clearInterval(timer)
+      window.removeEventListener('sulibell:refresh', onRefresh)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
       supabase.removeChannel(ch)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }

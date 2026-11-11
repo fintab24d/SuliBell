@@ -149,6 +149,9 @@ export class FxEngine {
     window.addEventListener('pointerdown', this.onDown, { passive: true })
     window.addEventListener('pointermove', this.onMove, { passive: true })
     document.addEventListener('visibilitychange', this.onVis)
+    document.addEventListener('resume', this.onVis)
+    window.addEventListener('focus', this.onVis)
+    window.addEventListener('pageshow', this.onVis)
     this.last = performance.now()
     this.raf = requestAnimationFrame(this.tick)
   }
@@ -160,6 +163,9 @@ export class FxEngine {
     window.removeEventListener('pointerdown', this.onDown)
     window.removeEventListener('pointermove', this.onMove)
     document.removeEventListener('visibilitychange', this.onVis)
+    document.removeEventListener('resume', this.onVis)
+    window.removeEventListener('focus', this.onVis)
+    window.removeEventListener('pageshow', this.onVis)
     this.ctxBg.clearRect(0, 0, this.canvasBg.width, this.canvasBg.height)
     if (this.ctxFg && this.canvasFg) {
       this.ctxFg.clearRect(0, 0, this.canvasFg.width, this.canvasFg.height)
@@ -411,7 +417,11 @@ export class FxEngine {
   private onResize = () => this.resize()
   private onVis = () => {
     if (document.hidden) { cancelAnimationFrame(this.raf) }
-    else if (this.running) { this.last = performance.now(); this.raf = requestAnimationFrame(this.tick) }
+    else if (this.running) {
+      cancelAnimationFrame(this.raf)
+      this.last = performance.now()
+      this.raf = requestAnimationFrame(this.tick)
+    }
   }
   private onDown = (e: PointerEvent) => this.burst(e.clientX, e.clientY, 16, 1)
   private onMove = (e: PointerEvent) => {

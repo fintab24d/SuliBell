@@ -230,28 +230,33 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
     if (!schoolId || !day) return
     let alive = true
 
-    // Opcionális DB toplista lekérés (update17.sql)
-    supabase.rpc('get_arena_leaderboard', { p_school: schoolId, p_day: day }).then(({ data, error }) => {
-      if (!alive || error || !data) return
-      setBoard(prev => {
-        let next = [...prev]
-        for (const r of data as any[]) {
-          next = mergeLeaderboard(next, {
-            playerId: r.player_id,
-            name: r.player_name,
-            mode: r.mode === 'quiz' ? 'quiz' : 'reflex',
-            score: r.score,
-            at: Date.parse(r.created_at) || Date.now(),
-          })
-        }
-        saveLocalLb(day, next)
-        return next
-      })
-    })
+    const loadBoard = async (force = false) => {
+      if (!force && document.hidden) return
+      const { data, error } = await supabase.rpc('get_arena_leaderboard', { p_school: schoolId, p_day: day })
+      if (!alive || error || !Array.isArray(data)) return
+      let next: LeaderEntry[] = []
+      for (const r of data as any[]) {
+        next = mergeLeaderboard(next, {
+          playerId: r.player_id,
+          name: r.player_name,
+          mode: r.mode === 'quiz' ? 'quiz' : 'reflex',
+          score: r.score,
+          at: Date.parse(r.created_at) || Date.now(),
+        })
+      }
+      setBoard(next)
+      saveLocalLb(day, next)
+    }
 
-    // Realtime csatorna
+    loadBoard(true)
+    const pollTimer = window.setInterval(() => loadBoard(false), 20_000)
+
+    // Realtime csatorna + DB változás figyelés
     const ch = supabase.channel(`sulibell-arena-${schoolId}`, {
       config: { broadcast: { self: false } },
+    })
+    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'arena_scores', filter: `school_id=eq.${schoolId}` }, () => {
+      loadBoard(true)
     })
     ch.on('broadcast', { event: 'score' }, (msg: any) => {
       const payload = msg?.payload
@@ -317,8 +322,22 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
       bcRef.current = bc
     } catch { /* ignore */ }
 
+    const onWake = () => { if (!document.hidden) loadBoard(true) }
+    const onRefresh = () => { loadBoard(true) }
+    window.addEventListener('sulibell:refresh', onRefresh)
+    document.addEventListener('visibilitychange', onWake)
+    document.addEventListener('resume', onWake)
+    window.addEventListener('focus', onWake)
+    window.addEventListener('pageshow', onWake)
+
     return () => {
       alive = false
+      clearInterval(pollTimer)
+      window.removeEventListener('sulibell:refresh', onRefresh)
+      document.removeEventListener('visibilitychange', onWake)
+      document.removeEventListener('resume', onWake)
+      window.removeEventListener('focus', onWake)
+      window.removeEventListener('pageshow', onWake)
       supabase.removeChannel(ch)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }
