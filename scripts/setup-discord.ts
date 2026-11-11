@@ -316,9 +316,20 @@ async function main() {
 
   await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
     name: '📋-teendők-roadmap',
-    type: 0,
+    type: 15, // GUILD_FORUM
     parent_id: devCat.id,
-    topic: 'Fejlesztési tervek, következő funkciók és feladatok.',
+    topic: 'Fejlesztési tervek, következő funkciók, folyamatban lévő feladatok és kiadás előtti teendők fóruma.',
+    available_tags: [
+      { name: '📋 Tervezett', emoji_name: '📋' },
+      { name: '🔨 Folyamatban', emoji_name: '🔨' },
+      { name: '🧪 Tesztelés', emoji_name: '🧪' },
+      { name: '✅ Kész', emoji_name: '✅' },
+      { name: '🐛 Bugfix', emoji_name: '🐛' },
+      { name: '✨ Új funkció', emoji_name: '✨' },
+    ],
+    default_reaction_emoji: { emoji_name: '🚀' },
+    default_sort_order: 0,
+    default_forum_layout: 1,
   })
 
   await api(`/guilds/${GUILD_ID}/channels`, 'POST', {

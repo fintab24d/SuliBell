@@ -26,7 +26,9 @@ interface ChannelMap {
   announcements?: string
   updates?: string
   music?: string
+  musicName?: string
   videos?: string
+  videosName?: string
   ideas?: string
   bugs?: string
   logs?: string
@@ -199,14 +201,24 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     if (c.type === 4 && (n.includes('információ') || n.includes('informacio'))) {
       map.infoCat = c.id
     }
+    if (c.type === 15 && (n.includes('ötlet') || n.includes('otlet'))) {
+      map.ideas = c.id
+      continue
+    }
     if (c.type !== 0) continue
     if (n.includes('üdvözlő') || n.includes('udvozlo')) map.welcome = c.id
     else if (n.includes('szabályzat') || n.includes('szabalyzat')) map.rules = c.id
     else if (n.includes('belépés') || n.includes('belepes') || n.includes('kilépés')) map.joins = c.id
     else if (n.includes('közlemény') || n.includes('kozlemeny')) map.announcements = c.id
     else if (n.includes('frissítés') || n.includes('frissites')) map.updates = c.id
-    else if (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene')) map.music = c.id
-    else if (n.includes('videó') || n.includes('video')) map.videos = c.id
+    else if (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene')) {
+      map.music = c.id
+      map.musicName = `#${c.name}`
+    }
+    else if (n.includes('videó') || n.includes('video')) {
+      map.videos = c.id
+      map.videosName = `#${c.name}`
+    }
     else if (n.includes('ötlet') || n.includes('otlet')) map.ideas = c.id
     else if (n.includes('hiba')) map.bugs = c.id
     else if (n.includes('napló') || n.includes('naplo')) map.logs = c.id
@@ -541,6 +553,10 @@ Deno.serve(async (req: Request) => {
       return reply({
         ok: true,
         invite: 'https://discord.gg/uHhbhFB5rC',
+        channels: {
+          music: chMap.musicName,
+          videos: chMap.videosName,
+        },
         songs,
         announcements,
       })

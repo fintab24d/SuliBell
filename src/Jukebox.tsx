@@ -180,6 +180,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   const mode = mediaModeForDay(day)
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
   const [voted, setVoted] = useState<Set<string>>(() => loadVotedSet(day))
+  const [discordChannels, setDiscordChannels] = useState<{ music: string; videos: string }>({
+    music: '#🎵-zenekérés-ötletek',
+    videos: '#🎬-videóbeküldés',
+  })
   const chanRef = useRef<any>(null)
   const bcRef = useRef<BroadcastChannel | null>(null)
   const soundRef = useRef(sound)
@@ -295,10 +299,18 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       })
     }
 
-    // Discord #🎵-zenekérés-ötletek szinkronizáció
+    // Discord #🎵-zenekérés-ötletek és #🎬-videóbeküldés szinkronizáció
     const syncFromDiscord = async () => {
       const res = await fetchDiscordSync()
-      if (!alive || !res.songs.length) return
+      if (!alive) return
+      if (res.channels) {
+        setDiscordChannels(prev => {
+          const music = res.channels?.music || prev.music
+          const videos = res.channels?.videos || prev.videos
+          return prev.music === music && prev.videos === videos ? prev : { music, videos }
+        })
+      }
+      if (!res.songs.length) return
       const del = loadDeletedSet(day)
       setSongs(prev => {
         let next = prev.filter(s => !del.has(s.id))
@@ -702,7 +714,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, voted, mode, addSong, voteSong, removeSong, finishSong, clearAllSongs }
+  return { songs, voted, mode, channels: discordChannels, addSong, voteSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default function Jukebox({
@@ -716,7 +728,7 @@ export default function Jukebox({
   tv?: boolean
   sound?: boolean
 }) {
-  const { songs, voted, mode, addSong, voteSong } = useJukebox(schoolId, day, sound)
+  const { songs, voted, mode, channels, addSong, voteSong } = useJukebox(schoolId, day, sound)
   const isVideoDay = mode === 'video'
   const [title, setTitle] = useState('')
   const [by, setBy] = useState(() => {
@@ -798,6 +810,8 @@ export default function Jukebox({
   }
 
   const quickItems = isVideoDay ? QUICK_VIDEOS : QUICK_SONGS
+  const musicRoom = channels.music || '#🎵-zenekérés-ötletek'
+  const videoRoom = channels.videos || '#🎬-videóbeküldés'
 
   return (
     <section className="panel jukebox">
@@ -810,8 +824,8 @@ export default function Jukebox({
           </div>
           <p className="meta" style={{ margin: 0 }}>
             {isVideoDay
-              ? 'Ma a szünetekben videók mennek! Küldj be videót itt vagy a Discord #🎵-zenekérés-ötletek szobában — automatikusan megjelenik az oldalon!'
-              : 'Ma a szünetekben zenék szólnak! Küldd be a kedvenc számodat itt vagy a Discord #🎵-zenekérés-ötletek szobában — automatikusan szinkronizálódik!'}
+              ? `Ma a szünetekben videók mennek! Küldj be videót itt vagy a Discord ${videoRoom} szobában — automatikusan megjelenik az oldalon!`
+              : `Ma a szünetekben zenék szólnak! Küldd be a kedvenc számodat itt vagy a Discord ${musicRoom} szobában — automatikusan szinkronizálódik!`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -821,7 +835,11 @@ export default function Jukebox({
             rel="noopener noreferrer"
             className="btn"
             style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: '1px solid var(--line)', background: 'rgba(88,101,242,.18)' }}
-            title="Zenekérés a hivatalos SuliBell Discord szerveren"
+            title={
+              isVideoDay
+                ? `Videóbeküldés a hivatalos SuliBell Discord szerveren (${videoRoom})`
+                : `Zenekérés a hivatalos SuliBell Discord szerveren (${musicRoom})`
+            }
           >
             💬 Discord
           </a>
