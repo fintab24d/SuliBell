@@ -1,5 +1,5 @@
 // Egyszerű service worker: az oldal internet nélkül is elindul, online állapotban viszont mindig a legfrissebb verziót adja.
-const CACHE = 'sulibell-v4'
+const CACHE = 'sulibell-v5'
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c =>

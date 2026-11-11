@@ -25,7 +25,7 @@ export function useVideos(schoolId?: string) {
     load(true)
     const t = setInterval(() => load(false), 30_000)
     const ch = supabase
-      .channel(`sulibell-videos-${schoolId}`)
+      .channel(`sulibell-videos-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'break_videos', filter: `school_id=eq.${schoolId}` }, () => load(true))
       .subscribe()
     window.addEventListener('sulibell:refresh', onRefresh)

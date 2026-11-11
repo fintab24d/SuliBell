@@ -33,7 +33,7 @@ export function usePoll(schoolId?: string) {
     const t = setInterval(() => { if (!document.hidden) refresh() }, 5000)
     const ch = schoolId
       ? supabase
-          .channel(`sulibell-polls-${schoolId}`)
+          .channel(`sulibell-polls-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'polls', filter: `school_id=eq.${schoolId}` }, () => refresh())
           .subscribe()
       : null

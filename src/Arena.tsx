@@ -251,12 +251,9 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
     loadBoard(true)
     const pollTimer = window.setInterval(() => loadBoard(false), 20_000)
 
-    // Realtime csatorna + DB változás figyelés
+    // Realtime csatorna + egyedi DB postgres_changes csatorna
     const ch = supabase.channel(`sulibell-arena-${schoolId}`, {
       config: { broadcast: { self: false } },
-    })
-    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'arena_scores', filter: `school_id=eq.${schoolId}` }, () => {
-      loadBoard(true)
     })
     ch.on('broadcast', { event: 'score' }, (msg: any) => {
       const payload = msg?.payload
@@ -287,6 +284,13 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
     })
     ch.subscribe()
     chanRef.current = ch
+
+    const pgCh = supabase
+      .channel(`sulibell-arena-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'arena_scores', filter: `school_id=eq.${schoolId}` }, () => {
+        loadBoard(true)
+      })
+      .subscribe()
 
     let bc: BroadcastChannel | null = null
     try {
@@ -339,6 +343,7 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
       window.removeEventListener('focus', onWake)
       window.removeEventListener('pageshow', onWake)
       supabase.removeChannel(ch)
+      supabase.removeChannel(pgCh)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }
       bcRef.current = null

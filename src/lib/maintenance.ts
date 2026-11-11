@@ -137,9 +137,13 @@ export function useMaintenance(
     ch.on('broadcast', { event: 'maint' }, (msg: any) => {
       if (!alive || !msg?.payload) return
       apply(normalize(msg.payload))
-    }).on('postgres_changes', { event: '*', schema: 'public', table: 'announcements', filter: `school_id=eq.${schoolId}` }, () => {
-      fetchLatest(true)
     }).subscribe()
+    const pgCh = supabase
+      .channel(`sulibell-maint-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements', filter: `school_id=eq.${schoolId}` }, () => {
+        fetchLatest(true)
+      })
+      .subscribe()
     chanRef.current = ch
 
     let bc: BroadcastChannel | null = null
@@ -169,6 +173,7 @@ export function useMaintenance(
       window.removeEventListener('focus', onWake)
       window.removeEventListener('pageshow', onWake)
       supabase.removeChannel(ch)
+      supabase.removeChannel(pgCh)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }
       bcRef.current = null

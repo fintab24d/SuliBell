@@ -340,10 +340,17 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     window.addEventListener('pageshow', onResume)
     window.addEventListener('sulibell:refresh', onResume)
 
-    // Realtime csatorna (Broadcast + DB postgres_changes)
+    // Realtime csatorna (Broadcast) + egyedi DB postgres_changes csatorna
     const ch = supabase.channel(`sulibell-jukebox-${schoolId}`, {
       config: { broadcast: { self: false } },
     })
+    const pgCh = supabase
+      .channel(`sulibell-jukebox-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jukebox_songs', filter: `school_id=eq.${schoolId}` }, () => {
+        if (!alive) return
+        syncFromDb()
+      })
+      .subscribe()
     ch.on('broadcast', { event: 'song' }, (msg: any) => {
       const payload = msg?.payload
       if (!alive || !payload?.song) return
@@ -403,10 +410,6 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         return next
       })
     })
-    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'jukebox_songs', filter: `school_id=eq.${schoolId}` }, () => {
-      if (!alive) return
-      syncFromDb()
-    })
     ch.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {
         ch.send({ type: 'broadcast', event: 'sync_req', payload: { day } }).catch?.(() => {})
@@ -461,6 +464,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       window.removeEventListener('pageshow', onResume)
       window.removeEventListener('sulibell:refresh', onResume)
       supabase.removeChannel(ch)
+      supabase.removeChannel(pgCh)
       chanRef.current = null
       try { bc?.close() } catch { /* ignore */ }
       bcRef.current = null

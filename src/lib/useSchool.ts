@@ -216,11 +216,15 @@ export function useSchool() {
       if (!alive) return
       load(true)
     })
-    ch.on('postgres_changes', { event: '*', schema: 'public' }, () => {
-      if (!alive) return
-      load(false)
-    })
     ch.subscribe()
+
+    const pgCh = supabase
+      .channel(`sulibell-global-pg-${SCHOOL_SLUG}-${Math.random().toString(36).slice(2, 8)}`)
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        if (!alive) return
+        load(false)
+      })
+      .subscribe()
 
     let bc: BroadcastChannel | null = null
     try {
@@ -244,6 +248,7 @@ export function useSchool() {
       document.removeEventListener('visibilitychange', onResume)
       document.removeEventListener('resume', onResume)
       supabase.removeChannel(ch)
+      supabase.removeChannel(pgCh)
       try { bc?.close() } catch { /* ignore */ }
     }
   }, [])
