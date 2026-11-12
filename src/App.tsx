@@ -394,6 +394,36 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const partners = parsePartnersFromAnnouncements(data.announcements)
   const partnersBox = !tv && partners.length > 0 && <section className="panel partners-panel"><div className="tag">🤝 Társoldalak és hasznos linkek</div><div className="partners-grid">{partners.map(p => <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="partner-card"><span className="p-ico" aria-hidden="true">{p.icon || '🌐'}</span><div className="p-info"><b>{p.name}</b>{p.desc && <small>{p.desc}</small>}</div><span className="p-arr" aria-hidden="true">↗</span></a>)}</div></section>
   const kofi = parseKofiFromAnnouncements(data.announcements)
+  const kofiHref = kofi.url && !/^https?:\/\/(www\.)?ko-fi\.com\/?$/i.test(kofi.url) ? kofi.url : 'https://ko-fi.com/sulibell'
+  const kofiTvBox = tv && (
+    <section className="panel kofi-tv">
+      <div className="kofi-tv-left">
+        <div className="kofi-tv-head">
+          <div className="tag" style={{ marginBottom: 0 }}>☕ Ko-fi &amp; VIP</div>
+          <span className="kofi-vip-pill">💎 VIP</span>
+        </div>
+        {kofi.donors.length === 0 ? (
+          <p className="kofi-tv-empty">
+            Támogasd az oldalt &amp; szerezd meg a <b>💎 VIP</b> rangot Discordon!
+          </p>
+        ) : (
+          <ul className="kofi-tv-list">
+            {kofi.donors.slice(0, 3).map((d, idx) => (
+              <li key={d.id}>
+                <span>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
+                <b>{d.name}</b>
+                <small>{formatDonationAmount(d.amount, d.currency)}</small>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="kofi-tv-qr">
+        <img src="/kofi-qr.png" alt="Ko-fi QR-kód" />
+        <span>ko-fi.com/sulibell</span>
+      </div>
+    </section>
+  )
   const kofiBox = !tv && (
     <section className="panel kofi-panel">
       <div className="kofi-head">
@@ -404,7 +434,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         Tetszik a SuliBell? Támogasd az oldal fejlesztését Ko-fi-n! A támogatók felkerülnek a <b>🏆 Támogatói Toplistára</b>, és ha az üzenetbe beírod a Discord nevedet, automatikusan megkapod a <b>💎 VIP Támogató</b> rangot és a privát VIP szobákat (<b>#💎-vip-társalgó</b>, <b>#👑-vip-zenekérés +2 szavazattal</b>)!
       </p>
       <div className="kofi-actions">
-        <a href={kofi.url && !/^https?:\/\/(www\.)?ko-fi\.com\/?$/i.test(kofi.url) ? kofi.url : 'https://ko-fi.com/sulibell'} target="_blank" rel="noopener noreferrer" className="kofi-cta">
+        <a href={kofiHref} target="_blank" rel="noopener noreferrer" className="kofi-cta">
           <span className="kofi-cup" aria-hidden="true">☕</span>
           <span>Támogatás Ko-fi-n</span>
           <span aria-hidden="true">↗</span>
@@ -647,6 +677,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
                     <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} tv />
                     <Jukebox schoolId={data.id} day={z.date} tv />
+                    {kofiTvBox}
                   </div>
                 </>
               ) : (
@@ -660,6 +691,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
                     <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} tv />
                     <Jukebox schoolId={data.id} day={z.date} tv />
+                    {kofiTvBox}
                   </div>
                 </>
               )}
