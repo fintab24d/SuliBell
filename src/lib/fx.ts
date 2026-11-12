@@ -164,7 +164,6 @@ export class FxEngine {
   private frame = 0
   private time = 0
   private running = false
-  private lastTrail = 0
   private wkind: WeatherKind = 'none'
   private wpow = 0
   private drops: Drop[] = []
@@ -254,7 +253,6 @@ export class FxEngine {
     window.addEventListener('resize', this.onResize)
     window.addEventListener('scroll', this.onScroll, { passive: true })
     window.addEventListener('pointerdown', this.onDown, { passive: true })
-    window.addEventListener('pointermove', this.onMove, { passive: true })
     document.addEventListener('visibilitychange', this.onVis)
     document.addEventListener('resume', this.onVis)
     window.addEventListener('focus', this.onVis)
@@ -271,7 +269,6 @@ export class FxEngine {
     window.removeEventListener('resize', this.onResize)
     window.removeEventListener('scroll', this.onScroll)
     window.removeEventListener('pointerdown', this.onDown)
-    window.removeEventListener('pointermove', this.onMove)
     document.removeEventListener('visibilitychange', this.onVis)
     document.removeEventListener('resume', this.onVis)
     window.removeEventListener('focus', this.onVis)
@@ -630,15 +627,6 @@ export class FxEngine {
     }
   }
   private onDown = (e: PointerEvent) => this.burst(e.clientX, e.clientY, 16, 1)
-  private onMove = (e: PointerEvent) => {
-    if (e.pointerType !== 'mouse') return
-    const n = performance.now()
-    if (n - this.lastTrail < (this.lowSpec ? 75 : 42)) return
-    this.lastTrail = n
-    const cnt = this.lowSpec ? 1 : 2
-    for (let i = 0; i < cnt; i++) this.sparks.push({ x: e.clientX, y: e.clientY, vx: rnd(-30, 30), vy: rnd(-30, 30), r: rnd(2, 4), life: rnd(0.4, 0.9), max: 0.9, ci: this.pick(0.4) })
-    this.capSparks()
-  }
   private pick(focusWeight: number) { return Math.random() < focusWeight ? this.focus : (Math.random() * this.pal.length) | 0 }
   private capSparks() {
     const maxSparks = this.lowSpec ? 320 : 650
