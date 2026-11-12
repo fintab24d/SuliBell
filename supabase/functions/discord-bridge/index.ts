@@ -202,8 +202,10 @@ async function runVipSetup(map: ChannelMap) {
     })
   }
 
+  const vipCategoryOverwrites = vipPrivateOverwrites
+
   const vipInfoOverwrites: any[] = [
-    { id: guildId, type: 0, allow: pStr(PERM.VIEW_CHANNEL, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS), deny: pStr(PERM.SEND_MESSAGES) }
+    { id: guildId, type: 0, deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES), allow: '0' }
   ]
   if (botId) {
     vipInfoOverwrites.push({
@@ -218,7 +220,7 @@ async function runVipSetup(map: ChannelMap) {
       id: vipRoleId,
       type: 0,
       allow: pStr(PERM.VIEW_CHANNEL, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS),
-      deny: '0'
+      deny: pStr(PERM.SEND_MESSAGES)
     })
   }
   for (const srId of staffIds) {
@@ -231,7 +233,7 @@ async function runVipSetup(map: ChannelMap) {
   }
 
   const vipVoiceOverwrites: any[] = [
-    { id: guildId, type: 0, allow: pStr(PERM.VIEW_CHANNEL), deny: pStr(PERM.CONNECT, PERM.SPEAK) }
+    { id: guildId, type: 0, deny: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT, PERM.SPEAK), allow: '0' }
   ]
   if (botId) {
     vipVoiceOverwrites.push({
@@ -258,19 +260,24 @@ async function runVipSetup(map: ChannelMap) {
     })
   }
 
-  // 2. Ensure "💎 VIP ZÓNA" category exists
+  // 2. Ensure "💎 VIP ZÓNA" category exists with strictly private permissions
   if (!map.vipCat) {
     const cat = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
       name: '💎 VIP ZÓNA',
       type: 4,
-      position: 2
+      position: 2,
+      permission_overwrites: vipCategoryOverwrites
     }).catch(() => null)
     if (cat?.id) {
       map.vipCat = cat.id
     }
+  } else {
+    await discordApi(`/channels/${map.vipCat}`, 'PATCH', {
+      permission_overwrites: vipCategoryOverwrites
+    }).catch(() => {})
   }
 
-  // 3. Ensure "#🎁-vip-infó-és-fal" exists
+  // 3. Ensure "#🎁-vip-infó-és-fal" exists and has strict VIP-only view permissions
   if (!map.vipInfo && map.vipCat) {
     const ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
       name: '🎁-vip-infó-és-fal',
@@ -301,6 +308,11 @@ async function runVipSetup(map: ChannelMap) {
         }]
       }).catch(() => {})
     }
+  } else if (map.vipInfo) {
+    await discordApi(`/channels/${map.vipInfo}`, 'PATCH', {
+      parent_id: map.vipCat,
+      permission_overwrites: vipInfoOverwrites
+    }).catch(() => {})
   }
 
   // 4. Ensure "#💎-vip-társalgó" exists
@@ -322,6 +334,11 @@ async function runVipSetup(map: ChannelMap) {
         }]
       }).catch(() => {})
     }
+  } else if (map.vipChat) {
+    await discordApi(`/channels/${map.vipChat}`, 'PATCH', {
+      parent_id: map.vipCat,
+      permission_overwrites: vipPrivateOverwrites
+    }).catch(() => {})
   }
 
   // 5. Ensure "#👑-vip-zenekérés" exists
@@ -343,6 +360,11 @@ async function runVipSetup(map: ChannelMap) {
         }]
       }).catch(() => {})
     }
+  } else if (map.vipMusic) {
+    await discordApi(`/channels/${map.vipMusic}`, 'PATCH', {
+      parent_id: map.vipCat,
+      permission_overwrites: vipPrivateOverwrites
+    }).catch(() => {})
   }
 
   // 6. Ensure "🔊 VIP Társalgó" voice channel exists
@@ -356,6 +378,11 @@ async function runVipSetup(map: ChannelMap) {
     if (ch?.id) {
       map.vipVoice = ch.id
     }
+  } else if (map.vipVoice) {
+    await discordApi(`/channels/${map.vipVoice}`, 'PATCH', {
+      parent_id: map.vipCat,
+      permission_overwrites: vipVoiceOverwrites
+    }).catch(() => {})
   }
 }
 

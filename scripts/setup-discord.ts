@@ -323,6 +323,7 @@ async function main() {
   const vipCat = await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
     name: '💎 VIP ZÓNA',
     type: 4,
+    permission_overwrites: vipPrivateOverwrites,
   })
 
   await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
@@ -330,7 +331,15 @@ async function main() {
     type: 0,
     parent_id: vipCat.id,
     topic: '☕ SuliBell Ko-fi támogatók dicsőségfala és VIP rang információk!',
-    permission_overwrites: readOnlyOverwrites,
+    permission_overwrites: [
+      ...devOnlyOverwrites,
+      {
+        id: vipRole.id,
+        type: 0,
+        allow: perm(P.VIEW_CHANNEL, P.READ_MESSAGE_HISTORY, P.ADD_REACTIONS),
+        deny: perm(P.SEND_MESSAGES),
+      },
+    ],
   })
 
   await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
