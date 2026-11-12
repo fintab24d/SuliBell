@@ -834,3 +834,199 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 [data-perf=lite] .timebox .digits.neon{animation-timing-function:steps(18,end)}
 
 @media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i,.digits.neon .dg,.digits.neon .dg-sep,.timebox .digits.neon,.viz-disc.spin,.viz-ring,.viz-bar{animation:none}}
+
+
+/* ===== Ko-fi Támogatás & VIP Toplista ===== */
+.kofi-panel {
+  border-color: color-mix(in srgb, #facc15 35%, var(--bdr));
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(250, 204, 21, 0.11), transparent 60%),
+    radial-gradient(100% 80% at 0% 100%, rgba(255, 79, 195, 0.08), transparent 60%),
+    var(--card);
+}
+.kofi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.kofi-vip-pill {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.22), rgba(245, 158, 11, 0.28));
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  color: #fde047;
+  letter-spacing: 0.03em;
+}
+:root[data-theme="light"] .kofi-vip-pill {
+  color: #92400e;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.3), rgba(245, 158, 11, 0.22));
+  border-color: rgba(217, 119, 6, 0.45);
+}
+.kofi-sub {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--mut);
+}
+.kofi-sub b {
+  color: var(--txt);
+}
+.kofi-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.kofi-cta {
+  flex: 1 1 170px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  color: #fff;
+  background: linear-gradient(135deg, #ff5e5b, #ff2e93);
+  box-shadow: 0 6px 18px rgba(255, 94, 91, 0.32);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.kofi-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(255, 94, 91, 0.45);
+  filter: brightness(1.05);
+}
+.kofi-cup {
+  font-size: 16px;
+}
+.kofi-dc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--txt);
+  background: color-mix(in srgb, #5865f2 18%, var(--card2));
+  border: 1px solid color-mix(in srgb, #5865f2 45%, var(--bdr));
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.kofi-dc-btn:hover {
+  transform: translateY(-1px);
+  border-color: #5865f2;
+}
+.kofi-board {
+  background: var(--card2);
+  border: 1px solid var(--bdr);
+  border-radius: 13px;
+  padding: 10px;
+}
+.kofi-board-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  color: var(--txt);
+}
+.kofi-board-title small {
+  font-weight: 600;
+  color: var(--mut);
+}
+.kofi-empty {
+  font-size: 12px;
+  color: var(--mut);
+  text-align: center;
+  padding: 8px 6px;
+  line-height: 1.45;
+}
+.kofi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kofi-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--bdr);
+}
+.kofi-item.kofi-top-1 {
+  border-color: rgba(250, 204, 21, 0.55);
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.13), transparent 85%), var(--card);
+}
+.kofi-item.kofi-top-2 {
+  border-color: rgba(148, 163, 184, 0.45);
+}
+.kofi-item.kofi-top-3 {
+  border-color: rgba(217, 119, 6, 0.45);
+}
+.kofi-rank {
+  font-size: 16px;
+  min-width: 24px;
+  text-align: center;
+  font-weight: 800;
+}
+.kofi-donor-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kofi-donor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.kofi-donor-name {
+  font-size: 13px;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kofi-donor-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(250, 204, 21, 0.2);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  color: #eab308;
+}
+:root[data-theme="light"] .kofi-donor-badge {
+  color: #a16207;
+}
+.kofi-donor-msg {
+  font-size: 11px;
+  color: var(--mut);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kofi-donor-amt {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #facc15;
+  white-space: nowrap;
+}
+:root[data-theme="light"] .kofi-donor-amt {
+  color: #b45309;
+}

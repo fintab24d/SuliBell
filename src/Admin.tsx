@@ -7,6 +7,7 @@ import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from '.
 import { useArenaLeaderboard } from './Arena'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
+import { isKofiAnnouncement, parseKofiFromAnnouncements, saveKofiToDb, formatDonationAmount, grantDiscordVipRole } from './lib/kofi'
 import { checkProfanity, isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements, saveBannedWordsToDb } from './lib/moderation'
 import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
@@ -82,6 +83,8 @@ function Panel() {
   const [ev, setEv] = useState({ title: '', kind: 'other', date: '', time: '00:00' })
   const [an, setAn] = useState({ text: '', until: '' })
   const [pt, setPt] = useState({ icon: '🌐', name: '', url: '', desc: '' })
+  const [kf, setKf] = useState({ name: '', amount: '1000', currency: 'HUF', discord: '', message: '' })
+  const [kfUrl, setKfUrl] = useState('')
   const [sd, setSd] = useState({ day: '', schedule_id: '' })
   const [chg, setChg] = useState({ day: todayStr, kind: 'cancel', lesson_label: '', text: '' })
   const [mn, setMn] = useState({ day: todayStr, text: '' })
@@ -531,12 +534,168 @@ function Panel() {
         {(ev.title || ev.date || ev.kind !== 'other' || ev.time !== '00:00') && <button type="button" onClick={() => setEv({ title: '', kind: 'other', date: '', time: '00:00' })}>↺ Alaphelyzet</button>}</div>
     </section>}
 
+    {can('announcements') && (() => {
+      const kofiCfg = parseKofiFromAnnouncements(d.announcements)
+      const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || 'https://rqetnqxlkwqrrhoqlptc.supabase.co'}/functions/v1/discord-bridge`
+      return (
+        <section>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2>☕ Ko-fi Támogatás, Webhook & 💎 Discord VIP Toplista</h2>
+            {kofiCfg.donors.length > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!confirm('Biztosan törlöd az összes támogatót a toplistáról?')) return
+                  await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: [] })
+                  setMsg('Ko-fi toplista ürítve.')
+                  load()
+                }}
+              >
+                ↺ Toplista ürítése
+              </button>
+            )}
+          </div>
+          <p className="sub">
+            Itt állíthatod be a Ko-fi oldalad linkjét és kezelheted a támogatói toplistát. Ha a Ko-fi-n a <b>Webhooks</b> menüpontban beállítod az alábbi Webhook URL-t, minden új támogatás <b>automatikusan</b> megjelenik a weboldalon, bekerül a Discord <b>#🎁-vip-infó-és-fal</b> szobába, és a támogató megkapja a <b>💎 VIP Támogató</b> rangot!
+          </p>
+          <div className="row" style={{ marginBottom: 8 }}>
+            <label>☕ Ko-fi profil URL
+              <input
+                placeholder="https://ko-fi.com/..."
+                value={kfUrl || kofiCfg.url}
+                onChange={e => setKfUrl(e.target.value)}
+                style={{ minWidth: 260 }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={async () => {
+                const nextUrl = (kfUrl || kofiCfg.url).trim() || 'https://ko-fi.com/sulibell'
+                await saveKofiToDb(d.id, d.announcements ?? [], { url: nextUrl, donors: kofiCfg.donors })
+                setMsg('Ko-fi profil URL elmentve!')
+                load()
+              }}
+            >
+              💾 URL mentése
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(webhookUrl)
+                setMsg('Ko-fi Webhook URL vágólapra másolva!')
+              }}
+            >
+              📋 Ko-fi Webhook URL másolása
+            </button>
+          </div>
+          <div className="row" style={{ marginBottom: 10, fontSize: 12, opacity: 0.85 }}>
+            <span>🔗 <b>Ko-fi Webhook URL:</b> <code>{webhookUrl}</code></span>
+          </div>
+          {kofiCfg.donors.map((dn, idx) => (
+            <div className="row" key={dn.id} style={{ justifyContent: 'space-between', borderBottom: '1px solid rgba(128,128,128,.18)', padding: '6px 0' }}>
+              <span>
+                <b>#{idx + 1} {dn.name}</b> — <b style={{ color: '#facc15' }}>{formatDonationAmount(dn.amount, dn.currency)}</b>
+                {dn.discord && <span style={{ marginLeft: 8, opacity: 0.85 }}>• Discord: <code>@{dn.discord}</code></span>}
+                {dn.vip_granted && <span style={{ marginLeft: 8, color: '#39ff7a' }}>✅ 💎 VIP kiosztva</span>}
+                {dn.message && <span style={{ marginLeft: 8, opacity: 0.75 }}>„{dn.message}”</span>}
+              </span>
+              <div className="row">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMsg('Discord VIP rang kiosztása folyamatban…')
+                    const res = await grantDiscordVipRole({
+                      discord: dn.discord || dn.name,
+                      name: dn.name,
+                      amount: dn.amount,
+                      currency: dn.currency,
+                      message: dn.message,
+                      announce: false
+                    })
+                    if (res.vipGranted) {
+                      const updated = kofiCfg.donors.map(x => x.id === dn.id ? { ...x, vip_granted: true, discord: res.discordUsername || x.discord, discord_user_id: res.discordUserId || x.discord_user_id } : x)
+                      await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: updated })
+                      setMsg(`💎 VIP Támogató rang sikeresen kiosztva (@${res.discordUsername || dn.name})!`)
+                      load()
+                    } else {
+                      setMsg('Nem található ilyen Discord tag a szerveren (amint belép, automatikusan megkapja!).')
+                    }
+                  }}
+                >
+                  💎 VIP rang kiosztása
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const updated = kofiCfg.donors.filter(x => x.id !== dn.id)
+                    await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: updated })
+                    setMsg('Támogató eltávolítva.')
+                    load()
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+          <form
+            className="row"
+            style={{ marginTop: 10 }}
+            onSubmit={async e => {
+              e.preventDefault()
+              if (!kf.name.trim()) return
+              setMsg('Támogató mentése és Discord VIP rang szinkronizálása…')
+              const amt = Math.max(0, Number(kf.amount) || 0)
+              const vipRes = await grantDiscordVipRole({
+                name: kf.name.trim(),
+                amount: amt,
+                currency: kf.currency,
+                discord: kf.discord.trim() || undefined,
+                message: kf.message.trim() || undefined,
+                announce: true
+              })
+              if (!vipRes.ok) {
+                const nextDonors = [
+                  ...kofiCfg.donors,
+                  {
+                    id: `kofi_${Date.now().toString(36)}`,
+                    name: kf.name.trim(),
+                    amount: amt,
+                    currency: kf.currency,
+                    discord: kf.discord.trim() || undefined,
+                    vip_granted: !!vipRes.vipGranted,
+                    message: kf.message.trim() || undefined,
+                    date: todayStr
+                  }
+                ]
+                await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: nextDonors })
+              }
+              setKf({ name: '', amount: '1000', currency: 'HUF', discord: '', message: '' })
+              setMsg(vipRes.vipGranted ? 'Támogató hozzáadva + 💎 Discord VIP rang kiosztva!' : 'Támogató hozzáadva a toplistához és beküldve a Discord VIP falra!')
+              load()
+            }}
+          >
+            <input placeholder="Támogató neve" value={kf.name} onChange={e => setKf({ ...kf, name: e.target.value })} required />
+            <input type="number" min="0" step="any" placeholder="Összeg" value={kf.amount} onChange={e => setKf({ ...kf, amount: e.target.value })} style={{ width: 95 }} required />
+            <select value={kf.currency} onChange={e => setKf({ ...kf, currency: e.target.value })}>
+              <option value="HUF">Ft (HUF)</option>
+              <option value="EUR">€ (EUR)</option>
+              <option value="USD">$ (USD)</option>
+            </select>
+            <input placeholder="Discord név (pl. @user)" value={kf.discord} onChange={e => setKf({ ...kf, discord: e.target.value })} />
+            <input placeholder="Rövid üzenet (opcionális)" value={kf.message} onChange={e => setKf({ ...kf, message: e.target.value })} />
+            <button>+ Támogató felvétele & VIP</button>
+          </form>
+        </section>
+      )
+    })()}
+
     {can('announcements') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h2>Közlemények (főoldal és TV)</h2>
-        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%').not('text', 'like', '__BANNED_WORDS__:%'))}>↺ Összes közlemény törlése</button>}
+        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%').not('text', 'like', '__KOFI__:%').not('text', 'like', '__BANNED_WORDS__:%'))}>↺ Összes közlemény törlése</button>}
       </div>
-      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
+      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
         <button onClick={() => setAn({ text: n.text, until: n.active_until ?? '' })}>Szerkesztés</button>
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />

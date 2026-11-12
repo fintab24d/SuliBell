@@ -14,6 +14,7 @@ import Jukebox, { mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
 import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/partners'
+import { isKofiAnnouncement, parseKofiFromAnnouncements, formatDonationAmount } from './lib/kofi'
 import { isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements } from './lib/moderation'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
@@ -387,11 +388,63 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
   const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[])
-    .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
+    .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
     .concat(discordNotes.map(dn => ({ id: dn.id, text: dn.text, active_until: null })))
   parseBannedWordsFromAnnouncements(data.announcements)
   const partners = parsePartnersFromAnnouncements(data.announcements)
   const partnersBox = !tv && partners.length > 0 && <section className="panel partners-panel"><div className="tag">🤝 Társoldalak és hasznos linkek</div><div className="partners-grid">{partners.map(p => <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="partner-card"><span className="p-ico" aria-hidden="true">{p.icon || '🌐'}</span><div className="p-info"><b>{p.name}</b>{p.desc && <small>{p.desc}</small>}</div><span className="p-arr" aria-hidden="true">↗</span></a>)}</div></section>
+  const kofi = parseKofiFromAnnouncements(data.announcements)
+  const kofiBox = !tv && (
+    <section className="panel kofi-panel">
+      <div className="kofi-head">
+        <div className="tag" style={{ marginBottom: 0 }}>☕ Ko-fi Támogatás & 💎 VIP Toplista</div>
+        <span className="kofi-vip-pill">💎 Discord VIP</span>
+      </div>
+      <p className="kofi-sub">
+        Tetszik a SuliBell? Támogasd az oldal fejlesztését Ko-fi-n! A támogatók felkerülnek a <b>🏆 Támogatói Toplistára</b>, és ha az üzenetbe beírod a Discord nevedet, automatikusan megkapod a <b>💎 VIP Támogató</b> rangot és a privát VIP szobákat (<b>#💎-vip-társalgó</b>, <b>#👑-vip-zenekérés +2 szavazattal</b>)!
+      </p>
+      <div className="kofi-actions">
+        <a href={kofi.url} target="_blank" rel="noopener noreferrer" className="kofi-cta">
+          <span className="kofi-cup" aria-hidden="true">☕</span>
+          <span>Támogatás Ko-fi-n</span>
+          <span aria-hidden="true">↗</span>
+        </a>
+        <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="kofi-dc-btn" title="Csatlakozz a Discord szerverhez a VIP szobákért!">
+          💎 VIP Szobák (Discord)
+        </a>
+      </div>
+      <div className="kofi-board">
+        <div className="kofi-board-title">
+          <span>🏆 Támogatói Toplista</span>
+          <small>{kofi.donors.length > 0 ? `${kofi.donors.length} támogató` : 'Legyél te az első!'}</small>
+        </div>
+        {kofi.donors.length === 0 ? (
+          <div className="kofi-empty">
+            🌟 Még senki sem került fel a toplistára — támogasd az oldalt Ko-fi-n, és szerezd meg elsőként a <b>💎 VIP Támogató</b> rangot!
+          </div>
+        ) : (
+          <div className="kofi-list">
+            {kofi.donors.slice(0, 10).map((d, idx) => {
+              const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`
+              return (
+                <div key={d.id} className={`kofi-item ${idx < 3 ? `kofi-top-${idx + 1}` : ''}`}>
+                  <span className="kofi-rank">{medal}</span>
+                  <div className="kofi-donor-main">
+                    <div className="kofi-donor-row">
+                      <b className="kofi-donor-name">{d.name}</b>
+                      <span className="kofi-donor-badge" title="Discord VIP Támogató">💎 VIP</span>
+                    </div>
+                    {d.message && <small className="kofi-donor-msg">„{d.message}”</small>}
+                  </div>
+                  <span className="kofi-donor-amt">{formatDonationAmount(d.amount, d.currency)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  )
   const note = notes.length ? notes[Math.floor(now.getTime() / 10000) % notes.length] : null
 
   // ---- Visszaszámláló kártyák ----
@@ -599,6 +652,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               ) : (
                 <>
                   {pollCard}
+            {kofiBox}
             {partnersBox}
                   {restBox || (events[0] && evCard(events[0], 0))}
                   <div className="tv-subgrid">
@@ -785,6 +839,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} sound={!!data.settings.sound_enabled && audioOn} />
 
             {pollCard}
+            {kofiBox}
             {partnersBox}
           </div>
         </div>

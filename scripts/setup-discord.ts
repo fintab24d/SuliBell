@@ -292,6 +292,70 @@ async function main() {
     parent_id: commCat.id,
   })
 
+  // --- II/B. VIP ZÓNA (KO-FI TÁMOGATÓK) ---
+  console.log('💎 VIP Támogató rang és VIP Zóna létrehozása...')
+  const vipRole = await api(`/guilds/${GUILD_ID}/roles`, 'POST', {
+    name: '💎 VIP Támogató',
+    color: 0xfacc15,
+    hoist: true,
+    mentionable: true,
+  })
+
+  const vipPrivateOverwrites = [
+    ...devOnlyOverwrites,
+    {
+      id: vipRole.id,
+      type: 0,
+      allow: perm(
+        P.VIEW_CHANNEL,
+        P.SEND_MESSAGES,
+        P.EMBED_LINKS,
+        P.ATTACH_FILES,
+        P.READ_MESSAGE_HISTORY,
+        P.ADD_REACTIONS,
+        P.CONNECT,
+        P.SPEAK
+      ),
+      deny: '0',
+    },
+  ]
+
+  const vipCat = await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
+    name: '💎 VIP ZÓNA',
+    type: 4,
+  })
+
+  await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
+    name: '🎁-vip-infó-és-fal',
+    type: 0,
+    parent_id: vipCat.id,
+    topic: '☕ SuliBell Ko-fi támogatók dicsőségfala és VIP rang információk!',
+    permission_overwrites: readOnlyOverwrites,
+  })
+
+  await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
+    name: '💎-vip-társalgó',
+    type: 0,
+    parent_id: vipCat.id,
+    topic: '💎 Exkluzív VIP társalgó a SuliBell Ko-fi támogatóinak és a csapatnak.',
+    permission_overwrites: vipPrivateOverwrites,
+  })
+
+  await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
+    name: '👑-vip-zenekérés',
+    type: 0,
+    parent_id: vipCat.id,
+    topic: '👑 VIP Zenekérés — az ide beküldött zenék és videók 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
+    permission_overwrites: vipPrivateOverwrites,
+  })
+
+  await api(`/guilds/${GUILD_ID}/channels`, 'POST', {
+    name: '🔊 VIP Társalgó',
+    type: 2,
+    parent_id: vipCat.id,
+    permission_overwrites: vipPrivateOverwrites,
+  })
+
   // --- III. PRIVÁT FEJLESZTŐI ZÓNA (DEV ONLY) ---
   console.log('🔒 Privát Fejlesztői Zóna (Dev) létrehozása...')
   const devCat = await api(`/guilds/${GUILD_ID}/channels`, 'POST', {

@@ -34,12 +34,513 @@ interface ChannelMap {
   logs?: string
   deployGit?: string
   studentRoleId?: string
+  vipCat?: string
+  vipInfo?: string
+  vipChat?: string
+  vipMusic?: string
+  vipVoice?: string
+  vipRoleId?: string
+  staffRoleIds?: string[]
   fetchedAt: number
 }
 
 let cachedChannels: ChannelMap | null = null
 let intentChecked = false
 let welcomeSetupDone = false
+let vipSetupDone = false
+
+const KOFI_PREFIX = '__KOFI__:'
+const PERM = {
+  VIEW_CHANNEL: 1n << 10n,
+  SEND_MESSAGES: 1n << 11n,
+  EMBED_LINKS: 1n << 14n,
+  ATTACH_FILES: 1n << 15n,
+  READ_MESSAGE_HISTORY: 1n << 16n,
+  ADD_REACTIONS: 1n << 6n,
+  CONNECT: 1n << 20n,
+  SPEAK: 1n << 21n,
+}
+const pStr = (...bits: bigint[]) => bits.reduce((a, b) => a | b, 0n).toString()
+
+interface KofiDonorEntry {
+  id: string
+  name: string
+  amount: number
+  currency: string
+  discord?: string
+  discord_user_id?: string
+  vip_granted?: boolean
+  message?: string
+  date: string
+}
+
+interface KofiConfigPayload {
+  url: string
+  donors: KofiDonorEntry[]
+}
+
+async function getKofiConfigFromSupabase(): Promise<{ rowId?: string; schoolId?: string; config: KofiConfigPayload }> {
+  const sbUrl = Deno.env.get('SUPABASE_URL')
+  const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const defaultCfg: KofiConfigPayload = { url: 'https://ko-fi.com/sulibell', donors: [] }
+  if (!sbUrl || !sbKey) return { config: defaultCfg }
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/announcements?select=id,school_id,text&order=id.asc`, {
+      headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` }
+    })
+    if (!res.ok) return { config: defaultCfg }
+    const rows = await res.json()
+    let schoolId: string | undefined = rows[0]?.school_id
+    if (!schoolId) {
+      const sRes = await fetch(`${sbUrl}/rest/v1/schools?select=id&limit=1`, {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` }
+      })
+      if (sRes.ok) {
+        const sRows = await sRes.json()
+        schoolId = sRows[0]?.id
+      }
+    }
+    const kofiRow = rows.find((r: any) => typeof r.text === 'string' && r.text.startsWith(KOFI_PREFIX))
+    if (!kofiRow) return { schoolId, config: defaultCfg }
+    const raw = JSON.parse(kofiRow.text.slice(KOFI_PREFIX.length))
+    return {
+      rowId: kofiRow.id,
+      schoolId: kofiRow.school_id || schoolId,
+      config: {
+        url: typeof raw?.url === 'string' && raw.url.trim() ? raw.url.trim() : defaultCfg.url,
+        donors: Array.isArray(raw?.donors) ? raw.donors : []
+      }
+    }
+  } catch {
+    return { config: defaultCfg }
+  }
+}
+
+async function saveKofiConfigToSupabase(config: KofiConfigPayload, existingRowId?: string, schoolId?: string): Promise<boolean> {
+  const sbUrl = Deno.env.get('SUPABASE_URL')
+  const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!sbUrl || !sbKey) return false
+  const textPayload = `${KOFI_PREFIX}${JSON.stringify(config)}`
+  try {
+    if (existingRowId) {
+      const res = await fetch(`${sbUrl}/rest/v1/announcements?id=eq.${existingRowId}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal'
+        },
+        body: JSON.stringify({ text: textPayload })
+      })
+      return res.ok
+    } else if (schoolId) {
+      const res = await fetch(`${sbUrl}/rest/v1/announcements`, {
+        method: 'POST',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal'
+        },
+        body: JSON.stringify({ school_id: schoolId, text: textPayload, active_until: null })
+      })
+      return res.ok
+    }
+  } catch {
+    // ignore
+  }
+  return false
+}
+
+async function runVipSetup(map: ChannelMap) {
+  const guildId = getGuild()
+  const me = await discordApi('/users/@me').catch(() => null)
+  const botId = me?.id
+
+  // 1. Ensure "💎 VIP Támogató" role exists
+  if (!map.vipRoleId) {
+    const createdRole = await discordApi(`/guilds/${guildId}/roles`, 'POST', {
+      name: '💎 VIP Támogató',
+      color: 0xfacc15,
+      hoist: true,
+      mentionable: true
+    }).catch(() => null)
+    if (createdRole?.id) {
+      map.vipRoleId = createdRole.id
+    }
+  }
+
+  const vipRoleId = map.vipRoleId
+  const staffIds = map.staffRoleIds || []
+
+  const vipPrivateOverwrites: any[] = [
+    { id: guildId, type: 0, deny: pStr(PERM.VIEW_CHANNEL), allow: '0' }
+  ]
+  if (botId) {
+    vipPrivateOverwrites.push({
+      id: botId,
+      type: 1,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.READ_MESSAGE_HISTORY, PERM.CONNECT, PERM.SPEAK),
+      deny: '0'
+    })
+  }
+  if (vipRoleId) {
+    vipPrivateOverwrites.push({
+      id: vipRoleId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.ATTACH_FILES, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS, PERM.CONNECT, PERM.SPEAK),
+      deny: '0'
+    })
+  }
+  for (const srId of staffIds) {
+    vipPrivateOverwrites.push({
+      id: srId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.ATTACH_FILES, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS, PERM.CONNECT, PERM.SPEAK),
+      deny: '0'
+    })
+  }
+
+  const vipInfoOverwrites: any[] = [
+    { id: guildId, type: 0, allow: pStr(PERM.VIEW_CHANNEL, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS), deny: pStr(PERM.SEND_MESSAGES) }
+  ]
+  if (botId) {
+    vipInfoOverwrites.push({
+      id: botId,
+      type: 1,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.READ_MESSAGE_HISTORY),
+      deny: '0'
+    })
+  }
+  if (vipRoleId) {
+    vipInfoOverwrites.push({
+      id: vipRoleId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS),
+      deny: '0'
+    })
+  }
+  for (const srId of staffIds) {
+    vipInfoOverwrites.push({
+      id: srId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.READ_MESSAGE_HISTORY),
+      deny: '0'
+    })
+  }
+
+  const vipVoiceOverwrites: any[] = [
+    { id: guildId, type: 0, allow: pStr(PERM.VIEW_CHANNEL), deny: pStr(PERM.CONNECT, PERM.SPEAK) }
+  ]
+  if (botId) {
+    vipVoiceOverwrites.push({
+      id: botId,
+      type: 1,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT, PERM.SPEAK),
+      deny: '0'
+    })
+  }
+  if (vipRoleId) {
+    vipVoiceOverwrites.push({
+      id: vipRoleId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT, PERM.SPEAK),
+      deny: '0'
+    })
+  }
+  for (const srId of staffIds) {
+    vipVoiceOverwrites.push({
+      id: srId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT, PERM.SPEAK),
+      deny: '0'
+    })
+  }
+
+  // 2. Ensure "💎 VIP ZÓNA" category exists
+  if (!map.vipCat) {
+    const cat = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
+      name: '💎 VIP ZÓNA',
+      type: 4,
+      position: 2
+    }).catch(() => null)
+    if (cat?.id) {
+      map.vipCat = cat.id
+    }
+  }
+
+  // 3. Ensure "#🎁-vip-infó-és-fal" exists
+  if (!map.vipInfo && map.vipCat) {
+    const ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
+      name: '🎁-vip-infó-és-fal',
+      type: 0,
+      parent_id: map.vipCat,
+      topic: '☕ SuliBell Ko-fi támogatók dicsőségfala és VIP rang információk! Támogasd az oldalt, írd be a Discord neved, és automatikusan megkapod a 💎 VIP Támogató rangot!',
+      permission_overwrites: vipInfoOverwrites
+    }).catch(() => null)
+    if (ch?.id) {
+      map.vipInfo = ch.id
+      await discordApi(`/channels/${ch.id}/messages`, 'POST', {
+        embeds: [{
+          title: '💎 SuliBell VIP Zóna & Ko-fi Támogatás',
+          description: 'Köszönjük mindenkinek, aki támogatja a **SuliBell** fejlesztését és fenntartását! ☕💖\n\nA támogatók felkerülnek a **weboldal Támogatói Toplistájára**, valamint itt a Discordon megkapják az exkluzív **💎 VIP Támogató** rangot!',
+          color: 0xfacc15,
+          fields: [
+            {
+              name: '🎁 Mit ad a 💎 VIP Támogató rang?',
+              value: '• **Kiemelt arany név** és külön kategória a taglistában\n• Hozzáférés a privát **#💎-vip-társalgó** és **🔊 VIP Társalgó** szobákhoz\n• Hozzáférés a **#👑-vip-zenekérés** szobához, ahonnan a beküldött zenék **💎 VIP jelvénnyel és +2 bónusz szavazattal** kerülnek be a SuliBell zenegépébe!\n• Megjelenés a SuliBell főoldali **🏆 Támogatói Toplistáján**'
+            },
+            {
+              name: '⚡ Hogyan kapod meg automatikusan a rangot?',
+              value: '1. Kattints a weboldalon a **„☕ Támogatás Ko-fi-n”** gombra.\n2. A támogatási üzenetbe (**Message**) írd bele a Discord felhasználónevedet (pl. `@felhasznalonev` vagy `discord: felhasznalonev`).\n3. A SuliBell bot a támogatás pillanatában **automatikusan ráteszi a 💎 VIP Támogató rangot** a fiókodra és kiírja a nevedet ide a dicsőségfalra!'
+            }
+          ],
+          footer: { text: 'SuliBell • Ko-fi & Discord VIP rendszer' },
+          timestamp: new Date().toISOString()
+        }]
+      }).catch(() => {})
+    }
+  }
+
+  // 4. Ensure "#💎-vip-társalgó" exists
+  if (!map.vipChat && map.vipCat) {
+    const ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
+      name: '💎-vip-társalgó',
+      type: 0,
+      parent_id: map.vipCat,
+      topic: '💎 Exkluzív VIP társalgó a SuliBell Ko-fi támogatóinak és a csapatnak.',
+      permission_overwrites: vipPrivateOverwrites
+    }).catch(() => null)
+    if (ch?.id) {
+      map.vipChat = ch.id
+      await discordApi(`/channels/${ch.id}/messages`, 'POST', {
+        embeds: [{
+          title: '🥂 Üdv a VIP Társalgóban!',
+          description: 'Ez a szoba kizárólag a **💎 VIP Támogató** ranggal rendelkezőknek és a SuliBell csapatnak látható. Köszönjük, hogy támogatod a SuliBell-t!',
+          color: 0xfacc15
+        }]
+      }).catch(() => {})
+    }
+  }
+
+  // 5. Ensure "#👑-vip-zenekérés" exists
+  if (!map.vipMusic && map.vipCat) {
+    const ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
+      name: '👑-vip-zenekérés',
+      type: 0,
+      parent_id: map.vipCat,
+      topic: '👑 VIP Zenekérés — az ide beküldött zenék és videók 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
+      permission_overwrites: vipPrivateOverwrites
+    }).catch(() => null)
+    if (ch?.id) {
+      map.vipMusic = ch.id
+      await discordApi(`/channels/${ch.id}/messages`, 'POST', {
+        embeds: [{
+          title: '👑 VIP Zenekérés (+2 Bónusz Szavazat!)',
+          description: 'Küldj be ide egy **YouTube**, **Spotify** vagy **SoundCloud** linket! A SuliBell automatikusan szinkronizálja a weboldalra **💎 VIP jelvénnyel** és **3 kezdő szavazattal (1 + 2 VIP bónusz)**, így a kérésed azonnal a kívánságlista élére ugrik!',
+          color: 0xfacc15
+        }]
+      }).catch(() => {})
+    }
+  }
+
+  // 6. Ensure "🔊 VIP Társalgó" voice channel exists
+  if (!map.vipVoice && map.vipCat) {
+    const ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', {
+      name: '🔊 VIP Társalgó',
+      type: 2,
+      parent_id: map.vipCat,
+      permission_overwrites: vipVoiceOverwrites
+    }).catch(() => null)
+    if (ch?.id) {
+      map.vipVoice = ch.id
+    }
+  }
+}
+
+function extractDiscordHint(message?: string, directDiscord?: string, fromName?: string): string {
+  if (directDiscord && directDiscord.trim()) return directDiscord.trim().replace(/^@/, '')
+  const msg = String(message || '')
+  const m1 = msg.match(/discord\s*[:=\-]?\s*@?([a-zA-Z0-9_.]{2,32})/i)
+  if (m1) return m1[1]
+  const m2 = msg.match(/@([a-zA-Z0-9_.]{2,32})/)
+  if (m2) return m2[1]
+  const m3 = msg.match(/\b(\d{17,20})\b/)
+  if (m3) return m3[1]
+  return String(fromName || '').trim().replace(/^@/, '')
+}
+
+async function findAndGrantVipRole(
+  chMap: ChannelMap,
+  discordCandidate?: string,
+  fallbackName?: string
+): Promise<{ granted: boolean; userId?: string; username?: string; displayName?: string }> {
+  const guildId = getGuild()
+  if (!chMap.vipRoleId) {
+    await runVipSetup(chMap).catch(() => {})
+  }
+  const roleId = chMap.vipRoleId
+  if (!roleId) return { granted: false }
+
+  const candidates = [discordCandidate, fallbackName]
+    .map(s => String(s || '').trim().replace(/^@/, ''))
+    .filter(Boolean)
+
+  if (candidates.length === 0) return { granted: false }
+
+  const members: any[] = await discordApi(`/guilds/${guildId}/members?limit=1000`).catch(() => [])
+
+  let matchedMember: any = null
+  for (const cand of candidates) {
+    const cl = cand.toLowerCase()
+    matchedMember = members.find(m => {
+      const u = m.user || {}
+      return (
+        u.id === cand ||
+        String(u.username || '').toLowerCase() === cl ||
+        String(u.global_name || '').toLowerCase() === cl ||
+        String(m.nick || '').toLowerCase() === cl
+      )
+    })
+    if (matchedMember) break
+  }
+
+  if (!matchedMember && candidates[0]) {
+    const found: any[] = await discordApi(`/guilds/${guildId}/members/search?query=${encodeURIComponent(candidates[0])}&limit=5`).catch(() => [])
+    if (Array.isArray(found) && found.length > 0) matchedMember = found[0]
+  }
+
+  if (!matchedMember?.user?.id) return { granted: false }
+
+  const userId = matchedMember.user.id
+  let granted = false
+  try {
+    await discordApi(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, 'PUT')
+    granted = true
+  } catch {
+    granted = false
+  }
+  return {
+    granted,
+    userId,
+    username: matchedMember.user.username,
+    displayName: matchedMember.nick || matchedMember.user.global_name || matchedMember.user.username
+  }
+}
+
+async function handleKofiDonation(
+  chMap: ChannelMap,
+  payload: {
+    id?: string
+    name: string
+    amount: number
+    currency?: string
+    discord?: string
+    message?: string
+    date?: string
+  }
+) {
+  const donorName = String(payload.name || 'Névtelen támogató').trim() || 'Névtelen támogató'
+  const amount = Math.max(0, Number(payload.amount) || 0)
+  const currency = String(payload.currency || 'HUF').trim().toUpperCase() || 'HUF'
+  const message = payload.message ? String(payload.message).trim().slice(0, 220) : undefined
+  const date = payload.date || new Date().toISOString().slice(0, 10)
+  const discordHint = extractDiscordHint(message, payload.discord, donorName)
+
+  const vipRes = await findAndGrantVipRole(chMap, discordHint, donorName)
+
+  const { rowId, schoolId, config } = await getKofiConfigFromSupabase()
+  const existingIdx = config.donors.findIndex(d =>
+    (vipRes.userId && d.discord_user_id === vipRes.userId) ||
+    (discordHint && d.discord && d.discord.toLowerCase() === discordHint.toLowerCase()) ||
+    d.name.toLowerCase() === donorName.toLowerCase()
+  )
+
+  if (existingIdx >= 0) {
+    const prev = config.donors[existingIdx]
+    const sameCurr = (prev.currency || 'HUF').toUpperCase() === currency
+    config.donors[existingIdx] = {
+      ...prev,
+      amount: sameCurr ? Number(prev.amount || 0) + amount : amount,
+      currency: sameCurr ? prev.currency : currency,
+      discord: vipRes.username || discordHint || prev.discord,
+      discord_user_id: vipRes.userId || prev.discord_user_id,
+      vip_granted: vipRes.granted || prev.vip_granted,
+      message: message || prev.message,
+      date
+    }
+  } else {
+    config.donors.push({
+      id: payload.id || `kofi_${Date.now().toString(36)}`,
+      name: donorName,
+      amount,
+      currency,
+      discord: vipRes.username || discordHint || undefined,
+      discord_user_id: vipRes.userId,
+      vip_granted: vipRes.granted,
+      message,
+      date
+    })
+  }
+
+  const savedToDb = await saveKofiConfigToSupabase(config, rowId, schoolId)
+
+  const amountText = currency === 'HUF' || currency === 'FT'
+    ? `${Math.round(amount).toLocaleString('hu-HU')} Ft`
+    : currency === 'EUR'
+      ? `${amount} €`
+      : currency === 'USD'
+        ? `$${amount}`
+        : `${amount} ${currency}`
+
+  const vipMention = vipRes.userId ? `<@${vipRes.userId}>` : `**${donorName}**`
+  const embed = {
+    title: '☕ Új Ko-fi Támogatás érkezett! 💎',
+    description: `Hatalmas köszönet ${vipMention} támogatónknak a SuliBell támogatásáért! 💖`,
+    color: 0xfacc15,
+    fields: [
+      { name: '🏆 Támogató', value: donorName, inline: true },
+      { name: '💰 Összeg', value: amountText, inline: true },
+      {
+        name: '💎 Discord VIP Rang',
+        value: vipRes.granted && vipRes.userId
+          ? `✅ Kiosztva: <@${vipRes.userId}>`
+          : discordHint
+            ? `⏳ Belépéskor automatikusan megkapja (${discordHint})`
+            : '💎 VIP Toplista tag',
+        inline: true
+      },
+      ...(message ? [{ name: '💬 Üzenet', value: `„${message}”` }] : [])
+    ],
+    footer: { text: 'SuliBell • Ko-fi Támogatói Rendszer' },
+    timestamp: new Date().toISOString()
+  }
+
+  if (chMap.vipInfo) {
+    await discordApi(`/channels/${chMap.vipInfo}/messages`, 'POST', {
+      content: vipRes.userId ? `🎉 Köszönjük a támogatást, <@${vipRes.userId}>! Megkaptad a **💎 VIP Támogató** rangot!` : undefined,
+      embeds: [embed]
+    }).catch(() => {})
+  }
+  if (chMap.vipChat) {
+    await discordApi(`/channels/${chMap.vipChat}/messages`, 'POST', {
+      content: vipRes.userId ? `🥂 Üdvözöljük <@${vipRes.userId}>-t a VIP Társalgóban!` : `🥂 Új Ko-fi támogatónk érkezett: **${donorName}**!`,
+      embeds: [embed]
+    }).catch(() => {})
+  }
+
+  return {
+    ok: true,
+    donor: donorName,
+    amount,
+    currency,
+    vipGranted: vipRes.granted,
+    discordUserId: vipRes.userId,
+    discordUsername: vipRes.username,
+    savedToDb
+  }
+}
 let memoryMembers: Record<string, { name: string; avatar?: string }> | null = null
 let lastMemberCheckAt = 0
 const ytTitleCache = new Map<string, string>()
@@ -189,24 +690,42 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
 
   const map: ChannelMap = { fetchedAt: Date.now() }
 
+  const staffRoleIds: string[] = []
   for (const r of roles) {
     const rn = String(r.name || '').toLowerCase()
     if (rn.includes('diák') || rn.includes('diak')) {
       map.studentRoleId = r.id
     }
+    if (rn.includes('vip') || rn.includes('támogató') || rn.includes('tamogato')) {
+      map.vipRoleId = r.id
+    }
+    if (rn.includes('dev') || rn.includes('moderátor') || rn.includes('moderator') || rn.includes('főadmin') || rn.includes('foadmin') || rn.includes('tulajdonos')) {
+      staffRoleIds.push(r.id)
+    }
   }
+  map.staffRoleIds = staffRoleIds
 
   for (const c of chs) {
     const n = String(c.name || '').toLowerCase()
     if (c.type === 4 && (n.includes('információ') || n.includes('informacio'))) {
       map.infoCat = c.id
     }
+    if (c.type === 4 && n.includes('vip')) {
+      map.vipCat = c.id
+    }
+    if (c.type === 2 && n.includes('vip')) {
+      map.vipVoice = c.id
+      continue
+    }
     if (c.type === 15 && (n.includes('ötlet') || n.includes('otlet'))) {
       map.ideas = c.id
       continue
     }
     if (c.type !== 0) continue
-    if (n.includes('üdvözlő') || n.includes('udvozlo')) map.welcome = c.id
+    if (n.includes('vip') && (n.includes('infó') || n.includes('info') || n.includes('fal'))) map.vipInfo = c.id
+    else if (n.includes('vip') && (n.includes('társalgó') || n.includes('tarsalgo') || n.includes('chat'))) map.vipChat = c.id
+    else if (n.includes('vip') && (n.includes('zene') || n.includes('zenekérés') || n.includes('zenekeres'))) map.vipMusic = c.id
+    else if (n.includes('üdvözlő') || n.includes('udvozlo')) map.welcome = c.id
     else if (n.includes('szabályzat') || n.includes('szabalyzat')) map.rules = c.id
     else if (n.includes('belépés') || n.includes('belepes') || n.includes('kilépés')) map.joins = c.id
     else if (n.includes('közlemény') || n.includes('kozlemeny')) map.announcements = c.id
@@ -228,6 +747,10 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
   if (!welcomeSetupDone || !map.joins) {
     welcomeSetupDone = true
     await runWelcomeAndJoinSetup(map).catch(() => {})
+  }
+  if (!vipSetupDone || !map.vipRoleId || !map.vipCat || !map.vipChat || !map.vipInfo || !map.vipMusic || !map.vipVoice) {
+    vipSetupDone = true
+    await runVipSetup(map).catch(() => {})
   }
 
   cachedChannels = map
@@ -289,6 +812,26 @@ async function checkMemberJoinsAndLeaves(chMap: ChannelMap) {
         changed = true
         if (chMap.studentRoleId) {
           discordApi(`/guilds/${guildId}/members/${uid}/roles/${chMap.studentRoleId}`, 'PUT').catch(() => {})
+        }
+        if (chMap.vipRoleId) {
+          const memberObj = members.find((x: any) => x.user?.id === uid)
+          const uName = String(memberObj?.user?.username || '').toLowerCase()
+          const gName = String(memberObj?.user?.global_name || '').toLowerCase()
+          const dName = String(info.name || '').toLowerCase()
+          getKofiConfigFromSupabase().then(({ rowId, schoolId, config }) => {
+            const matchIdx = config.donors.findIndex(d => {
+              const dh = String(d.discord || '').toLowerCase().replace(/^@/, '')
+              const dn = String(d.name || '').toLowerCase()
+              return d.discord_user_id === uid || (dh && (dh === uName || dh === gName || dh === dName)) || dn === uName || dn === dName
+            })
+            if (matchIdx >= 0) {
+              discordApi(`/guilds/${guildId}/members/${uid}/roles/${chMap.vipRoleId}`, 'PUT').then(() => {
+                config.donors[matchIdx].discord_user_id = uid
+                config.donors[matchIdx].vip_granted = true
+                saveKofiConfigToSupabase(config, rowId, schoolId).catch(() => {})
+              }).catch(() => {})
+            }
+          }).catch(() => {})
         }
         await discordApi(`/channels/${chMap.joins}/messages`, 'POST', {
           embeds: [
@@ -751,7 +1294,27 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   try {
-    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
+    let body: any = {}
+    if (req.method === 'POST') {
+      const rawText = await req.text().catch(() => '')
+      if (rawText) {
+        const trimmed = rawText.trim()
+        if (trimmed.startsWith('{')) {
+          try { body = JSON.parse(trimmed) } catch { body = {} }
+        } else {
+          const params = new URLSearchParams(rawText)
+          const dataStr = params.get('data')
+          if (dataStr) {
+            try { body = { action: 'kofi_webhook', kofi: JSON.parse(dataStr) } } catch { body = {} }
+          }
+        }
+      }
+    }
+    if (body && typeof body.data === 'string' && body.data.trim().startsWith('{')) {
+      try { body = { action: 'kofi_webhook', kofi: JSON.parse(body.data) } } catch {}
+    } else if (body && (body.kofi_transaction_id || (body.from_name && body.amount !== undefined && !body.action))) {
+      body = { action: 'kofi_webhook', kofi: body }
+    }
     const action = body.action || 'sync'
 
     if (action === 'check_media') {
@@ -772,14 +1335,63 @@ Deno.serve(async (req: Request) => {
       return reply({ ok: true, chMap })
     }
 
+    if (action === 'setup_vip') {
+      await runVipSetup(chMap)
+      chMap = await ensureIntentAndChannels(true)
+      return reply({ ok: true, chMap })
+    }
+
+    if (action === 'grant_vip') {
+      const discordHint = extractDiscordHint(body.message, body.discord, body.name)
+      const vipRes = await findAndGrantVipRole(chMap, discordHint, body.name)
+      if (body.announce && (chMap.vipInfo || chMap.vipChat)) {
+        const res = await handleKofiDonation(chMap, {
+          id: body.id,
+          name: body.name || body.discord || 'Támogató',
+          amount: Number(body.amount) || 0,
+          currency: body.currency || 'HUF',
+          discord: body.discord,
+          message: body.message,
+          date: body.date
+        })
+        return reply(res)
+      }
+      return reply({
+        ok: true,
+        vipGranted: vipRes.granted,
+        discordUserId: vipRes.userId,
+        discordUsername: vipRes.username,
+        displayName: vipRes.displayName
+      })
+    }
+
+    if (action === 'kofi_webhook') {
+      const k = body.kofi || body
+      const res = await handleKofiDonation(chMap, {
+        id: k.kofi_transaction_id || k.message_id || k.id,
+        name: k.from_name || k.name || 'Névtelen támogató',
+        amount: parseFloat(String(k.amount ?? 0)) || 0,
+        currency: k.currency || 'HUF',
+        discord: k.discord_username || k.discord_userid || k.discord,
+        message: k.message || '',
+        date: k.timestamp ? String(k.timestamp).slice(0, 10) : new Date().toISOString().slice(0, 10)
+      })
+      return reply(res)
+    }
+
     if (action === 'sync') {
       await checkMemberJoinsAndLeaves(chMap)
 
       const songs: any[] = []
       const announcements: any[] = []
 
-      if (chMap.music) {
-        const msgs: any[] = await discordApi(`/channels/${chMap.music}/messages?limit=25`).catch(() => [])
+      const musicSources = [
+        ...(chMap.vipMusic ? [{ id: chMap.vipMusic, isVip: true }] : []),
+        ...(chMap.music ? [{ id: chMap.music, isVip: false }] : [])
+      ]
+
+      for (const src of musicSources) {
+        const msgs: any[] = await discordApi(`/channels/${src.id}/messages?limit=25`).catch(() => [])
         for (const m of msgs) {
           if (m.author?.bot) continue
           const rawContent = String(m.content || '').trim()
@@ -819,8 +1431,9 @@ Deno.serve(async (req: Request) => {
             }
           }
 
+          const reactEmoji = src.isVip ? '💎' : '🎵'
           if (!botReacted) {
-            discordApi(`/channels/${chMap.music}/messages/${m.id}/reactions/${encodeURIComponent('🎵')}/@me`, 'PUT').catch(() => {})
+            discordApi(`/channels/${src.id}/messages/${m.id}/reactions/${encodeURIComponent(reactEmoji)}/@me`, 'PUT').catch(() => {})
           }
 
           const createdMs = Date.parse(m.timestamp) || Date.now()
@@ -831,9 +1444,9 @@ Deno.serve(async (req: Request) => {
             day: msgDay,
             kind: 'music',
             title: cleanTitle.slice(0, 60),
-            by: `${senderName} 💬`,
+            by: src.isVip ? `${senderName} 💎` : `${senderName} 💬`,
             ytId,
-            votes: 1 + extraVotes,
+            votes: (src.isVip ? 3 : 1) + extraVotes,
             at: createdMs,
           })
         }
