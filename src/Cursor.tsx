@@ -5,7 +5,7 @@ const CLICK = 'a[href],button,[role="button"],label.btn,select,summary,input[typ
 const TEXT = 'textarea,[contenteditable="true"],input:not([type="checkbox"],[type="radio"],[type="button"],[type="submit"],[type="file"],[type="range"],[type="color"])'
 const TRAIL = 5
 
-/** Egyedi neon egérkurzor: pontos pont + puhán követő gyűrű + halvány csóva.
+/** Egyedi Windows-stílusú neon egérkurzor: éles nyíl / mutatókéz + puhán követő gyűrű + halvány csóva + kattintási hullám.
  *  Csak egérrel, finom mutatóval (hover: hover) és mozgáscsökkentés nélkül él; a TV-módban (/display) nincs.
  *  A billentyűzetes fókuszkeret érintetlen marad. Beágyazás: a main.tsx-ben, minden oldalon. */
 export default function Cursor() {
@@ -81,6 +81,14 @@ export default function Cursor() {
   return <div ref={root} className="cur" aria-hidden="true">
     {Array.from({ length: TRAIL }, (_, i) => <div key={i} className="cur-t" ref={n => { trail.current[i] = n }} style={{ '--k': i } as CSSProperties}><i /></div>)}
     <div ref={ring} className="cur-ring"><i /></div>
-    <div ref={dot} className="cur-dot"><i /></div>
+    <div ref={dot} className="cur-dot">
+      <svg className="cur-arrow" viewBox="0 0 22 24" width="22" height="24" fill="none">
+        <path d="M1 1L1 18.5L5.4 14.3L8.6 21.2L11.1 20L7.9 13.1L13.8 13.1Z" strokeWidth="1.65" strokeLinejoin="round" />
+      </svg>
+      <svg className="cur-hand" viewBox="0 0 22 22" width="22" height="22" fill="none">
+        <path d="M7.5 1.5C6.4 1.5 5.6 2.3 5.6 3.4V10.5L3.8 9.2C3 8.6 1.9 8.9 1.5 9.8C1.2 10.5 1.5 11.4 2.1 11.9L6.5 16.5C7.5 17.5 8.8 18.1 10.2 18.1H13.8C16.2 18.1 18 16.2 18 13.8V8.8C18 7.9 17.3 7.2 16.4 7.2C15.8 7.2 15.3 7.5 15 8V7.4C15 6.5 14.3 5.8 13.4 5.8C12.8 5.8 12.3 6.1 12 6.6V6.2C12 5.3 11.3 4.6 10.4 4.6C9.9 4.6 9.5 4.8 9.2 5.2V3.4C9.2 2.3 8.5 1.5 7.5 1.5Z" strokeWidth="1.55" strokeLinejoin="round" />
+      </svg>
+      <i className="cur-ibeam" />
+    </div>
   </div>
 }

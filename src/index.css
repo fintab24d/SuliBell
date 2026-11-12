@@ -425,27 +425,36 @@ label.btn:hover{border-color:var(--brand)}
 .tv .rest{padding:1vh 1.2vw!important;border:1px solid var(--line)!important;border-radius:14px;background:var(--panel)!important}
 .tv .rest h2{font-size:2.6vh;margin-bottom:.6vh}.tv .restcount b{font-size:5.5vh}.tv .restcount span{font-size:2vh}.tv .restcount small{font-size:1.5vh}.tv .restcount em{font-size:1.6vh}.tv .snakehud{font-size:1.5vh}.tv .snakescreen{max-height:22vh}
 
-/* Egyedi neon kurzor (Cursor.tsx): csak egérrel, finom mutatóval; a billentyűzetes fókuszkeret marad */
+/* Egyedi Windows-stílusú neon kurzor (Cursor.tsx): csak egérrel, finom mutatóval; a billentyűzetes fókuszkeret marad */
 html.cursor-on,html.cursor-on *{cursor:none!important}
-.cur{--ca:var(--n-cyan,#2de2ff);--cb:var(--n-pink,#ff4fc3);position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none;opacity:0;transition:opacity .2s}
-:root[data-theme=light] .cur{--ca:#0a78d1;--cb:#d11a93}
+.cur{--ca:var(--n-cyan,#2de2ff);--cb:var(--n-pink,#ff4fc3);--cf:rgba(8,10,28,.9);position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none;opacity:0;transition:opacity .2s}
+:root[data-theme=light] .cur{--ca:#0a78d1;--cb:#d11a93;--cf:rgba(255,255,255,.94)}
 .cur.on{opacity:1}
 .cur>*{position:absolute;left:0;top:0;width:0;height:0;will-change:transform;pointer-events:none}
 .cur i{position:absolute;display:block}
-.cur-dot i{inset:-3px;border-radius:50%;background:var(--ca);box-shadow:0 0 10px 2px var(--ca),0 0 0 1px rgba(8,10,28,.35);transition:inset .15s,background .2s,box-shadow .2s,border-radius .2s,transform .15s}
+.cur-dot svg{position:absolute;display:block;overflow:visible;transition:opacity .12s,transform .15s,filter .2s}
+.cur-arrow{left:-1px;top:-1px;transform-origin:1px 1px;filter:drop-shadow(0 0 6px var(--ca)) drop-shadow(0 0 1px rgba(8,10,28,.55))}
+.cur-arrow path{fill:var(--cf);stroke:var(--ca);transition:stroke .2s,fill .2s}
+.cur-hand{left:-7px;top:-1px;opacity:0;transform:scale(.9);transform-origin:7px 1px;filter:drop-shadow(0 0 7px var(--cb)) drop-shadow(0 0 1px rgba(8,10,28,.55))}
+.cur-hand path{fill:var(--cf);stroke:var(--cb)}
+.cur-ibeam{inset:-10px -1.25px;border-radius:2px;background:var(--cb);box-shadow:0 0 8px 1px var(--cb);opacity:0;transform:scaleY(.7);transition:opacity .12s,transform .15s}
+.cur-ibeam::before,.cur-ibeam::after{content:'';position:absolute;left:-3.5px;width:9.5px;height:1.5px;border-radius:1px;background:var(--cb);box-shadow:0 0 6px var(--cb)}
+.cur-ibeam::before{top:0}.cur-ibeam::after{bottom:0}
 .cur-ring i{inset:-15px;border:1.5px solid color-mix(in srgb,var(--ca) 75%,transparent);border-radius:50%;box-shadow:0 0 14px -3px var(--ca),inset 0 0 10px -5px var(--ca);transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .2s,box-shadow .2s,opacity .2s}
 .cur-t i{inset:-2px;border-radius:50%;background:var(--ca);opacity:calc(.32 - var(--k) * .055);filter:blur(.4px)}
-/* kattintható elem: nagyobb, rózsaszín, lüktető gyűrű */
+/* kattintható elem: Windows mutatókéz + nagyobb, rózsaszín, lüktető gyűrű */
+.cur.link .cur-arrow{opacity:0;transform:scale(.85)}
+.cur.link .cur-hand{opacity:1;transform:scale(1)}
 .cur.link .cur-ring i{border-color:var(--cb);box-shadow:0 0 18px -2px var(--cb),inset 0 0 12px -5px var(--cb);animation:curpulse 1.3s ease-in-out infinite}
-.cur.link .cur-dot i{background:var(--cb);box-shadow:0 0 10px 2px var(--cb),0 0 0 1px rgba(8,10,28,.35)}
 @keyframes curpulse{0%,100%{transform:scale(1.45)}50%{transform:scale(1.75)}}
-/* szövegmező: vékony függőleges neon vonal (I-beam) */
-.cur.text .cur-dot i{inset:-10px -1.25px;border-radius:2px;background:var(--cb);box-shadow:0 0 8px 1px var(--cb)}
+/* szövegmező: vékony függőleges neon vonal (Windows I-beam) */
+.cur.text .cur-arrow,.cur.text .cur-hand{opacity:0}
+.cur.text .cur-ibeam{opacity:1;transform:scaleY(1)}
 .cur.text .cur-ring i{opacity:0;transform:scale(.3);animation:none}
 .cur.text .cur-t i{opacity:0}
 /* lenyomás: összehúzódás */
 .cur.down .cur-ring i{animation:none;transform:scale(.6)}
-.cur.down .cur-dot i{transform:scale(.7)}
+.cur.down .cur-arrow,.cur.down .cur-hand{transform:scale(.85)}
 /* kattintáskor kitáguló szikra-kör */
 .cur-pop{position:fixed;width:0;height:0}
 .cur-pop i{inset:-14px;border:2px solid var(--cb);border-radius:50%;box-shadow:0 0 14px var(--cb);animation:curpop .55s ease-out forwards}
