@@ -404,7 +404,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         Tetszik a SuliBell? Támogasd az oldal fejlesztését Ko-fi-n! A támogatók felkerülnek a <b>🏆 Támogatói Toplistára</b>, és ha az üzenetbe beírod a Discord nevedet, automatikusan megkapod a <b>💎 VIP Támogató</b> rangot és a privát VIP szobákat (<b>#💎-vip-társalgó</b>, <b>#👑-vip-zenekérés +2 szavazattal</b>)!
       </p>
       <div className="kofi-actions">
-        <a href={kofi.url} target="_blank" rel="noopener noreferrer" className="kofi-cta">
+        <a href={kofi.url && !/^https?:\/\/(www\.)?ko-fi\.com\/?$/i.test(kofi.url) ? kofi.url : 'https://ko-fi.com/sulibell'} target="_blank" rel="noopener noreferrer" className="kofi-cta">
           <span className="kofi-cup" aria-hidden="true">☕</span>
           <span>Támogatás Ko-fi-n</span>
           <span aria-hidden="true">↗</span>

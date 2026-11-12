@@ -1,8 +1,8 @@
 import { supabase } from './supabase'
 
 export const KOFI_PREFIX = '__KOFI__:'
-const LOCAL_KEY = 'csengeto-kofi-v1'
-export const DEFAULT_KOFI_URL = 'https://ko-fi.com'
+const LOCAL_KEY = 'csengeto-kofi-v2'
+export const DEFAULT_KOFI_URL = 'https://ko-fi.com/sulibell'
 
 export interface KofiDonor {
   id: string
@@ -40,7 +40,7 @@ export function isKofiAnnouncement(text?: string | null): boolean {
 function normalizeUrl(raw: unknown): string {
   if (typeof raw !== 'string') return DEFAULT_KOFI_URL
   const s = raw.trim()
-  if (!s) return DEFAULT_KOFI_URL
+  if (!s || /^https?:\/\/(www\.)?ko-fi\.com\/?$/i.test(s)) return DEFAULT_KOFI_URL
   if (/^https?:\/\//i.test(s)) return s
   if (s.includes('ko-fi.com')) return `https://${s}`
   return `https://ko-fi.com/${s.replace(/^@+/, '')}`
