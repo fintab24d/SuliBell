@@ -19,11 +19,19 @@ jobs:
           COMMIT_AUTHOR: ${{ github.event.head_commit.author.name || github.actor }}
           BRANCH: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
-          COMMIT_COUNT: ${{ length(github.event.commits) }}
         run: |
           node -e '
+            const fs = require("fs");
             const webhook = process.env.DISCORD_WEBHOOK;
             if (!webhook) process.exit(0);
+
+            let evt = {};
+            try {
+              if (process.env.GITHUB_EVENT_PATH) {
+                evt = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+              }
+            } catch {}
+            const commitCount = Array.isArray(evt.commits) ? evt.commits.length : 1;
 
             const msg = (process.env.COMMIT_MSG || "").trim();
             const firstLine = msg.split("\n")[0].slice(0, 200);
@@ -57,7 +65,7 @@ jobs:
                     },
                     {
                       name: "📦 Csomag mérete",
-                      value: `${process.env.COMMIT_COUNT || 1} commit`,
+                      value: `${commitCount} commit`,
                       inline: true
                     }
                   ],
