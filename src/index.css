@@ -685,7 +685,7 @@ main.is-updating{filter:blur(14px) saturate(.8);pointer-events:none;user-select:
   text-shadow:0 0 .04em #fff,0 0 .12em var(--dc),0 0 .3em var(--dc),0 0 .65em color-mix(in srgb,var(--dc) 55%,transparent);
   animation:dgIn .35s cubic-bezier(.2,.8,.2,1)}
 .digits.neon .dg-sep{font-style:normal;width:.32em;text-align:center;color:var(--dc);opacity:.85;text-shadow:0 0 .25em var(--dc);animation:sepBlink 1s steps(1) infinite;transform:translateY(-.06em)}
-@keyframes dgIn{from{opacity:.25;transform:translateY(-.12em);filter:blur(2px)}to{opacity:1;transform:none;filter:none}}
+@keyframes dgIn{from{opacity:.25;transform:translateY(-.12em) scale(.96)}to{opacity:1;transform:none}}
 @keyframes sepBlink{50%{opacity:.35}}
 .count.soon .digits.neon{--dc:var(--n-pink,#ff4fc3)}
 .count.soon .dg{animation:dgIn .35s ease-out,pulse 1s ease-in-out infinite}
@@ -807,7 +807,7 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .viz-bar{display:block;width:100%;height:var(--h,65%);border-radius:99px 99px 3px 3px;background:linear-gradient(180deg,var(--n-cyan,#22d3ee) 0%,#a78bfa 52%,var(--n-pink,#f472b6) 100%);box-shadow:0 0 10px color-mix(in srgb,var(--n-cyan,#22d3ee) 45%,transparent);transform-origin:bottom;animation:vizDance var(--s,.6s) ease-in-out var(--d,0s) infinite alternate}
 .viz-bars.soft .viz-bar{opacity:.55;animation-duration:calc(var(--s,.6s) * 1.6)}
 .viz-bars.idle .viz-bar{animation:none;transform:scaleY(.18);opacity:.35}
-@keyframes vizDance{0%{transform:scaleY(.16);filter:hue-rotate(0deg)}50%{transform:scaleY(.62)}100%{transform:scaleY(1);filter:hue-rotate(28deg)}}
+@keyframes vizDance{0%{transform:scaleY(.16)}50%{transform:scaleY(.62)}100%{transform:scaleY(1)}}
 .tv .music-viz .viz-foreground{padding:1.4vh 1.6vw;gap:1.2vh}
 .tv .viz-disc-wrap{width:9vh;height:9vh}
 .tv .viz-title{font-size:2.6vh}
@@ -824,5 +824,13 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .p-info b{font-size:.95rem;line-height:1.25;word-break:break-word;overflow-wrap:anywhere}
 .p-info small{font-size:.8rem;line-height:1.25;color:var(--mut);word-break:break-word;overflow-wrap:anywhere}
 .p-arr{font-weight:700;color:var(--n-cyan,var(--lesson));font-size:.95rem;opacity:.8}
+
+/* ==================== POTATO PC / GYENGÉBB HARDVER OPTIMALIZÁCIÓ ==================== */
+.panel{contain:layout style}
+.ticks{will-change:transform}
+[data-perf=lite] .panel,[data-perf=lite] .bento-hdr,[data-perf=lite] .ev,[data-perf=lite] .ticker,[data-perf=lite] .admin{-webkit-backdrop-filter:none;backdrop-filter:none;background:color-mix(in srgb,var(--panel) 86%,var(--bg, #0b0e1f))}
+[data-perf=lite] .ticks{filter:none}
+[data-perf=lite] body::before{animation:none}
+[data-perf=lite] .timebox .digits.neon{animation-timing-function:steps(18,end)}
 
 @media(prefers-reduced-motion:reduce){.vibe-fly{animation:none;display:none}.rcell.active,.eq i,.maint-spinner,.maint-bar i,.digits.neon .dg,.digits.neon .dg-sep,.timebox .digits.neon,.viz-disc.spin,.viz-ring,.viz-bar{animation:none}}

@@ -342,31 +342,28 @@ function SandboxWorkspace() {
                 </button>
               </div>
               <div className="testlab-btns" style={{ marginTop: '0.35rem' }}>
-                <span style={{ fontSize: '0.82rem', opacity: 0.8, alignSelf: 'center' }}>🌧️ Csapadék teszt:</span>
-                <button
-                  type="button"
-                  className={sb.simWeatherCode === 61 ? 'active' : ''}
-                  onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === 61 ? null : 61 })}
-                >
-                  🌧️ Eső
-                </button>
-                <button
-                  type="button"
-                  className={sb.simWeatherCode === 71 ? 'active' : ''}
-                  onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === 71 ? null : 71 })}
-                >
-                  ❄️ Hó
-                </button>
-                <button
-                  type="button"
-                  className={sb.simWeatherCode === 95 ? 'active' : ''}
-                  onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === 95 ? null : 95 })}
-                >
-                  ⛈️ Vihar
-                </button>
+                <span style={{ fontSize: '0.82rem', opacity: 0.8, alignSelf: 'center' }}>🌤️ Időjárás teszt:</span>
+                {[
+                  [0, '☀️ Derült'],
+                  [3, '☁️ Borult'],
+                  [45, '🌫️ Köd'],
+                  [51, '🌦️ Szitálás'],
+                  [61, '🌧️ Eső'],
+                  [71, '❄️ Hó'],
+                  [95, '⛈️ Vihar'],
+                ].map(([code, label]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    className={sb.simWeatherCode === code ? 'active' : ''}
+                    onClick={() => updateSandbox({ simWeatherCode: sb.simWeatherCode === code ? null : Number(code) })}
+                  >
+                    {label}
+                  </button>
+                ))}
                 {sb.simWeatherCode !== null && (
                   <button type="button" onClick={() => updateSandbox({ simWeatherCode: null })}>
-                    ✕ Csapadék ki
+                    ✕ Időjárás ki
                   </button>
                 )}
               </div>

@@ -756,11 +756,12 @@ export default function Jukebox({
       return
     }
 
-    // 1. Névtelen beküldés tiltása + 2. Káromkodás & NSFW szűrő
+    // 1. Névtelen beküldés tiltása + 2. Káromkodás, NSFW & Explicit szűrő
     const check = await validateMediaSubmission({
       title: title.trim(),
       by: by.trim(),
       ytId: explicitOrParsedYt,
+      url: ytUrl.trim() || undefined,
     })
 
     if (!check.valid) {
