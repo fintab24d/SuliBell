@@ -98,7 +98,7 @@ function normalizeDonors(raw: unknown): KofiDonor[] {
     const wa = a.amount * currencyWeight(a.currency)
     const wb = b.amount * currencyWeight(b.currency)
     if (wb !== wa) return wb - wa
-    return b.at - a.at
+    return (b.at ?? 0) - (a.at ?? 0)
   })
 }
 
