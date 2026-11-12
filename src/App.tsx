@@ -640,7 +640,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               </div>
               {qr && (
                 <div className="qrbox">
-                  <img src={qr} alt="QR-kód az oldal megnyitásához" />
+                  <img src="/site-qr.jpg" alt="QR-kód az oldal megnyitásához" />
                   <span>Telepítsd<br />telefonra</span>
                 </div>
               )}

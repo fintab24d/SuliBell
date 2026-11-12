@@ -199,7 +199,7 @@ main.tv{
   text-align:left;
   font-weight:600;
 }
-.tv .qrbox img{display:block;width:6.8vh;height:6.8vh}
+.tv .qrbox img{display:block;width:9.8vh;height:9.8vh;border-radius:6px;object-fit:contain}
 .tv-main{
   min-height:0;
   max-height:100%;
@@ -718,7 +718,7 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .tv-hdr-left .date{font-size:2.7vh}
 .tv-hdr-left .wx{font-size:2.6vh}.tv-hdr-left .wx small{font-size:2vh}
 .tv .timebox .digits{font-size:min(12vh,13vw)}
-.tv .qrbox{font-size:1.7vh}.tv .qrbox img{width:8.5vh;height:8.5vh}
+.tv .qrbox{font-size:1.8vh}.tv .qrbox img{width:12vh;height:12vh}
 .tv-main{grid-template-columns:minmax(0,46fr) minmax(0,54fr);gap:1.6vw}
 .tv .ring{width:min(58vh,44vw)}
 .tv .next{padding:1vh 1.6vw;font-size:2.9vh}
@@ -1062,7 +1062,7 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 }
 .kofi-tv-empty {
   margin: 0;
-  font-size: 1.45vh;
+  font-size: 1.65vh;
   line-height: 1.3;
   color: var(--mut);
 }
@@ -1072,14 +1072,14 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: .3vh;
+  gap: .35vh;
 }
 .kofi-tv-list li {
   display: grid;
   grid-template-columns: 1.4em minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
-  font-size: 1.45vh;
+  font-size: 1.65vh;
 }
 .kofi-tv-list li b {
   white-space: nowrap;
@@ -1099,20 +1099,25 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 .kofi-tv-qr img {
-  width: 7.4vh;
-  height: 7.4vh;
+  width: 11.5vh;
+  height: 11.5vh;
   display: block;
   background: #fff;
-  padding: 3px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+  padding: 4px;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .38);
 }
 .kofi-tv-qr span {
-  font-size: 1.1vh;
+  font-size: 1.3vh;
   font-weight: 700;
   color: var(--mut);
   white-space: nowrap;
+}
+@media(min-width:1400px) and (min-height:760px){
+  .kofi-tv-qr img{width:13vh;height:13vh}
+  .kofi-tv-qr span{font-size:1.5vh}
+  .kofi-tv-empty,.kofi-tv-list li{font-size:1.85vh}
 }
