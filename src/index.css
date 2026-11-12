@@ -440,18 +440,18 @@ html.cursor-on,html.cursor-on *{cursor:none!important}
 .cur-ibeam{inset:-10px -1.25px;border-radius:2px;background:var(--cb);box-shadow:0 0 8px 1px var(--cb);opacity:0;transform:scaleY(.7);transition:opacity .12s,transform .15s}
 .cur-ibeam::before,.cur-ibeam::after{content:'';position:absolute;left:-3.5px;width:9.5px;height:1.5px;border-radius:1px;background:var(--cb);box-shadow:0 0 6px var(--cb)}
 .cur-ibeam::before{top:0}.cur-ibeam::after{bottom:0}
-.cur-ring i{inset:-9px;border:1.5px solid color-mix(in srgb,var(--ca) 75%,transparent);border-radius:50%;box-shadow:0 0 12px -3px var(--ca),inset 0 0 8px -4px var(--ca);transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .2s,box-shadow .2s,opacity .2s}
-/* kattintható elem: Windows mutatókéz + rózsaszín, lüktető kis gyűrű */
+.cur-ring i{inset:-11px;border:1.5px solid color-mix(in srgb,var(--cb) 80%,transparent);border-radius:50%;box-shadow:0 0 16px -2px var(--cb),inset 0 0 10px -4px var(--cb);opacity:0;transform:scale(.4);transition:transform .2s cubic-bezier(.2,.8,.2,1),opacity .18s}
+/* kattintható elem: Windows mutatókéz + nagyobb, rózsaszín, lüktető gyűrű */
 .cur.link .cur-arrow{opacity:0;transform:scale(.85)}
 .cur.link .cur-hand{opacity:1;transform:scale(1)}
-.cur.link .cur-ring i{border-color:var(--cb);box-shadow:0 0 14px -2px var(--cb),inset 0 0 10px -4px var(--cb);animation:curpulse 1.3s ease-in-out infinite}
-@keyframes curpulse{0%,100%{transform:scale(1.25)}50%{transform:scale(1.48)}}
+.cur.link .cur-ring i{opacity:1;animation:curpulse 1.3s ease-in-out infinite}
+@keyframes curpulse{0%,100%{transform:scale(1.35)}50%{transform:scale(1.65)}}
 /* szövegmező: vékony függőleges neon vonal (Windows I-beam) */
 .cur.text .cur-arrow,.cur.text .cur-hand{opacity:0}
 .cur.text .cur-ibeam{opacity:1;transform:scaleY(1)}
 .cur.text .cur-ring i{opacity:0;transform:scale(.3);animation:none}
 /* lenyomás: összehúzódás */
-.cur.down .cur-ring i{animation:none;transform:scale(.55)}
+.cur.down .cur-ring i{animation:none;transform:scale(.6)}
 .cur.down .cur-arrow,.cur.down .cur-hand{transform:scale(.85)}
 /* kattintáskor kitáguló szikra-kör */
 .cur-pop{position:fixed;width:0;height:0}
