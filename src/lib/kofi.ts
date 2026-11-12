@@ -12,13 +12,16 @@ export interface KofiDonor {
   message?: string
   discord?: string
   vipGranted?: boolean
+  vip_granted?: boolean
+  discord_user_id?: string
+  date?: string
   count?: number
-  at: number
+  at?: number
 }
 
 export interface KofiConfig {
   url: string
-  enabled: boolean
+  enabled?: boolean
   subtitle?: string
   donors: KofiDonor[]
 }
@@ -83,7 +86,10 @@ function normalizeDonors(raw: unknown): KofiDonor[] {
       currency,
       message: typeof it.message === 'string' && it.message.trim() ? it.message.trim().slice(0, 120) : undefined,
       discord: typeof it.discord === 'string' && it.discord.trim() ? it.discord.trim().slice(0, 40) : undefined,
-      vipGranted: Boolean(it.vipGranted),
+      vipGranted: Boolean(it.vipGranted ?? it.vip_granted),
+      vip_granted: Boolean(it.vip_granted ?? it.vipGranted),
+      discord_user_id: typeof it.discord_user_id === 'string' ? it.discord_user_id : undefined,
+      date: typeof it.date === 'string' ? it.date : undefined,
       count: Math.max(1, Number(it.count) || 1),
       at: Number(it.at) || Date.now(),
     })
@@ -133,8 +139,13 @@ export function parseKofiFromAnnouncements(
   }
 }
 
-export async function saveKofiToDb(schoolId: string, cfg: KofiConfig) {
-  const clean = normalizeKofiConfig(cfg)
+export async function saveKofiToDb(
+  schoolId: string,
+  announcementsOrCfg: unknown,
+  maybeCfg?: unknown
+) {
+  const cfgToSave = maybeCfg !== undefined ? maybeCfg : announcementsOrCfg
+  const clean = normalizeKofiConfig(cfgToSave)
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(clean)) } catch { /* ignore */ }
   const payload = KOFI_PREFIX + JSON.stringify(clean)
 
@@ -157,15 +168,47 @@ export async function saveKofiToDb(schoolId: string, cfg: KofiConfig) {
   return supabase.from('announcements').insert({ school_id: schoolId, text: payload, active_until: null })
 }
 
-export async function grantDiscordVipRole(discordUser: string, donorName?: string, amountStr?: string): Promise<{ ok: boolean; memberName?: string; error?: string }> {
+export interface GrantVipPayload {
+  discord?: string
+  name?: string
+  amount?: number | string
+  currency?: string
+  message?: string
+  announce?: boolean
+  discordUser?: string
+  donorName?: string
+  amountStr?: string
+}
+
+export interface GrantVipResult {
+  ok: boolean
+  vipGranted?: boolean
+  discordUserId?: string
+  discordUsername?: string
+  displayName?: string
+  error?: string
+  memberName?: string
+}
+
+export async function grantDiscordVipRole(
+  arg1: string | GrantVipPayload,
+  donorName?: string,
+  amountStr?: string
+): Promise<GrantVipResult> {
   try {
+    const payload = typeof arg1 === 'string'
+      ? {
+          action: 'grant_vip',
+          discord: arg1.trim(),
+          name: donorName,
+          amountStr,
+        }
+      : {
+          action: 'grant_vip',
+          ...arg1,
+        }
     const { data, error } = await supabase.functions.invoke('discord-bridge', {
-      body: {
-        action: 'grant_vip',
-        discordUser: discordUser.trim(),
-        donorName,
-        amountStr,
-      },
+      body: payload,
     })
     if (error) return { ok: false, error: error.message }
     return data || { ok: false, error: 'Ismeretlen válasz' }

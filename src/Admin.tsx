@@ -665,7 +665,8 @@ function Panel() {
                     discord: kf.discord.trim() || undefined,
                     vip_granted: !!vipRes.vipGranted,
                     message: kf.message.trim() || undefined,
-                    date: todayStr
+                    date: todayStr,
+                    at: Date.now()
                   }
                 ]
                 await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: nextDonors })
