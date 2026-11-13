@@ -48,6 +48,7 @@ let cachedChannels: ChannelMap | null = null
 let intentChecked = false
 let welcomeSetupDone = false
 let vipSetupDone = false
+let visibilitySetupDone = false
 
 const KOFI_PREFIX = '__KOFI__:'
 const PERM = {
@@ -384,6 +385,106 @@ async function runVipSetup(map: ChannelMap) {
       permission_overwrites: vipVoiceOverwrites
     }).catch(() => {})
   }
+}
+
+/**
+ * Minden szobát és kategóriát elrejt @everyone / Diák elől (csak a megadott staff rangoknak látható),
+ * KIVÉVE a VIP Zónát (azt a runVipSetup kezeli), az alapokat (üdvözlő, szabályzat, közlemények, frissítések)
+ * és a diák társalgókat.
+ */
+async function runChannelVisibilitySetup(map: ChannelMap): Promise<{ locked: string[]; keptPublic: string[] }> {
+  const guildId = getGuild()
+  const [chs, me]: [any[], any] = await Promise.all([
+    discordApi(`/guilds/${guildId}/channels`),
+    discordApi('/users/@me').catch(() => null),
+  ])
+  const botId = me?.id
+  const staffIds = map.staffRoleIds || []
+
+  if (staffIds.length === 0) {
+    return { locked: [], keptPublic: [] }
+  }
+
+  const privateOverwrites: any[] = [
+    { id: guildId, type: 0, deny: pStr(PERM.VIEW_CHANNEL), allow: '0' },
+  ]
+  if (map.studentRoleId) {
+    privateOverwrites.push({
+      id: map.studentRoleId,
+      type: 0,
+      deny: pStr(PERM.VIEW_CHANNEL),
+      allow: '0',
+    })
+  }
+  if (botId) {
+    privateOverwrites.push({
+      id: botId,
+      type: 1,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.READ_MESSAGE_HISTORY, PERM.CONNECT, PERM.SPEAK),
+      deny: '0',
+    })
+  }
+  for (const srId of staffIds) {
+    privateOverwrites.push({
+      id: srId,
+      type: 0,
+      allow: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES, PERM.EMBED_LINKS, PERM.ATTACH_FILES, PERM.READ_MESSAGE_HISTORY, PERM.ADD_REACTIONS, PERM.CONNECT, PERM.SPEAK),
+      deny: '0',
+    })
+  }
+
+  const isAlwaysPrivate = (n: string) =>
+    n.includes('napló') || n.includes('naplo') || n.includes('deploy') || n.includes('git') ||
+    n.includes('belépés') || n.includes('belepes') || n.includes('kilépés') || n.includes('kilepes') ||
+    n.includes('admin') || n.includes('staff') || n.includes('mod') || n.includes('log')
+
+  const isBasicOrStudent = (c: any): boolean => {
+    const n = String(c.name || '').toLowerCase()
+    if (isAlwaysPrivate(n)) return false
+    if (c.type === 4) {
+      // Kategóriák: alap információk / diák / társalgó / közösség / általános maradhat látható
+      return n.includes('információ') || n.includes('informacio') || n.includes('alap') ||
+        n.includes('diák') || n.includes('diak') || n.includes('társalgó') || n.includes('tarsalgo') ||
+        n.includes('közösség') || n.includes('kozosseg') || n.includes('általános') || n.includes('altalanos')
+    }
+    // Alapok (üdvözlő, szabályzat, közlemények, frissítések)
+    if (
+      n.includes('üdvözlő') || n.includes('udvozlo') || n.includes('welcome') ||
+      n.includes('szabályzat') || n.includes('szabalyzat') || n.includes('rules') ||
+      n.includes('közlemény') || n.includes('kozlemeny') || n.includes('announcement') ||
+      n.includes('frissítés') || n.includes('frissites') || n.includes('update')
+    ) return true
+    // Diák társalgók (szöveges és hang)
+    if (
+      n.includes('társalgó') || n.includes('tarsalgo') ||
+      n.includes('általános') || n.includes('altalanos') || n.includes('general') ||
+      n.includes('csevegő') || n.includes('csevego') || n.includes('chat') ||
+      n.includes('beszélgető') || n.includes('beszelgeto') ||
+      n.includes('diák') || n.includes('diak')
+    ) return true
+    return false
+  }
+
+  const locked: string[] = []
+  const keptPublic: string[] = []
+
+  for (const c of chs) {
+    const n = String(c.name || '').toLowerCase()
+    // A VIP Zónát a runVipSetup kezeli
+    if (n.includes('vip') || (map.vipCat && (c.id === map.vipCat || c.parent_id === map.vipCat))) {
+      continue
+    }
+    if (isBasicOrStudent(c)) {
+      keptPublic.push(c.name)
+      continue
+    }
+    await discordApi(`/channels/${c.id}`, 'PATCH', {
+      permission_overwrites: privateOverwrites,
+    }).catch(() => {})
+    locked.push(c.name)
+  }
+
+  return { locked, keptPublic }
 }
 
 function extractDiscordHint(message?: string, directDiscord?: string, fromName?: string): string {
@@ -726,7 +827,7 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     if (rn.includes('vip') || rn.includes('támogató') || rn.includes('tamogato')) {
       map.vipRoleId = r.id
     }
-    if (rn.includes('dev') || rn.includes('moderátor') || rn.includes('moderator') || rn.includes('főadmin') || rn.includes('foadmin') || rn.includes('tulajdonos')) {
+    if (rn.includes('dev') || rn.includes('fejleszt') || rn.includes('moderátor') || rn.includes('moderator') || rn.includes('admin') || rn.includes('főadmin') || rn.includes('foadmin') || rn.includes('tulajdonos') || rn.includes('owner') || rn.includes('staff')) {
       staffRoleIds.push(r.id)
     }
   }
@@ -778,6 +879,10 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
   if (!vipSetupDone || !map.vipRoleId || !map.vipCat || !map.vipChat || !map.vipInfo || !map.vipMusic || !map.vipVoice) {
     vipSetupDone = true
     await runVipSetup(map).catch(() => {})
+  }
+  if (!visibilitySetupDone) {
+    visibilitySetupDone = true
+    await runChannelVisibilitySetup(map).catch(() => {})
   }
 
   cachedChannels = map
@@ -1362,10 +1467,29 @@ Deno.serve(async (req: Request) => {
       return reply({ ok: true, chMap })
     }
 
+    if (action === 'inspect_guild') {
+      const guildId = getGuild()
+      const [chs, roles]: [any[], any[]] = await Promise.all([
+        discordApi(`/guilds/${guildId}/channels`),
+        discordApi(`/guilds/${guildId}/roles`),
+      ])
+      return reply({
+        ok: true,
+        channels: chs.map((c: any) => ({ id: c.id, name: c.name, type: c.type, parent_id: c.parent_id })),
+        roles: roles.map((r: any) => ({ id: r.id, name: r.name, position: r.position })),
+      })
+    }
+
     if (action === 'setup_vip') {
       await runVipSetup(chMap)
       chMap = await ensureIntentAndChannels(true)
       return reply({ ok: true, chMap })
+    }
+
+    if (action === 'lock_channels') {
+      const res = await runChannelVisibilitySetup(chMap)
+      chMap = await ensureIntentAndChannels(true)
+      return reply({ ok: true, ...res })
     }
 
     if (action === 'grant_vip') {
