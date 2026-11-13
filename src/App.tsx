@@ -15,6 +15,7 @@ import Daily from './Daily'
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/partners'
 import { isKofiAnnouncement, parseKofiFromAnnouncements, formatDonationAmount } from './lib/kofi'
+import { trackPageVisit, useOnlinePresence } from './lib/visits'
 import { isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements } from './lib/moderation'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
@@ -249,6 +250,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const videos = useVideos(data?.id)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
   const [myModalOpen, setMyModalOpen] = useState(false)
+  useOnlinePresence(sandbox ? undefined : data?.id, tv ? 'tv' : 'web')
+  useEffect(() => { if (data?.id && !sandbox) void trackPageVisit(data.id, location.pathname) }, [data?.id, sandbox])
 
   // Csengetési hang: állapotváltáskor szól, ha az admin bekapcsolta és a hang engedélyezve van.
   // Hang alapból bekapcsolva: a böngésző az első érintésnél/kattintásnál/billentyűnél automatikusan feloldja; a látogató letilthatja.

@@ -8,6 +8,7 @@ import { useArenaLeaderboard } from './Arena'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
 import { isKofiAnnouncement, parseKofiFromAnnouncements, saveKofiToDb, formatDonationAmount, grantDiscordVipRole } from './lib/kofi'
+import { loadVisitStats, useOnlinePresence, type VisitStatRow } from './lib/visits'
 import { checkProfanity, isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements, saveBannedWordsToDb } from './lib/moderation'
 import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
@@ -106,6 +107,13 @@ function Panel() {
   const [pcounts, setPcounts] = useState<Record<string, number[]>>({})
   const [wq, setWq] = useState('')
   const [wres, setWres] = useState<any[]>([])
+  const online = useOnlinePresence(d?.id, 'admin')
+  const [visitStats, setVisitStats] = useState<{ missing: boolean; rows: VisitStatRow[] }>({ missing: false, rows: [] })
+  const refreshVisits = useCallback(async () => {
+    if (!d?.id) return
+    setVisitStats(await loadVisitStats(d.id))
+  }, [d?.id])
+  useEffect(() => { void refreshVisits() }, [refreshVisits])
 
   const load = useCallback(async (broadcast = true) => {
     const m = await supabase.from('school_members').select('school_id')
@@ -328,6 +336,88 @@ function Panel() {
     <p className="msg" role="status">{msg}</p>
     {perms && <p>Korlátozott jogosultságod van: csak a megengedett részeket látod és szerkesztheted.</p>}
     {can('ai') && <AdminAi schoolId={d.id} onDone={load} />}
+
+    {(() => {
+      const byDay = new Map<string, { webViews: number; webUniq: number; tvViews: number }>()
+      let totalViews = 0
+      let weekViews = 0
+      let weekUniq = 0
+      const weekAgo = addDays(todayStr, -6)
+      for (const r of visitStats.rows) {
+        const cur = byDay.get(r.day) ?? { webViews: 0, webUniq: 0, tvViews: 0 }
+        if (r.path === '/display') cur.tvViews += r.views
+        else { cur.webViews += r.views; cur.webUniq += r.unique_visitors }
+        byDay.set(r.day, cur)
+        totalViews += r.views
+        if (r.day >= weekAgo) { weekViews += r.views; if (r.path !== '/display') weekUniq += r.unique_visitors }
+      }
+      const todayRow = byDay.get(todayStr) ?? { webViews: 0, webUniq: 0, tvViews: 0 }
+      const days = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14)
+      return (
+        <section>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2>📊 Látogatottság és Élő Nézők</h2>
+            <button type="button" onClick={() => void refreshVisits()}>↻ Frissítés</button>
+          </div>
+          <div className="row" style={{ gap: '12px', flexWrap: 'wrap', marginBottom: 10 }}>
+            <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(57,255,122,0.45)', background: 'rgba(57,255,122,0.08)' }}>
+              <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>🟢 Éppen most online</div>
+              <b style={{ fontSize: '1.25rem', color: 'var(--brand, #39ff7a)' }}>{online.total} fő</b>
+              <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>📱 Főoldal: {online.web} • 📺 TV: {online.tv}</div>
+            </div>
+            {!visitStats.missing && (
+              <>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>📅 Mai látogatók</div>
+                  <b style={{ fontSize: '1.25rem' }}>{todayRow.webUniq} egyedi</b>
+                  <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>{todayRow.webViews} megnyitás • {todayRow.tvViews} TV</div>
+                </div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>🗓️ Elmúlt 7 nap</div>
+                  <b style={{ fontSize: '1.25rem' }}>{weekUniq} egyedi</b>
+                  <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>{weekViews} összes megnyitás</div>
+                </div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>📈 Rögzített összes</div>
+                  <b style={{ fontSize: '1.25rem' }}>{totalViews} megnyitás</b>
+                  <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>utolsó {byDay.size} nap adatai</div>
+                </div>
+              </>
+            )}
+          </div>
+          {visitStats.missing ? (
+            <p className="hint" style={{ margin: 0 }}>
+              ℹ️ Az élő online számláló már működik! A napi/történeti statisztikához futtasd le egyszer a <code>supabase/update22.sql</code> fájlt a Supabase SQL Editorban.
+            </p>
+          ) : days.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--line)', opacity: 0.8 }}>
+                    <th style={{ padding: '6px 8px' }}>Dátum</th>
+                    <th style={{ padding: '6px 8px' }}>Egyedi eszköz</th>
+                    <th style={{ padding: '6px 8px' }}>Főoldal megnyitás</th>
+                    <th style={{ padding: '6px 8px' }}>TV (/display)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {days.map(([day, row]) => (
+                    <tr key={day} style={{ borderBottom: '1px solid var(--line)' }}>
+                      <td style={{ padding: '6px 8px', fontWeight: day === todayStr ? 700 : 400 }}>{day === todayStr ? `${day} (ma)` : day}</td>
+                      <td style={{ padding: '6px 8px' }}><b>{row.webUniq}</b></td>
+                      <td style={{ padding: '6px 8px' }}>{row.webViews}</td>
+                      <td style={{ padding: '6px 8px' }}>{row.tvViews}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="hint" style={{ margin: 0 }}>Még nincs rögzített napi adat — amint valaki megnyitja az oldalt, itt megjelenik.</p>
+          )}
+        </section>
+      )
+    })()}
 
     {can('settings') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>
