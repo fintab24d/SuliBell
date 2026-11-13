@@ -645,7 +645,7 @@ function Panel() {
               </button>
             )}
           </div>
-          <p className="sub">
+          <p className="hint">
             Itt állíthatod be a Ko-fi oldalad linkjét és kezelheted a támogatói toplistát. Ha a Ko-fi-n a <b>Webhooks</b> menüpontban beállítod az alábbi Webhook URL-t, minden új támogatás <b>automatikusan</b> megjelenik a weboldalon, bekerül a Discord <b>#🎁-vip-infó-és-fal</b> szobába, és a támogató megkapja a <b>💎 VIP Támogató</b> rangot!
           </p>
           <div className="row" style={{ marginBottom: 8 }}>
