@@ -46,9 +46,6 @@ interface ChannelMap {
 
 let cachedChannels: ChannelMap | null = null
 let intentChecked = false
-let welcomeSetupDone = false
-let vipSetupDone = false
-let visibilitySetupDone = false
 
 const KOFI_PREFIX = '__KOFI__:'
 const PERM = {
@@ -505,9 +502,6 @@ async function findAndGrantVipRole(
   fallbackName?: string
 ): Promise<{ granted: boolean; userId?: string; username?: string; displayName?: string }> {
   const guildId = getGuild()
-  if (!chMap.vipRoleId) {
-    await runVipSetup(chMap).catch(() => {})
-  }
   const roleId = chMap.vipRoleId
   if (!roleId) return { granted: false }
 
@@ -872,19 +866,8 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     else if (n.includes('deploy') || n.includes('git')) map.deployGit = c.id
   }
 
-  if (!welcomeSetupDone || !map.joins) {
-    welcomeSetupDone = true
-    await runWelcomeAndJoinSetup(map).catch(() => {})
-  }
-  if (!vipSetupDone || !map.vipRoleId || !map.vipCat || !map.vipChat || !map.vipInfo || !map.vipMusic || !map.vipVoice) {
-    vipSetupDone = true
-    await runVipSetup(map).catch(() => {})
-  }
-  if (!visibilitySetupDone) {
-    visibilitySetupDone = true
-    await runChannelVisibilitySetup(map).catch(() => {})
-  }
-
+  // A csatornák, kategóriák és jogosultságok automatikus átírása kikapcsolva,
+  // hogy a kézzel beállított Discord szerverstruktúra érintetlen maradjon.
   cachedChannels = map
   return map
 }
