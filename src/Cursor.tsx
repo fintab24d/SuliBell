@@ -33,22 +33,29 @@ export default function Cursor() {
     }
     const kick = () => { if (!raf) raf = requestAnimationFrame(loop) }
 
-    const move = (e: PointerEvent) => {
-      if (e.pointerType !== 'mouse') return
-      tx.x = e.clientX; tx.y = e.clientY
+    const updatePos = (x: number, y: number) => {
+      tx.x = x; tx.y = y
       if (!seen) { seen = true; rp.x = tx.x; rp.y = tx.y }   // első mozdulatnál nincs "berepülés"
       put(dt, tx)
+      html.classList.add('cursor-on')
       el.classList.add('on')
       kick()
+    }
+    const move = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return
+      updatePos(e.clientX, e.clientY)
+    }
+    const mouseMove = (e: MouseEvent) => {
+      updatePos(e.clientX, e.clientY)
     }
     const over = (e: PointerEvent) => {
       const t = e.target as Element | null
       const text = !!t?.closest?.(TEXT), click = !text && !!t?.closest?.(CLICK) && !(t.closest('button,input,select') as HTMLButtonElement | null)?.disabled
       el.classList.toggle('text', text); el.classList.toggle('link', click)
     }
-    const down = (e: PointerEvent) => { if (e.pointerType === 'mouse') el.classList.add('down') }
+    const down = (e: PointerEvent) => { if (e.pointerType !== 'touch') el.classList.add('down') }
     const up = (e: PointerEvent) => {
-      if (e.pointerType !== 'mouse') return
+      if (e.pointerType === 'touch') return
       el.classList.remove('down')
       const p = document.createElement('div')              // szikra-kör a kattintás helyén
       p.className = 'cur-pop'; p.style.left = `${e.clientX}px`; p.style.top = `${e.clientY}px`
@@ -56,21 +63,27 @@ export default function Cursor() {
       p.addEventListener('animationend', () => p.remove(), { once: true })
       el.appendChild(p)
     }
-    const out = (e: MouseEvent) => { if (!e.relatedTarget) el.classList.remove('on') }   // az ablakot elhagyta
+    const leave = () => { el.classList.remove('on') }      // az ablakot elhagyta vagy elvesztette a fókuszt
+    const enter = () => { html.classList.add('cursor-on'); if (seen) el.classList.add('on') }
     const hide = () => { if (document.hidden) el.classList.remove('on') }
 
     window.addEventListener('pointermove', move, { passive: true })
+    window.addEventListener('mousemove', mouseMove, { passive: true })
     window.addEventListener('pointerover', over, { passive: true })
     window.addEventListener('pointerdown', down, { passive: true })
     window.addEventListener('pointerup', up, { passive: true })
-    document.addEventListener('mouseout', out)
+    window.addEventListener('blur', leave)
+    html.addEventListener('mouseleave', leave)
+    html.addEventListener('mouseenter', enter)
     document.addEventListener('visibilitychange', hide)
     return () => {
       cancelAnimationFrame(raf)
       html.classList.remove('cursor-on')
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerover', over)
+      window.removeEventListener('pointermove', move); window.removeEventListener('mousemove', mouseMove); window.removeEventListener('pointerover', over)
       window.removeEventListener('pointerdown', down); window.removeEventListener('pointerup', up)
-      document.removeEventListener('mouseout', out); document.removeEventListener('visibilitychange', hide)
+      window.removeEventListener('blur', leave)
+      html.removeEventListener('mouseleave', leave); html.removeEventListener('mouseenter', enter)
+      document.removeEventListener('visibilitychange', hide)
     }
   }, [])
 

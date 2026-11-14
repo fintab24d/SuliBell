@@ -57,27 +57,101 @@ function makeMistSprite([r, g, b]: RGB) {
   return s
 }
 
-/** Előre lerenderelt több-pamacsos felhő sprite (220x96). */
-function makeCloudSprite([r, g, b]: RGB) {
+/** Előre lerenderelt többrétegű felhő sprite (320x140). */
+function makeCloudSprite([r, g, b]: RGB, rim?: RGB) {
   const s = document.createElement('canvas')
-  s.width = 220
-  s.height = 96
+  s.width = 320
+  s.height = 140
   const c = s.getContext('2d')!
   const puffs: [number, number, number, number][] = [
-    [56, 56, 36, 0.55],
-    [98, 42, 44, 0.72],
-    [142, 46, 38, 0.65],
-    [176, 58, 30, 0.48],
-    [114, 62, 34, 0.5],
+    [76, 86, 46, 0.72],
+    [126, 62, 56, 0.88],
+    [186, 64, 52, 0.84],
+    [240, 84, 42, 0.7],
+    [156, 86, 48, 0.82],
+    [104, 90, 40, 0.74],
+    [212, 90, 38, 0.68],
   ]
   for (const [px, py, pr, pa] of puffs) {
-    const gr = c.createRadialGradient(px, py, pr * 0.15, px, py, pr)
+    const gr = c.createRadialGradient(px, py, pr * 0.16, px, py, pr)
     gr.addColorStop(0, `rgba(${r},${g},${b},${pa})`)
-    gr.addColorStop(0.65, `rgba(${r},${g},${b},${pa * 0.35})`)
+    gr.addColorStop(0.58, `rgba(${r},${g},${b},${(pa * 0.58).toFixed(2)})`)
     gr.addColorStop(1, `rgba(${r},${g},${b},0)`)
     c.fillStyle = gr
     c.fillRect(px - pr, py - pr, pr * 2, pr * 2)
   }
+  if (rim) {
+    const [rr, rg, rb] = rim
+    const topPuffs: [number, number, number, number][] = [
+      [126, 52, 42, 0.42],
+      [186, 54, 38, 0.36],
+      [78, 76, 32, 0.28],
+    ]
+    for (const [px, py, pr, pa] of topPuffs) {
+      const gr = c.createRadialGradient(px, py, pr * 0.1, px, py, pr)
+      gr.addColorStop(0, `rgba(${rr},${rg},${rb},${pa})`)
+      gr.addColorStop(0.65, `rgba(${rr},${rg},${rb},${(pa * 0.3).toFixed(2)})`)
+      gr.addColorStop(1, `rgba(${rr},${rg},${rb},0)`)
+      c.fillStyle = gr
+      c.fillRect(px - pr, py - pr, pr * 2, pr * 2)
+    }
+  }
+  return s
+}
+
+/** Előre lerenderelt Hold sprite (160x160): izzó ezüstös holdkorong finom kráterekkel és félhold-árnyékkal. */
+function makeMoonSprite() {
+  const s = document.createElement('canvas')
+  s.width = 160
+  s.height = 160
+  const c = s.getContext('2d')!
+  const cx = 80, cy = 80, r = 34
+
+  // Lágy holdudvar
+  const halo = c.createRadialGradient(cx, cy, r * 0.8, cx, cy, 78)
+  halo.addColorStop(0, 'rgba(210, 232, 255, 0.48)')
+  halo.addColorStop(0.45, 'rgba(150, 195, 255, 0.18)')
+  halo.addColorStop(1, 'rgba(130, 175, 245, 0)')
+  c.fillStyle = halo
+  c.fillRect(0, 0, 160, 160)
+
+  // Holdkorong
+  const disc = c.createRadialGradient(cx - 10, cy - 10, 4, cx, cy, r)
+  disc.addColorStop(0, 'rgba(255, 255, 252, 0.98)')
+  disc.addColorStop(0.7, 'rgba(226, 238, 255, 0.94)')
+  disc.addColorStop(1, 'rgba(178, 206, 242, 0.88)')
+  c.fillStyle = disc
+  c.beginPath()
+  c.arc(cx, cy, r, 0, Math.PI * 2)
+  c.fill()
+
+  // Finom kráterek
+  c.save()
+  c.beginPath()
+  c.arc(cx, cy, r, 0, Math.PI * 2)
+  c.clip()
+  const craters: [number, number, number, number][] = [
+    [cx - 12, cy - 8, 7, 0.14],
+    [cx + 6, cy + 12, 9, 0.12],
+    [cx - 4, cy + 16, 4.5, 0.15],
+    [cx + 14, cy - 14, 5.5, 0.11],
+    [cx - 19, cy + 7, 5, 0.13],
+  ]
+  for (const [kx, ky, kr, ka] of craters) {
+    c.fillStyle = `rgba(115, 145, 190, ${ka})`
+    c.beginPath()
+    c.arc(kx, ky, kr, 0, Math.PI * 2)
+    c.fill()
+  }
+  // Enyhe sötétedés a jobb oldali szegélyen (térhatás)
+  const shade = c.createRadialGradient(cx + 16, cy + 6, r * 0.25, cx + 10, cy + 4, r * 1.15)
+  shade.addColorStop(0, 'rgba(20, 35, 72, 0.28)')
+  shade.addColorStop(0.65, 'rgba(20, 35, 72, 0.08)')
+  shade.addColorStop(1, 'rgba(20, 35, 72, 0)')
+  c.fillStyle = shade
+  c.fillRect(cx - r, cy - r, r * 2, r * 2)
+  c.restore()
+
   return s
 }
 
@@ -153,10 +227,13 @@ export class FxEngine {
   private sprites: HTMLCanvasElement[] = []
   private snowSprite!: HTMLCanvasElement
   private sunSprite!: HTMLCanvasElement
+  private moonSprite!: HTMLCanvasElement
+  private moonGlowSprite!: HTMLCanvasElement
   private mistDarkSprite!: HTMLCanvasElement
   private mistLightSprite!: HTMLCanvasElement
   private cloudDarkSprite!: HTMLCanvasElement
   private cloudLightSprite!: HTMLCanvasElement
+  private isNight = false
   private focus = 0
   private additive = true
   private raf = 0
@@ -215,10 +292,16 @@ export class FxEngine {
     this.sprites = this.pal.map(makeSprite)
     this.snowSprite = makeSprite([235, 245, 255])
     this.sunSprite = makeMistSprite([255, 210, 95])
+    this.moonSprite = makeMoonSprite()
+    this.moonGlowSprite = makeMistSprite([140, 185, 255])
     this.mistDarkSprite = makeMistSprite([185, 215, 245])
     this.mistLightSprite = makeMistSprite([135, 162, 198])
-    this.cloudDarkSprite = makeCloudSprite([115, 155, 215])
-    this.cloudLightSprite = makeCloudSprite([140, 165, 200])
+    this.cloudDarkSprite = makeCloudSprite([110, 145, 200], [185, 215, 250])
+    this.cloudLightSprite = makeCloudSprite([125, 145, 178], [235, 244, 255])
+    try {
+      const h = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Europe/Budapest' }).format(new Date()))
+      this.isNight = h >= 18 || h < 6
+    } catch { /* fallback false */ }
   }
 
   private syncPerfAttr() {
@@ -302,6 +385,11 @@ export class FxEngine {
       this.sparks.push({ x: x + Math.cos(a) * rad, y: y + Math.sin(a) * rad, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rnd(3, 8), life: rnd(0.7, 1.6), max: 1.6, ci: this.pick(0.6) })
     }
     this.capSparks()
+  }
+
+  /** Napszak beállítása: nappal Nap sugarakkal, este Hold és csillagok. */
+  setNight(night: boolean) {
+    this.isNight = night
   }
 
   /** Valódi időjárás: derült, felhős/borult, ködös, szitálás, eső, hó, vihar (villámlással). */
@@ -404,8 +492,8 @@ export class FxEngine {
       wantBg = Math.round(8 * this.wpow * this.perfScale)
       wantFg = Math.round(3 * this.perfScale)
     } else if (this.wkind === 'cloudy') {
-      wantBg = Math.max(3, Math.round(5.5 * this.wpow * this.perfScale))
-      wantFg = 0
+      wantBg = Math.max(6, Math.round(9 * this.wpow * this.perfScale))
+      wantFg = this.wpow > 1 ? Math.max(2, Math.round(3 * this.perfScale)) : 1
     } else if (this.wkind === 'rain' || this.wkind === 'storm') {
       wantBg = this.wkind === 'storm' ? 4 : 2
       wantFg = this.wkind === 'storm' ? 2 : 0
@@ -417,13 +505,13 @@ export class FxEngine {
       const isFg = i >= wantBg
       const isCloud = this.wkind === 'cloudy'
       const isFog = this.wkind === 'fog'
-      const bw = isCloud ? rnd(240, 440) * this.sc : rnd(420, 780) * this.sc
-      const bh = isCloud ? bw * 0.42 : rnd(170, 320) * this.sc
-      const y = isCloud ? rnd(-bh * 0.2, this.h * 0.42) : rnd(-bh * 0.15, this.h - bh * 0.35)
-      const vx = (isCloud ? rnd(7, 17) : isFog ? rnd(10, 26) : rnd(28, 65)) * (Math.random() < 0.8 ? 1 : -1)
+      const bw = isCloud ? rnd(260, 520) * this.sc : rnd(420, 780) * this.sc
+      const bh = isCloud ? bw * 0.44 : rnd(170, 320) * this.sc
+      const y = isCloud ? rnd(-bh * 0.15, this.h * 0.48) : rnd(-bh * 0.15, this.h - bh * 0.35)
+      const vx = (isCloud ? rnd(8, 22) : isFog ? rnd(10, 26) : rnd(28, 65)) * (Math.random() < 0.85 ? 1 : -1)
       const a = isFg
-        ? (isFog ? rnd(0.055, 0.105) : rnd(0.035, 0.07))
-        : (isFog ? rnd(0.16, 0.3) : isCloud ? rnd(0.2, 0.38) : rnd(0.08, 0.16))
+        ? (isCloud ? rnd(0.18, 0.32) : isFog ? rnd(0.055, 0.105) : rnd(0.035, 0.07))
+        : (isCloud ? rnd(0.48, 0.78) : isFog ? rnd(0.16, 0.3) : rnd(0.08, 0.16))
       this.mists.push({ x: rnd(-bw * 0.4, this.w), y, vx, w: bw, h: bh, a, ph: rnd(0, TAU), fg: isFg })
     }
   }
@@ -993,29 +1081,99 @@ export class FxEngine {
     const wk = this.wkind
     const t = this.time
 
-    // Derült: finom napsütés a sarokban + lágy sugarak
-    if (wk === 'clear') {
+    // Derült vagy részben felhős ég: nappal Nap sok sugárral, este Hold és csillagok
+    if (wk === 'clear' || (wk === 'cloudy' && this.wpow < 1)) {
+      const mul = wk === 'clear' ? 1 : 0.6
       const sx = this.w * 0.88
-      const sy = this.h * 0.12
+      const sy = this.h * 0.13
       const rad = Math.min(this.w, this.h) * 0.42
-      cBg.globalCompositeOperation = isDark ? 'lighter' : 'source-over'
-      cBg.globalAlpha = isDark ? 0.38 : 0.48
-      cBg.drawImage(this.sunSprite, sx - rad, sy - rad, rad * 2, rad * 2)
-      // 3 finom forgó fénysugár
-      cBg.globalAlpha = isDark ? 0.045 : 0.075
-      cBg.fillStyle = isDark ? '#ffe39a' : '#ffcf5c'
-      for (let i = 0; i < 3; i++) {
-        const ang = 2.25 + i * 0.28 + Math.sin(t * 0.35 + i) * 0.06
-        const len = Math.max(this.w, this.h) * 1.15
+
+      if (this.isNight) {
+        // Pislákoló csillagok az éjszakai égbolton (derült / gyéren felhős ég)
+        if (isDark) {
+          cBg.globalCompositeOperation = 'lighter'
+          cBg.fillStyle = '#e4f0ff'
+          const starCount = wk === 'clear' ? 28 : 14
+          for (let i = 0; i < starCount; i++) {
+            const fx = ((i * 197 + 31) % 97) / 97
+            const fy = ((i * 131 + 17) % 61) / 100
+            const tw = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1.2 + (i % 5) * 0.35) + i * 1.7))
+            cBg.globalAlpha = tw * mul
+            const sr = (i % 4 === 0 ? 1.8 : 1.1) * this.sc
+            cBg.beginPath()
+            cBg.arc(fx * this.w, fy * this.h, sr, 0, TAU)
+            cBg.fill()
+          }
+        }
+
+        // Holdudvar és holdsugarak
+        cBg.globalCompositeOperation = isDark ? 'lighter' : 'source-over'
+        cBg.globalAlpha = (isDark ? 0.34 : 0.25) * mul
+        cBg.drawImage(this.moonGlowSprite, sx - rad, sy - rad, rad * 2, rad * 2)
+
+        cBg.globalAlpha = (isDark ? 0.045 : 0.035) * mul
+        cBg.fillStyle = '#cde2ff'
+        for (let i = 0; i < 6; i++) {
+          const ang = 1.85 + i * 0.34 + Math.sin(t * 0.28 + i) * 0.05
+          const len = Math.max(this.w, this.h) * 0.85
+          const halfW = 0.035 + (i % 2) * 0.02
+          cBg.beginPath()
+          cBg.moveTo(sx, sy)
+          cBg.lineTo(sx + Math.cos(ang - halfW) * len, sy + Math.sin(ang - halfW) * len)
+          cBg.lineTo(sx + Math.cos(ang + halfW) * len, sy + Math.sin(ang + halfW) * len)
+          cBg.closePath()
+          cBg.fill()
+        }
+
+        // Holdkorong
+        const moonSize = Math.min(this.w, this.h) * 0.17 * mul + 28 * this.sc
+        cBg.globalCompositeOperation = 'source-over'
+        cBg.globalAlpha = (isDark ? 0.92 : 0.72) * mul
+        cBg.drawImage(this.moonSprite, sx - moonSize * 0.5, sy - moonSize * 0.5, moonSize, moonSize)
+      } else {
+        // Nappali meleg aura és világító napkorong
+        cBg.globalCompositeOperation = isDark ? 'lighter' : 'source-over'
+        cBg.globalAlpha = (isDark ? 0.42 : 0.52) * mul
+        cBg.drawImage(this.sunSprite, sx - rad, sy - rad, rad * 2, rad * 2)
+
+        const sunR = Math.min(this.w, this.h) * 0.042
+        cBg.globalAlpha = (isDark ? 0.75 : 0.88) * mul
+        cBg.fillStyle = isDark ? '#fff1b8' : '#ffe27a'
         cBg.beginPath()
-        cBg.moveTo(sx, sy)
-        cBg.lineTo(sx + Math.cos(ang - 0.06) * len, sy + Math.sin(ang - 0.06) * len)
-        cBg.lineTo(sx + Math.cos(ang + 0.06) * len, sy + Math.sin(ang + 0.06) * len)
-        cBg.closePath()
+        cBg.arc(sx, sy, sunR, 0, TAU)
         cBg.fill()
+
+        // 12 rövid, körben forgó korona-sugár a napkorong körül
+        cBg.fillStyle = isDark ? '#ffe39a' : '#ffd25a'
+        for (let i = 0; i < 12; i++) {
+          const ang = t * 0.12 + (i * TAU) / 12
+          const len = sunR * (2.6 + 0.5 * Math.sin(t * 1.1 + i))
+          cBg.globalAlpha = (isDark ? 0.16 : 0.24) * mul
+          cBg.beginPath()
+          cBg.moveTo(sx, sy)
+          cBg.lineTo(sx + Math.cos(ang - 0.09) * len, sy + Math.sin(ang - 0.09) * len)
+          cBg.lineTo(sx + Math.cos(ang + 0.09) * len, sy + Math.sin(ang + 0.09) * len)
+          cBg.closePath()
+          cBg.fill()
+        }
+
+        // 10 hosszú, legyezőszerű napsugár az égen át
+        cBg.fillStyle = isDark ? '#ffe39a' : '#ffcf5c'
+        for (let i = 0; i < 10; i++) {
+          const ang = 1.55 + i * 0.26 + Math.sin(t * 0.32 + i * 0.8) * 0.05
+          const len = Math.max(this.w, this.h) * (0.95 + (i % 3) * 0.16)
+          const halfW = 0.028 + (i % 3) * 0.018
+          cBg.globalAlpha = ((isDark ? 0.042 : 0.068) + (i % 2) * 0.018) * mul
+          cBg.beginPath()
+          cBg.moveTo(sx, sy)
+          cBg.lineTo(sx + Math.cos(ang - halfW) * len, sy + Math.sin(ang - halfW) * len)
+          cBg.lineTo(sx + Math.cos(ang + halfW) * len, sy + Math.sin(ang + halfW) * len)
+          cBg.closePath()
+          cBg.fill()
+        }
       }
       cBg.globalAlpha = 1
-      return
+      if (wk === 'clear') return
     }
 
     // Háttér köd- vagy felhőrétegek (cloudy, fog, rain, storm)
@@ -1117,10 +1275,12 @@ export class FxEngine {
       cFg.clearRect(0, 0, this.w, this.h)
     }
 
-    // Finom előtér-ködfátyol (ködös / vihar)
+    // Finom előtér-felhők vagy ködfátyol (felhős / ködös / vihar)
     if (this.mists.length) {
       cFg.globalCompositeOperation = 'source-over'
-      const mistSpr = isDark ? this.mistDarkSprite : this.mistLightSprite
+      const mistSpr = this.wkind === 'cloudy'
+        ? (isDark ? this.cloudDarkSprite : this.cloudLightSprite)
+        : (isDark ? this.mistDarkSprite : this.mistLightSprite)
       for (const m of this.mists) {
         if (!m.fg) continue
         cFg.globalAlpha = m.a * (0.85 + 0.15 * Math.sin(t * 0.45 + m.ph))

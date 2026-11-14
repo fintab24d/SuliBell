@@ -186,7 +186,7 @@ function useQr(text: string, on: boolean) {
 }
 
 /** WMO időjárási kód → ikon és magyar leírás */
-const WX = (c: number): [string, string] => c === 0 ? ['☀️', 'Derült'] : c <= 2 ? ['🌤️', 'Részben felhős'] : c === 3 ? ['☁️', 'Borult'] : c <= 48 ? ['🌫️', 'Ködös']
+const WX = (c: number, night?: boolean): [string, string] => c === 0 ? [night ? '🌙' : '☀️', 'Derült'] : c <= 2 ? [night ? '🌙' : '🌤️', 'Részben felhős'] : c === 3 ? ['☁️', 'Borult'] : c <= 48 ? ['🌫️', 'Ködös']
   : c <= 57 ? ['🌦️', 'Szitálás'] : c <= 67 ? ['🌧️', 'Eső'] : c <= 77 ? ['❄️', 'Havazás'] : c <= 82 ? ['🌦️', 'Zápor'] : c <= 86 ? ['🌨️', 'Hózápor'] : ['⛈️', 'Zivatar']
 
 /** Aktuális időjárás az Open-Meteo-ból (30 percenként frissül; offline esetén az utolsó adat marad). */
@@ -326,6 +326,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const wx = sandbox && sb.simWeatherCode !== null
     ? { t: 14, c: sb.simWeatherCode, min: 10, max: 18, p: 90, lat: 0, lon: 0 }
     : rawWx
+  const isNight = !!z && (z.secs >= 18 * 3600 || z.secs < 6 * 3600)
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
   useEffect(() => {
@@ -623,8 +624,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               <div className="date">{dateText}</div>
               {wx && (
                 <div className="wx">
-                  <span>{WX(wx.c)[0]}</span>
-                  <b>{wx.t}°C, {WX(wx.c)[1]}</b>
+                  <span>{WX(wx.c, isNight)[0]}</span>
+                  <b>{wx.t}°C, {WX(wx.c, isNight)[1]}</b>
                   <small>{data.settings.weather_city} ({wx.min}–{wx.max}°C, 💧{wx.p}%)</small>
                 </div>
               )}
@@ -711,7 +712,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         {maintPrepBanner}
       {maintOverlay}
         <VibeOverlay floats={vibeFloats} />
-        {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
+        {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} />}
         <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
         {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
         {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
@@ -733,8 +734,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               <div className="date">{dateText}</div>
               {wx && (
                 <div className="wx">
-                  <span>{WX(wx.c)[0]}</span>
-                  <b>{wx.t}°C, {WX(wx.c)[1]}</b>
+                  <span>{WX(wx.c, isNight)[0]}</span>
+                  <b>{wx.t}°C, {WX(wx.c, isNight)[1]}</b>
                   <small>{data.settings.weather_city} ({wx.min}–{wx.max}°C, 💧{wx.p}%)</small>
                 </div>
               )}
@@ -898,7 +899,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       {maintPrepBanner}
       {maintOverlay}
       <VibeOverlay floats={vibeFloats} />
-      {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} sound={!!data.settings.sound_enabled && audioOn} />}
+      {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} />}
       <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}

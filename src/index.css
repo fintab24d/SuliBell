@@ -426,7 +426,7 @@ label.btn:hover{border-color:var(--brand)}
 .tv .rest h2{font-size:2.6vh;margin-bottom:.6vh}.tv .restcount b{font-size:5.5vh}.tv .restcount span{font-size:2vh}.tv .restcount small{font-size:1.5vh}.tv .restcount em{font-size:1.6vh}.tv .snakehud{font-size:1.5vh}.tv .snakescreen{max-height:22vh}
 
 /* Egyedi Windows-stílusú neon kurzor (Cursor.tsx): csak egérrel, finom mutatóval; a billentyűzetes fókuszkeret marad */
-html.cursor-on,html.cursor-on *{cursor:none!important}
+html.cursor-on,html.cursor-on body,html.cursor-on *,html.cursor-on *::before,html.cursor-on *::after,html.cursor-on input::-webkit-slider-thumb{cursor:url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") 0 0,none!important}
 .cur{--ca:var(--n-cyan,#2de2ff);--cb:var(--n-pink,#ff4fc3);--cf:rgba(8,10,28,.9);position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none;opacity:0;transition:opacity .2s}
 :root[data-theme=light] .cur{--ca:#0a78d1;--cb:#d11a93;--cf:rgba(255,255,255,.94)}
 .cur.on{opacity:1}
