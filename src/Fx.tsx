@@ -96,16 +96,40 @@ export function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: s
   return msg ? <div key={msg.id} className={`bellbanner ${msg.phase}`} role="status"><b>{msg.title}</b>{msg.sub && <span>{msg.sub}</span>}</div> : null
 }
 
-/** Nagy pillanatok: egy visszaszámláló nullára ér, hétvége / ünnep előtt vége a tanításnak, vagy a logóra 5-ször kattintanak (parti mód).
- *  Tűzijátékot és konfettit indít, és feliratot mutat. Az effektek a Fx rétegen át jelennek meg. */
+/** Nagy pillanatok és rejtett Easter Eggek:
+ *  - Visszaszámláló 0 / hétvége előtti utolsó óra
+ *  - Logó 5× kattintás (Parti mód) / ?party
+ *  - Konami-kód (↑↑↓↓←→←→BA) → 8-bites árkád mód
+ *  - Titkos begépelt szavak (matrix, cica/miau, szunet/pihi, sulibell)
+ *  - Nagy óra 7× kattintás → Időutazó mód
+ *  - Verziószám 5× kattintás → Kódmágus mód
+ *  - Időjárás ikon 5× kattintás → Időjárás-varázslat */
 export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean }) {
   const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
+  const eggTimerRef = useRef<number>(0)
+
   const fire = (title: string, sub: string, kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) => {
     if (enabled && sound) fxSound('fanfare', 0)
     if (enabled) window.dispatchEvent(new CustomEvent('sulibell:celebrate', { detail: { kind, power } }))
-    setMsg({ id: Date.now(), title, sub })
+    setMsg({ id: Date.now() + Math.random(), title, sub })
   }
-  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4200); return () => clearTimeout(t) }, [msg?.id])
+
+  const flashHtmlClass = (cls: string, ms = 7500) => {
+    const h = document.documentElement
+    h.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+    h.classList.add(cls)
+    if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
+    eggTimerRef.current = window.setTimeout(() => {
+      h.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+    }, ms)
+  }
+
+  useEffect(() => () => {
+    if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
+    document.documentElement.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+  }, [])
+
+  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4400); return () => clearTimeout(t) }, [msg?.id])
 
   // 1) Visszaszámláló nullára ér
   const seen = useRef<Map<string, number>>(new Map())
@@ -127,18 +151,98 @@ export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: 
     prevPhase.current = phase
   }, [phase])
 
-  // 3) Parti mód: a logóra 5 kattintás 3 mp-en belül (vagy a címben ?party)
+  // 3) Kattintásos & URL Easter Eggek + DevTools konzol üzenet
   useEffect(() => {
-    let n = 0, t = 0
-    const on = (e: Event) => {
-      if (!(e.target as HTMLElement | null)?.closest?.('.brand')) return
-      const now = Date.now(); n = now - t > 3000 ? 1 : n + 1; t = now
-      if (n >= 5) { n = 0; fire('Parti!', 'Szuper rejtett funkciót találtál', 'both', 1.6) }
+    const clicks: Record<string, { n: number; t: number }> = {}
+    const bump = (id: string, need: number, windowMs = 3000) => {
+      const now = Date.now(), cur = clicks[id]
+      const n = !cur || now - cur.t > windowMs ? 1 : cur.n + 1
+      clicks[id] = { n, t: now }
+      if (n >= need) { clicks[id] = { n: 0, t: 0 }; return true }
+      return false
     }
-    window.addEventListener('click', on)
+
+    const onClick = (e: Event) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      if (target.closest('.brand') && bump('brand', 5)) {
+        fire('Parti!', 'Szuper rejtett funkciót találtál', 'both', 1.6)
+      } else if (target.closest('.timebox') && bump('clock', 7)) {
+        flashHtmlClass('egg-warp', 6500)
+        fire('⏳ Időutazó mód!', 'Sajnos az órát így sem tudod előretekerni a kicsengetésig 😅', 'both', 1.5)
+      } else if (target.closest('.foot .ver') && bump('ver', 5)) {
+        fire('🛠️ Kódmágus!', 'Ezt a titkot a diákok 99%-a sosem találja meg. Szép munka!', 'confetti', 1.4)
+      } else if (target.closest('.wx') && bump('wx', 5)) {
+        fire('🌦️ Időjárás-varázsló!', 'Hószünetet ugyan nem tudunk rendelni, de jár a konfetti ✨', 'confetti', 1.3)
+      }
+    }
+
+    window.addEventListener('click', onClick)
     if (/[?&]party\b/.test(location.search)) setTimeout(() => fire('Parti!', 'SuliBell', 'both', 1.2), 1200)
-    return () => window.removeEventListener('click', on)
+    return () => window.removeEventListener('click', onClick)
   }, [enabled, sound])
+
+  // 4) Billentyűs Easter Eggek: Konami-kód + titkos varázsszavak (input mezőkön kívül)
+  useEffect(() => {
+    const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a']
+    let kIdx = 0
+    let buf = ''
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (el?.closest?.('input,textarea,select,[contenteditable="true"]')) return
+
+      const raw = e.key
+      const low = raw.length === 1 ? raw.toLowerCase() : raw
+
+      // Konami-kód vizsgálata
+      if (low === KONAMI[kIdx]) {
+        kIdx++
+        if (kIdx === KONAMI.length) {
+          kIdx = 0
+          flashHtmlClass('egg-arcade', 8000)
+          fire('👾 KONAMI-KÓD FELOLDVA!', 'Titkos 8-bites árkád mód aktiválva (+1000 tiszteletpont!)', 'both', 1.8)
+        }
+      } else {
+        kIdx = low === KONAMI[0] ? 1 : 0
+      }
+
+      // Titkos begépelt szavak (ékezet nélkül is működik)
+      if (low.length === 1 && /[a-z]/.test(low)) {
+        buf = (buf + low).slice(-14)
+        if (buf.endsWith('matrix')) {
+          buf = ''
+          flashHtmlClass('egg-matrix', 8000)
+          fire('🕶️ Mátrix-mód!', '„Nem a csengő késik, a Mátrix hajlik meg.”', 'confetti', 1.4)
+        } else if (buf.endsWith('cica') || buf.endsWith('miau')) {
+          buf = ''
+          fire('🐱 Titkos Iskolamacska!', 'Miaú! A folyosói kabalamacska áldását adta a napodra.', 'confetti', 1.25)
+        } else if (buf.endsWith('szunet') || buf.endsWith('pihi')) {
+          buf = ''
+          fire('🛋️ Szünet-idézés!', 'Hivatalosan is szünetre szavaztál (sajnos a csengő dönt 😅).', 'both', 1.25)
+        } else if (buf.endsWith('sulibell')) {
+          buf = ''
+          flashHtmlClass('egg-gold', 8000)
+          fire('🔔 Arany Harang!', 'Megtaláltad a névadó titkos varázsszót!', 'both', 1.6)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [enabled, sound])
+
+  // 5) Egyszeri titkos üzenet a DevTools konzolban
+  useEffect(() => {
+    try {
+      console.log(
+        '%c🔔 SuliBell Titkos Konzol %c Gratulálok, megtaláltad a fejlesztői konzolt! Tipp: ↑↑↓↓←→←→BA vagy gépeld be az üres oldalon: matrix, cica, sulibell 😉',
+        'background:linear-gradient(90deg,#ff4fc3,#2de2ff);color:#05060d;font-weight:800;padding:3px 8px;border-radius:6px',
+        'color:#9ca6cc;font-weight:600'
+      )
+    } catch { /* ignore */ }
+  }, [])
 
   return msg ? <div key={msg.id} className="bellbanner after party" role="status"><b>{msg.title}</b><span>{msg.sub}</span></div> : null
 }

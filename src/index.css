@@ -1148,7 +1148,93 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
   box-shadow: 0 0 22px -4px rgba(250, 204, 21, 0.36), inset 0 1px 0 rgba(255, 248, 200, 0.28);
 }
 @media(prefers-reduced-motion:reduce){
-  .kofi-panel,.kofi-panel::after{animation:none}
+  .kofi-panel,.kofi-panel::after,.scroll-cue-arr{animation:none}
+}
+
+/* Alsó lebegő görgetésjelző nyíl (zene/videó + szüneti játék) */
+@keyframes cueArrowBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+.scroll-cue {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 18px;
+  border-radius: 999px;
+  font: 700 0.88rem/1.25 var(--f);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--panel) 92%, #0a1026);
+  border: 1.5px solid color-mix(in srgb, var(--n-cyan, var(--break)) 60%, var(--line));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 22px -4px color-mix(in srgb, var(--n-cyan, var(--break)) 45%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.scroll-cue:hover:not(:disabled) {
+  transform: translateX(-50%) translateY(-2px);
+  border-color: var(--n-cyan, var(--break));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), 0 0 28px -2px color-mix(in srgb, var(--n-cyan, var(--break)) 65%, transparent);
+}
+.scroll-cue:active:not(:disabled) {
+  transform: translateX(-50%) translateY(1px);
+}
+.scroll-cue-arr {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--n-cyan, var(--break)) 22%, transparent);
+  color: var(--n-cyan, var(--break));
+  font-size: 1rem;
+  font-weight: 900;
+  animation: cueArrowBounce 1.3s ease-in-out infinite;
+}
+.jukebox, .arena {
+  scroll-margin-top: 20px;
+}
+@media (max-width: 720px) {
+  .scroll-cue {
+    bottom: 66px;
+    font-size: 0.8rem;
+    padding: 8px 14px;
+  }
+}
+
+/* Titkos Easter Egg vizuális módok (Fx.tsx) */
+@keyframes eggHueShift {
+  0% { filter: hue-rotate(0deg) saturate(1.2); }
+  50% { filter: hue-rotate(180deg) saturate(1.4); }
+  100% { filter: hue-rotate(360deg) saturate(1.2); }
+}
+html.egg-matrix #root main {
+  --lesson: #22c55e;
+  --break: #4ade80;
+  --next: #86efac;
+  --n-pink: #22c55e;
+  --n-cyan: #4ade80;
+  filter: hue-rotate(85deg) contrast(1.06);
+}
+html.egg-arcade .panel {
+  border-color: color-mix(in srgb, #facc15 55%, var(--n-pink)) !important;
+  box-shadow: 0 0 24px -6px rgba(255, 79, 195, 0.45), inset 0 0 18px -10px rgba(45, 226, 255, 0.35);
+}
+html.egg-gold .panel {
+  border-color: rgba(250, 204, 21, 0.78) !important;
+  box-shadow: 0 0 30px -6px rgba(250, 204, 21, 0.45);
+}
+html.egg-warp #root main {
+  animation: eggHueShift 3s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.egg-warp #root main { animation: none; }
 }
 .kofi-tv-left {
   min-width: 0;

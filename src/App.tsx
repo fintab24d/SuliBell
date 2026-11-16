@@ -229,6 +229,48 @@ function DayStrip({ L, secs, phase, cancelledIds }: { L: any[]; secs: number; ph
   </div>
 }
 
+function ScrollCue({ isVideoDay }: { isVideoDay: boolean }) {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      const target = document.querySelector('.jukebox, .arena') as HTMLElement | null
+      if (!target) { setShow(false); return }
+      const rect = target.getBoundingClientRect()
+      setShow(rect.top > window.innerHeight - 90)
+    }
+    check()
+    const t = setTimeout(check, 250)
+    window.addEventListener('scroll', check, { passive: true })
+    window.addEventListener('resize', check, { passive: true })
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('scroll', check)
+      window.removeEventListener('resize', check)
+    }
+  }, [isVideoDay])
+
+  if (!show) return null
+  const goDown = () => {
+    const target = document.querySelector('.jukebox, .arena') as HTMLElement | null
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  return (
+    <button
+      type="button"
+      className="scroll-cue"
+      onClick={goDown}
+      title="Ugrás a zene-/videóküldéshez és a szüneti játékhoz"
+    >
+      <span className="scroll-cue-txt">
+        Görgess lejjebb a {isVideoDay ? 'videó beküldésért' : 'zene beküldésért'} és a szüneti játékhoz
+      </span>
+      <span className="scroll-cue-arr" aria-hidden="true">↓</span>
+    </button>
+  )
+}
+
 export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const sb = useSandbox(!!sandbox)
   const tv = sandbox ? sb.simTv : location.pathname.startsWith('/display')
@@ -904,6 +946,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
+      {!isUpdating && !overlay && <ScrollCue isVideoDay={mediaModeForDay(z.date) === 'video'} />}
     </>
   )
 }
