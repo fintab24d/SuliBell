@@ -598,6 +598,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: sb.breakMediaKind, title: sb.breakMediaKind === 'music' ? 'Cartoon – On & On (Szüneti Zene Mix)' : 'Teszt szüneti videó (4K természetfilm)', by: 'Admin Tesztlabor', ytId: sb.breakMediaKind === 'music' ? 'K4DyBUG242c' : 'LXb3EKWsInQ', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
   const hasAnyWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
   const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
+  const curJukeboxBreakKey = `${z.date}-${s.phase}-${s.current?.id ?? s.next?.id ?? '0'}`
+  const breakTotalSec = s.phase === 'break' ? s.total : undefined
   const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasAnyWish || videos.length > 0) && (
     <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
   )
@@ -679,8 +681,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <div className="tv-subgrid">
                     {!vid && lunchBox}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
-                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} tv />
-                    <Jukebox schoolId={data.id} day={z.date} tv />
+                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv />
+                    <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
                     {kofiTvBox}
                   </div>
                 </>
@@ -693,8 +695,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <div className="tv-subgrid">
                     {offCard}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
-                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} tv />
-                    <Jukebox schoolId={data.id} day={z.date} tv />
+                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv />
+                    <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
                     {kofiTvBox}
                   </div>
                 </>
@@ -870,9 +872,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <div className="dash-col col-side">
             <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
 
-            <Jukebox schoolId={data.id} day={z.date} sound={!!data.settings.sound_enabled && audioOn} />
+            <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} />
 
-            <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} sound={!!data.settings.sound_enabled && audioOn} />
+            <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} sound={!!data.settings.sound_enabled && audioOn} />
 
             {pollCard}
             {kofiBox}

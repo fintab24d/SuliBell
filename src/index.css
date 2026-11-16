@@ -425,71 +425,59 @@ label.btn:hover{border-color:var(--brand)}
 .tv .rest{padding:1vh 1.2vw!important;border:1px solid var(--line)!important;border-radius:14px;background:var(--panel)!important}
 .tv .rest h2{font-size:2.6vh;margin-bottom:.6vh}.tv .restcount b{font-size:5.5vh}.tv .restcount span{font-size:2vh}.tv .restcount small{font-size:1.5vh}.tv .restcount em{font-size:1.6vh}.tv .snakehud{font-size:1.5vh}.tv .snakescreen{max-height:22vh}
 
-/* Egyedi Windows-stílusú neon kurzor (Cursor.tsx): csak egérrel, finom mutatóval; a billentyűzetes fókuszkeret marad */
-html.cursor-on{--cur-hide:url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") 0 0,none}
-html.cursor-on,html.cursor-on body,html.cursor-on *,html.cursor-on *::before,html.cursor-on *::after{cursor:var(--cur-hide)!important}
-html.cursor-on ::backdrop{cursor:var(--cur-hide)!important}
-html.cursor-on input::file-selector-button{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-file-upload-button{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-calendar-picker-indicator{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-fields-wrapper{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-text{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-year-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-month-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-day-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-hour-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-minute-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-second-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-millisecond-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-ampm-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-datetime-edit-week-field{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-inner-spin-button{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-outer-spin-button{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-clear-button{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-search-cancel-button{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-search-decoration{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-color-swatch-wrapper{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-color-swatch{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-slider-thumb{cursor:var(--cur-hide)!important}
-html.cursor-on input::-webkit-slider-runnable-track{cursor:var(--cur-hide)!important}
-html.cursor-on input::-moz-range-thumb{cursor:var(--cur-hide)!important}
-html.cursor-on input::-moz-range-track{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-scrollbar{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-scrollbar-button{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-scrollbar-track{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-scrollbar-track-piece{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-scrollbar-thumb{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-scrollbar-corner{cursor:var(--cur-hide)!important}
-html.cursor-on ::-webkit-resizer{cursor:var(--cur-hide)!important}
-.cur{--ca:var(--n-cyan,#2de2ff);--cb:var(--n-pink,#ff4fc3);--cf:rgba(8,10,28,.9);position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none;opacity:0;transition:opacity .2s}
-:root[data-theme=light] .cur{--ca:#0a78d1;--cb:#d11a93;--cf:rgba(255,255,255,.94)}
-.cur.on{opacity:1}
-.cur>*{position:absolute;left:0;top:0;width:0;height:0;will-change:transform;pointer-events:none}
+/* Egyedi Windows-stílusú neon kurzor (hardveres OS kurzor réteg + kattintási hullám; a billentyűzetes fókuszkeret marad) */
+html.cursor-on{
+  --cur-default:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='28' viewBox='0 0 26 28'%3E%3Cpath d='M3 3L3 20.5L7.4 16.3L10.6 23.2L13.1 22L9.9 15.1L15.8 15.1Z' fill='none' stroke='%232de2ff' stroke-opacity='.42' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M3 3L3 20.5L7.4 16.3L10.6 23.2L13.1 22L9.9 15.1L15.8 15.1Z' fill='%23080a1c' fill-opacity='.92' stroke='%232de2ff' stroke-width='1.75' stroke-linejoin='round'/%3E%3C/svg%3E") 3 3,auto;
+  --cur-pointer:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M9.5 3.5C8.4 3.5 7.6 4.3 7.6 5.4V12.5L5.8 11.2C5 10.6 3.9 10.9 3.5 11.8C3.2 12.5 3.5 13.4 4.1 13.9L8.5 18.5C9.5 19.5 10.8 20.1 12.2 20.1H15.8C18.2 20.1 20 18.2 20 15.8V10.8C20 9.9 19.3 9.2 18.4 9.2C17.8 9.2 17.3 9.5 17 10V9.4C17 8.5 16.3 7.8 15.4 7.8C14.8 7.8 14.3 8.1 14 8.6V8.2C14 7.3 13.3 6.6 12.4 6.6C11.9 6.6 11.5 6.8 11.2 7.2V5.4C11.2 4.3 10.5 3.5 9.5 3.5Z' fill='none' stroke='%23ff4fc3' stroke-opacity='.42' stroke-width='3.8' stroke-linejoin='round'/%3E%3Cpath d='M9.5 3.5C8.4 3.5 7.6 4.3 7.6 5.4V12.5L5.8 11.2C5 10.6 3.9 10.9 3.5 11.8C3.2 12.5 3.5 13.4 4.1 13.9L8.5 18.5C9.5 19.5 10.8 20.1 12.2 20.1H15.8C18.2 20.1 20 18.2 20 15.8V10.8C20 9.9 19.3 9.2 18.4 9.2C17.8 9.2 17.3 9.5 17 10V9.4C17 8.5 16.3 7.8 15.4 7.8C14.8 7.8 14.3 8.1 14 8.6V8.2C14 7.3 13.3 6.6 12.4 6.6C11.9 6.6 11.5 6.8 11.2 7.2V5.4C11.2 4.3 10.5 3.5 9.5 3.5Z' fill='%23080a1c' fill-opacity='.92' stroke='%23ff4fc3' stroke-width='1.65' stroke-linejoin='round'/%3E%3C/svg%3E") 9 3,pointer;
+  --cur-text:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 4V20M8.5 4H15.5M8.5 20H15.5' fill='none' stroke='%23ff4fc3' stroke-opacity='.42' stroke-width='4.2' stroke-linecap='round'/%3E%3Cpath d='M12 4V20M8.5 4H15.5M8.5 20H15.5' fill='none' stroke='%23ff4fc3' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 12 12,text;
+}
+html.cursor-on[data-theme=light]{
+  --cur-default:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='28' viewBox='0 0 26 28'%3E%3Cpath d='M3 3L3 20.5L7.4 16.3L10.6 23.2L13.1 22L9.9 15.1L15.8 15.1Z' fill='none' stroke='%230a78d1' stroke-opacity='.38' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M3 3L3 20.5L7.4 16.3L10.6 23.2L13.1 22L9.9 15.1L15.8 15.1Z' fill='%23ffffff' fill-opacity='.95' stroke='%230a78d1' stroke-width='1.75' stroke-linejoin='round'/%3E%3C/svg%3E") 3 3,auto;
+  --cur-pointer:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M9.5 3.5C8.4 3.5 7.6 4.3 7.6 5.4V12.5L5.8 11.2C5 10.6 3.9 10.9 3.5 11.8C3.2 12.5 3.5 13.4 4.1 13.9L8.5 18.5C9.5 19.5 10.8 20.1 12.2 20.1H15.8C18.2 20.1 20 18.2 20 15.8V10.8C20 9.9 19.3 9.2 18.4 9.2C17.8 9.2 17.3 9.5 17 10V9.4C17 8.5 16.3 7.8 15.4 7.8C14.8 7.8 14.3 8.1 14 8.6V8.2C14 7.3 13.3 6.6 12.4 6.6C11.9 6.6 11.5 6.8 11.2 7.2V5.4C11.2 4.3 10.5 3.5 9.5 3.5Z' fill='none' stroke='%23d11a93' stroke-opacity='.38' stroke-width='3.8' stroke-linejoin='round'/%3E%3Cpath d='M9.5 3.5C8.4 3.5 7.6 4.3 7.6 5.4V12.5L5.8 11.2C5 10.6 3.9 10.9 3.5 11.8C3.2 12.5 3.5 13.4 4.1 13.9L8.5 18.5C9.5 19.5 10.8 20.1 12.2 20.1H15.8C18.2 20.1 20 18.2 20 15.8V10.8C20 9.9 19.3 9.2 18.4 9.2C17.8 9.2 17.3 9.5 17 10V9.4C17 8.5 16.3 7.8 15.4 7.8C14.8 7.8 14.3 8.1 14 8.6V8.2C14 7.3 13.3 6.6 12.4 6.6C11.9 6.6 11.5 6.8 11.2 7.2V5.4C11.2 4.3 10.5 3.5 9.5 3.5Z' fill='%23ffffff' fill-opacity='.95' stroke='%23d11a93' stroke-width='1.65' stroke-linejoin='round'/%3E%3C/svg%3E") 9 3,pointer;
+  --cur-text:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 4V20M8.5 4H15.5M8.5 20H15.5' fill='none' stroke='%23d11a93' stroke-opacity='.38' stroke-width='4.2' stroke-linecap='round'/%3E%3Cpath d='M12 4V20M8.5 4H15.5M8.5 20H15.5' fill='none' stroke='%23d11a93' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 12 12,text;
+}
+html.cursor-on,html.cursor-on body,html.cursor-on *,html.cursor-on *::before,html.cursor-on *::after{cursor:var(--cur-default)!important}
+html.cursor-on ::backdrop{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-fields-wrapper{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-text{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-year-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-month-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-day-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-hour-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-minute-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-second-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-millisecond-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-ampm-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-datetime-edit-week-field{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-inner-spin-button{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-outer-spin-button{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-clear-button{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-search-cancel-button{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-search-decoration{cursor:var(--cur-default)!important}
+html.cursor-on input::-webkit-slider-runnable-track{cursor:var(--cur-default)!important}
+html.cursor-on input::-moz-range-track{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-scrollbar{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-scrollbar-button{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-scrollbar-track{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-scrollbar-track-piece{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-scrollbar-thumb{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-scrollbar-corner{cursor:var(--cur-default)!important}
+html.cursor-on ::-webkit-resizer{cursor:var(--cur-default)!important}
+html.cursor-on a[href],html.cursor-on a[href] *,html.cursor-on button:not(:disabled),html.cursor-on button:not(:disabled) *,html.cursor-on [role="button"],html.cursor-on [role="button"] *,html.cursor-on label.btn,html.cursor-on label.btn *,html.cursor-on select,html.cursor-on summary,html.cursor-on summary *,html.cursor-on input[type="checkbox"],html.cursor-on input[type="radio"],html.cursor-on input[type="button"],html.cursor-on input[type="submit"],html.cursor-on input[type="file"],html.cursor-on input[type="range"],html.cursor-on input[type="color"],html.cursor-on .popt,html.cursor-on .popt *,html.cursor-on .snakescreen canvas{cursor:var(--cur-pointer)!important}
+html.cursor-on input::file-selector-button{cursor:var(--cur-pointer)!important}
+html.cursor-on input::-webkit-file-upload-button{cursor:var(--cur-pointer)!important}
+html.cursor-on input::-webkit-calendar-picker-indicator{cursor:var(--cur-pointer)!important}
+html.cursor-on input::-webkit-slider-thumb{cursor:var(--cur-pointer)!important}
+html.cursor-on input::-moz-range-thumb{cursor:var(--cur-pointer)!important}
+html.cursor-on input::-webkit-color-swatch-wrapper{cursor:var(--cur-pointer)!important}
+html.cursor-on input::-webkit-color-swatch{cursor:var(--cur-pointer)!important}
+html.cursor-on textarea,html.cursor-on [contenteditable="true"],html.cursor-on [contenteditable="true"] *,html.cursor-on input:not([type="checkbox"],[type="radio"],[type="button"],[type="submit"],[type="file"],[type="range"],[type="color"],[type="date"],[type="time"],[type="datetime-local"],[type="month"],[type="week"]){cursor:var(--cur-text)!important}
+.cur{--ca:var(--n-cyan,#2de2ff);--cb:var(--n-pink,#ff4fc3);position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none}
+:root[data-theme=light] .cur{--ca:#0a78d1;--cb:#d11a93}
 .cur i{position:absolute;display:block}
-.cur-dot svg{position:absolute;display:block;overflow:visible;transition:opacity .12s,transform .15s,filter .2s}
-.cur-arrow{left:-1px;top:-1px;transform-origin:1px 1px;filter:drop-shadow(0 0 6px var(--ca)) drop-shadow(0 0 1px rgba(8,10,28,.55))}
-.cur-arrow path{fill:var(--cf);stroke:var(--ca);transition:stroke .2s,fill .2s}
-.cur-hand{left:-7px;top:-1px;opacity:0;transform:scale(.9);transform-origin:7px 1px;filter:drop-shadow(0 0 7px var(--cb)) drop-shadow(0 0 1px rgba(8,10,28,.55))}
-.cur-hand path{fill:var(--cf);stroke:var(--cb)}
-.cur-ibeam{inset:-10px -1.25px;border-radius:2px;background:var(--cb);box-shadow:0 0 8px 1px var(--cb);opacity:0;transform:scaleY(.7);transition:opacity .12s,transform .15s}
-.cur-ibeam::before,.cur-ibeam::after{content:'';position:absolute;left:-3.5px;width:9.5px;height:1.5px;border-radius:1px;background:var(--cb);box-shadow:0 0 6px var(--cb)}
-.cur-ibeam::before{top:0}.cur-ibeam::after{bottom:0}
-.cur-ring i{inset:-11px;border:1.5px solid color-mix(in srgb,var(--cb) 80%,transparent);border-radius:50%;box-shadow:0 0 16px -2px var(--cb),inset 0 0 10px -4px var(--cb);opacity:0;transform:scale(.4);transition:transform .2s cubic-bezier(.2,.8,.2,1),opacity .18s}
-/* kattintható elem: Windows mutatókéz + nagyobb, rózsaszín, lüktető gyűrű */
-.cur.link .cur-arrow{opacity:0;transform:scale(.85)}
-.cur.link .cur-hand{opacity:1;transform:scale(1)}
-.cur.link .cur-ring i{opacity:1;animation:curpulse 1.3s ease-in-out infinite}
-@keyframes curpulse{0%,100%{transform:scale(1.35)}50%{transform:scale(1.65)}}
-/* szövegmező: vékony függőleges neon vonal (Windows I-beam) */
-.cur.text .cur-arrow,.cur.text .cur-hand{opacity:0}
-.cur.text .cur-ibeam{opacity:1;transform:scaleY(1)}
-.cur.text .cur-ring i{opacity:0;transform:scale(.3);animation:none}
-/* lenyomás: összehúzódás */
-.cur.down .cur-ring i{animation:none;transform:scale(.6)}
-.cur.down .cur-arrow,.cur.down .cur-hand{transform:scale(.85)}
 /* kattintáskor kitáguló szikra-kör */
-.cur-pop{position:fixed;width:0;height:0}
+.cur-pop{position:fixed;width:0;height:0;pointer-events:none}
 .cur-pop i{inset:-10px;border:2px solid var(--cb);border-radius:50%;box-shadow:0 0 12px var(--cb);animation:curpop .5s ease-out forwards}
 @keyframes curpop{from{transform:scale(.3);opacity:.95}to{transform:scale(2.1);opacity:0}}
 @media(hover:none),(prefers-reduced-motion:reduce){.cur{display:none}}

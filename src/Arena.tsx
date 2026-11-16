@@ -444,20 +444,60 @@ interface CellTarget {
   born: number
 }
 
-const PLAYED_PREFIX = 'csengeto-arena-played-'
+const PLAYS_PREFIX = 'csengeto-arena-plays-'
+const QOFFSET_PREFIX = 'csengeto-arena-qoffset-'
+const OLD_PLAYED_PREFIX = 'csengeto-arena-played-'
 
-function loadPlayedBreaks(day: string): Set<string> {
+function pruneOldArenaDays(day: string) {
   try {
-    const raw = JSON.parse(localStorage.getItem(PLAYED_PREFIX + day) ?? '[]') || []
-    return new Set(Array.isArray(raw) ? raw : [])
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (!k) continue
+      if (
+        (k.startsWith(PLAYS_PREFIX) && k !== PLAYS_PREFIX + day) ||
+        (k.startsWith(QOFFSET_PREFIX) && k !== QOFFSET_PREFIX + day) ||
+        (k.startsWith(OLD_PLAYED_PREFIX) && k !== OLD_PLAYED_PREFIX + day)
+      ) {
+        localStorage.removeItem(k)
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+function loadBreakPlays(day: string): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PLAYS_PREFIX + day) ?? '{}')
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const clean: Record<string, number> = {}
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) clean[k] = Math.floor(v)
+      }
+      return clean
+    }
+    return {}
   } catch {
-    return new Set()
+    return {}
   }
 }
 
-function savePlayedBreaks(day: string, set: Set<string>) {
+function saveBreakPlays(day: string, map: Record<string, number>) {
   try {
-    localStorage.setItem(PLAYED_PREFIX + day, JSON.stringify(Array.from(set)))
+    localStorage.setItem(PLAYS_PREFIX + day, JSON.stringify(map))
+  } catch { /* ignore */ }
+}
+
+function loadQuizOffset(day: string): number {
+  try {
+    const n = Number(localStorage.getItem(QOFFSET_PREFIX + day) ?? '0')
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
+  } catch {
+    return 0
+  }
+}
+
+function saveQuizOffset(day: string, offset: number) {
+  try {
+    localStorage.setItem(QOFFSET_PREFIX + day, String(Math.max(0, Math.floor(offset))))
   } catch { /* ignore */ }
 }
 
@@ -466,6 +506,7 @@ export default function Arena({
   day,
   phase,
   breakKey,
+  breakTotalSec,
   tv,
   sound,
 }: {
@@ -473,6 +514,7 @@ export default function Arena({
   day: string
   phase: string
   breakKey?: string
+  breakTotalSec?: number
   tv?: boolean
   sound?: boolean
 }) {
@@ -490,22 +532,28 @@ export default function Arena({
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [openDuringLesson, setOpenDuringLesson] = useState(false)
 
-  const [playedBreaks, setPlayedBreaks] = useState<Set<string>>(() => loadPlayedBreaks(day))
-
-  useEffect(() => {
-    setPlayedBreaks(loadPlayedBreaks(day))
-  }, [day])
+  const [breakPlays, setBreakPlays] = useState<Record<string, number>>(() => loadBreakPlays(day))
+  const [qBaseIdx, setQBaseIdx] = useState(() => loadQuizOffset(day))
 
   const isBreak = phase === 'break'
   const currentBreakId = isBreak && breakKey ? breakKey : ''
-  const hasPlayedThisBreak = !!currentBreakId && playedBreaks.has(currentBreakId)
+  const breakMins = Math.round((breakTotalSec ?? 600) / 60)
+  const isLongBreak = (breakTotalSec ?? 0) > 600
+  const maxPlaysPerBreak = isLongBreak ? Math.max(3, Math.floor(breakMins / 5)) : 1
+  const reflexPlayCount = currentBreakId ? (breakPlays[`${currentBreakId}:reflex`] ?? 0) : 0
+  const quizPlayCount = currentBreakId ? (breakPlays[`${currentBreakId}:quiz`] ?? 0) : 0
+  const reflexLocked = !!currentBreakId && reflexPlayCount >= maxPlaysPerBreak
+  const quizLocked = !!currentBreakId && quizPlayCount >= maxPlaysPerBreak
+  const reflexLeft = currentBreakId ? Math.max(0, maxPlaysPerBreak - reflexPlayCount) : null
+  const quizLeft = currentBreakId ? Math.max(0, maxPlaysPerBreak - quizPlayCount) : null
 
-  const markBreakPlayed = useCallback(() => {
+  const markBreakPlayed = useCallback((mode: 'reflex' | 'quiz') => {
     if (!currentBreakId) return
-    setPlayedBreaks(prev => {
-      const next = new Set(prev)
-      next.add(currentBreakId)
-      savePlayedBreaks(day, next)
+    const k = `${currentBreakId}:${mode}`
+    setBreakPlays(prev => {
+      const latest = loadBreakPlays(day)
+      const next = { ...prev, ...latest, [k]: Math.max(prev[k] ?? 0, latest[k] ?? 0) + 1 }
+      saveBreakPlays(day, next)
       return next
     })
   }, [day, currentBreakId])
@@ -524,6 +572,13 @@ export default function Arena({
   const [qTime, setQTime] = useState(30)
   const [qIdx, setQIdx] = useState(0)
   const [qFlash, setQFlash] = useState<'ok' | 'bad' | null>(null)
+
+  useEffect(() => {
+    pruneOldArenaDays(day)
+    setBreakPlays(loadBreakPlays(day))
+    setQBaseIdx(loadQuizOffset(day))
+    setQIdx(0)
+  }, [day])
 
   const saveName = (v: string) => {
     setName(v)
@@ -578,8 +633,12 @@ export default function Arena({
   }, [rState, rScore, name, submitScore])
 
   const startReflex = () => {
-    if (hasPlayedThisBreak) {
-      setNameError('Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett.')
+    if (reflexLocked) {
+      setNameError(
+        maxPlaysPerBreak > 1
+          ? `Ebben a ${breakMins} perces szünetben már elérted a ${maxPlaysPerBreak} játékos limitet!`
+          : 'Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett.'
+      )
       return
     }
     const val = validatePlayerName(name)
@@ -588,7 +647,7 @@ export default function Arena({
       nameInputRef.current?.focus()
       return
     }
-    markBreakPlayed()
+    markBreakPlayed('reflex')
     setNameError('')
     rSubmitted.current = false
     setRScore(0)
@@ -644,8 +703,12 @@ export default function Arena({
   }, [qState, qScore, name, submitScore])
 
   const startQuiz = () => {
-    if (hasPlayedThisBreak) {
-      setNameError('Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett.')
+    if (quizLocked) {
+      setNameError(
+        maxPlaysPerBreak > 1
+          ? `Ebben a ${breakMins} perces szünetben már elérted a ${maxPlaysPerBreak} kvízjátékos limitet!`
+          : 'Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett.'
+      )
       return
     }
     const val = validatePlayerName(name)
@@ -654,19 +717,21 @@ export default function Arena({
       nameInputRef.current?.focus()
       return
     }
-    markBreakPlayed()
+    markBreakPlayed('quiz')
     setNameError('')
     qSubmitted.current = false
     setQScore(0)
     setQStreak(0)
     setQTime(30)
+    setQBaseIdx(loadQuizOffset(day))
     setQIdx(0)
     setQState('play')
   }
 
   const answerQuiz = (optIndex: number) => {
     if (qState !== 'play') return
-    const cur = makeDailyQuestion(day, qIdx)
+    const absIdx = qBaseIdx + qIdx
+    const cur = makeDailyQuestion(day, absIdx)
     if (optIndex === cur.ans) {
       if (sound) fxSound('pop', 0)
       const bonus = 15 + qStreak * 5
@@ -679,12 +744,13 @@ export default function Arena({
       setQScore(s => Math.max(0, s - 5))
       setQFlash('bad')
     }
+    saveQuizOffset(day, absIdx + 1)
     setTimeout(() => setQFlash(null), 260)
     setQIdx(i => i + 1)
   }
 
   const modeBoard = board.filter(b => b.mode === tab).slice(0, 5)
-  const curQ = makeDailyQuestion(day, qIdx)
+  const curQ = makeDailyQuestion(day, qBaseIdx + qIdx)
 
   // TV nézet: kompakt Napi Toplista kártya
   if (tv) {
@@ -803,17 +869,27 @@ export default function Arena({
                           🔒 Add meg a neved a játék indításához (névtelen játék nem engedélyezett)!
                         </p>
                       )}
-                      {hasPlayedThisBreak && (
+                      {reflexLocked ? (
                         <p style={{ color: '#facc15', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
-                          ⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!
+                          {maxPlaysPerBreak > 1
+                            ? `⏸️ Ebben a ${breakMins} perces szünetben már lejátszottad mind a(z) ${maxPlaysPerBreak} engedélyezett Reflex kört! A következő szünetben újra játszhatsz.`
+                            : '⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!'}
+                        </p>
+                      ) : isLongBreak && reflexLeft !== null && (
+                        <p style={{ color: '#4ade80', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
+                          ⏱️ Hosszú szünet ({breakMins} perc): ebben a szünetben még {reflexLeft} / {maxPlaysPerBreak} Reflex kör indítható!
                         </p>
                       )}
-                      <button type="button" className="cta" onClick={startReflex} disabled={hasPlayedThisBreak}>
-                        {hasPlayedThisBreak
-                          ? '⏸️ Ebben a szünetben már játszottál'
+                      <button type="button" className="cta" onClick={startReflex} disabled={reflexLocked}>
+                        {reflexLocked
+                          ? '⏸️ Elérted a szüneti limitet'
                           : rState === 'over'
-                            ? '🔄 Újra próbálom'
-                            : '⚡ Játék indítása (20 mp)'}
+                            ? isLongBreak && reflexLeft !== null
+                              ? `🔄 Újra próbálom (még ${reflexLeft}/${maxPlaysPerBreak})`
+                              : '🔄 Újra próbálom'
+                            : isLongBreak && reflexLeft !== null
+                              ? `⚡ Játék indítása (20 mp • ${reflexLeft}/${maxPlaysPerBreak})`
+                              : '⚡ Játék indítása (20 mp)'}
                       </button>
                     </div>
                   )}
@@ -851,17 +927,27 @@ export default function Arena({
                           🔒 Add meg a neved a kvíz indításához (névtelen játék nem engedélyezett)!
                         </p>
                       )}
-                      {hasPlayedThisBreak && (
+                      {quizLocked ? (
                         <p style={{ color: '#facc15', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
-                          ⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!
+                          {maxPlaysPerBreak > 1
+                            ? `⏸️ Ebben a ${breakMins} perces szünetben már lejátszottad mind a(z) ${maxPlaysPerBreak} engedélyezett Kvíz kört! A következő szünetben újra játszhatsz.`
+                            : '⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!'}
+                        </p>
+                      ) : isLongBreak && quizLeft !== null && (
+                        <p style={{ color: '#4ade80', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
+                          ⏱️ Hosszú szünet ({breakMins} perc): ebben a szünetben még {quizLeft} / {maxPlaysPerBreak} Kvíz kör indítható (új kérdésekkel)!
                         </p>
                       )}
-                      <button type="button" className="cta" onClick={startQuiz} disabled={hasPlayedThisBreak}>
-                        {hasPlayedThisBreak
-                          ? '⏸️ Ebben a szünetben már játszottál'
+                      <button type="button" className="cta" onClick={startQuiz} disabled={quizLocked}>
+                        {quizLocked
+                          ? '⏸️ Elérted a szüneti limitet'
                           : qState === 'over'
-                            ? '🔄 Újra próbálom'
-                            : '🧠 Kvíz indítása (30 mp)'}
+                            ? isLongBreak && quizLeft !== null
+                              ? `🔄 Újra próbálom (még ${quizLeft}/${maxPlaysPerBreak})`
+                              : '🔄 Újra próbálom'
+                            : isLongBreak && quizLeft !== null
+                              ? `🧠 Kvíz indítása (30 mp • ${quizLeft}/${maxPlaysPerBreak})`
+                              : '🧠 Kvíz indítása (30 mp)'}
                       </button>
                     </div>
                   )}

@@ -8,6 +8,7 @@ export interface BellState {
   remaining: number   // másodperc a következő csengetésig
   progress: number    // 0..1 az aktuális óra/szünet előrehaladása
   soon: boolean       // 60 mp-en belül csengetés
+  total?: number      // az aktuális fázis teljes hossza másodpercben
   reason?: string
 }
 
@@ -99,7 +100,7 @@ export function computeState(
   const curCancelled = cancelledLessons.find(cl => secs >= toSec(cl.start_time) && secs < toSec(cl.end_time))
   const mk = (phase: Phase, from: number, to: number, o: Partial<BellState>): BellState => ({
     phase, remaining: to - secs, progress: Math.min(1, Math.max(0, (secs - from) / (to - from))),
-    soon: to - secs <= 60, ...o })
+    soon: to - secs <= 60, total: to - from, ...o })
   if (secs < toSec(L[0].start_time)) {
     const firstCancelledStart = cancelledLessons.length > 0 ? Math.min(...cancelledLessons.map(cl => toSec(cl.start_time))) : 0
     const fromSec = curCancelled ? firstCancelledStart : 0

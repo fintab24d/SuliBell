@@ -50,13 +50,14 @@ const QUICK_VIDEOS: { title: string; ytId: string }[] = [
 const STORAGE_PREFIX = 'csengeto-jukebox-'
 const VOTED_PREFIX = 'csengeto-jukebox-voted-'
 const DELETED_PREFIX = 'csengeto-jukebox-del-'
+const SUB_PREFIX = 'csengeto-jukebox-sub-'
 
 /** A szüneti lejátszáshoz szükséges minimális szavazatszám */
 export const MIN_VOTES_TO_PLAY = 5
 
 /**
  * Napváltáskor eltávolítja az összes korábbi napról megmaradt helyi kívánságot,
- * szavazatot és törölt elemet, így az új nap mindig tiszta lappal indul.
+ * szavazatot, beküldési korlátot és törölt elemet, így az új nap mindig tiszta lappal indul.
  */
 export function pruneOldJukeboxDays(currentDay: string) {
   try {
@@ -66,7 +67,8 @@ export function pruneOldJukeboxDays(currentDay: string) {
       if (
         (k.startsWith(STORAGE_PREFIX) && k !== STORAGE_PREFIX + currentDay) ||
         (k.startsWith(VOTED_PREFIX) && k !== VOTED_PREFIX + currentDay) ||
-        (k.startsWith(DELETED_PREFIX) && k !== DELETED_PREFIX + currentDay)
+        (k.startsWith(DELETED_PREFIX) && k !== DELETED_PREFIX + currentDay) ||
+        (k.startsWith(SUB_PREFIX) && k !== SUB_PREFIX + currentDay)
       ) {
         localStorage.removeItem(k)
       }
@@ -147,6 +149,21 @@ function saveVotedSet(day: string, set: Set<string>) {
   } catch { /* ignore */ }
 }
 
+function loadSubmittedSet(day: string): Set<string> {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SUB_PREFIX + day) ?? '[]')
+    return new Set(Array.isArray(arr) ? arr : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSubmittedSet(day: string, set: Set<string>) {
+  try {
+    localStorage.setItem(SUB_PREFIX + day, JSON.stringify(Array.from(set)))
+  } catch { /* ignore */ }
+}
+
 function sortSongs(list: SongWish[]): SongWish[] {
   return [...list]
     .sort((a, b) => b.votes - a.votes || a.at - b.at)
@@ -176,10 +193,11 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
   return sortSongs([...list, incoming])
 }
 
-export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean) {
+export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean, breakKey?: string) {
   const mode = mediaModeForDay(day)
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
   const [voted, setVoted] = useState<Set<string>>(() => loadVotedSet(day))
+  const [submitted, setSubmitted] = useState<Set<string>>(() => loadSubmittedSet(day))
   const [discordChannels, setDiscordChannels] = useState<{ music: string; videos: string }>({
     music: '#🎵-zenekérés-ötletek',
     videos: '#🎬-videóbeküldés',
@@ -195,7 +213,16 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
     setVoted(loadVotedSet(day))
+    setSubmitted(loadSubmittedSet(day))
   }, [day])
+
+  const hasSubmittedInBreak = useCallback((byName?: string) => {
+    if (!breakKey) return false
+    if (submitted.has(breakKey)) return true
+    const norm = byName?.trim().toLowerCase()
+    if (norm && submitted.has(`${breakKey}::${norm}`)) return true
+    return false
+  }, [breakKey, submitted])
 
   const applyDeleteLocal = useCallback((songId: string, targetDay?: string) => {
     const d = targetDay || day
@@ -492,24 +519,37 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     try { bcRef.current?.postMessage({ song }) } catch { /* ignore */ }
   }, [])
 
-  const addSong = useCallback((rawTitle: string, rawBy: string, rawUrl?: string, explicitYtId?: string) => {
+  const addSong = useCallback((rawTitle: string, rawBy: string, rawUrl?: string, explicitYtId?: string): { ok: boolean; reason?: 'invalid' | 'voted' | 'break_limit' } => {
     const cleanTitle = rawTitle.trim().slice(0, 60)
-    if (!cleanTitle) return false
+    if (!cleanTitle) return { ok: false, reason: 'invalid' }
     const cleanBy = rawBy.trim().slice(0, 24)
-    if (!cleanBy) return false
+    if (!cleanBy) return { ok: false, reason: 'invalid' }
     const parsed = rawUrl?.trim() ? parseVideo(rawUrl.trim()) : parseVideo(rawTitle.trim())
     const ytId = explicitYtId || (parsed?.kind === 'yt' ? parsed.id : undefined)
     const mp4Url = parsed?.kind === 'file' ? parsed.src : undefined
 
     // Videó-napon kötelező vagy ajánlott az érvényes videólink / gyors tipp
     if (mode === 'video' && !ytId && !mp4Url && rawUrl?.trim()) {
-      return false
+      return { ok: false, reason: 'invalid' }
+    }
+
+    if (breakKey) {
+      const latestSub = loadSubmittedSet(day)
+      const normBy = cleanBy.toLowerCase()
+      if (
+        submitted.has(breakKey) ||
+        latestSub.has(breakKey) ||
+        submitted.has(`${breakKey}::${normBy}`) ||
+        latestSub.has(`${breakKey}::${normBy}`)
+      ) {
+        return { ok: false, reason: 'break_limit' }
+      }
     }
 
     const existing = songs.find(x => x.title.trim().toLowerCase() === cleanTitle.toLowerCase())
     if (existing && voted.has(existing.id)) {
       // Erre a számra már szavazott a felhasználó, többször nem szavazhat rá!
-      return false
+      return { ok: false, reason: 'voted' }
     }
 
     const created: SongWish = existing
@@ -548,6 +588,16 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       saveVotedSet(day, next)
       return next
     })
+
+    if (breakKey) {
+      setSubmitted(prev => {
+        const next = new Set([...loadSubmittedSet(day), ...prev])
+        next.add(breakKey)
+        next.add(`${breakKey}::${cleanBy.toLowerCase()}`)
+        saveSubmittedSet(day, next)
+        return next
+      })
+    }
 
     if (soundRef.current) fxSound('pop', 0)
     broadcastSong(created)
@@ -590,8 +640,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         }).then(() => {})
       }
     }
-    return true
-  }, [schoolId, day, mode, songs, voted, broadcastSong])
+    return { ok: true }
+  }, [schoolId, day, mode, breakKey, songs, voted, submitted, broadcastSong])
 
   const voteSong = useCallback((songId: string) => {
     if (voted.has(songId)) return
@@ -714,21 +764,23 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, voted, mode, channels: discordChannels, addSong, voteSong, removeSong, finishSong, clearAllSongs }
+  return { songs, voted, mode, channels: discordChannels, hasSubmittedInBreak, addSong, voteSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default function Jukebox({
   schoolId,
   day,
+  breakKey,
   tv,
   sound,
 }: {
   schoolId?: string
   day: string
+  breakKey?: string
   tv?: boolean
   sound?: boolean
 }) {
-  const { songs, voted, mode, channels, addSong, voteSong } = useJukebox(schoolId, day, sound)
+  const { songs, voted, mode, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
   const isVideoDay = mode === 'video'
   const [title, setTitle] = useState('')
   const [by, setBy] = useState(() => {
@@ -738,10 +790,15 @@ export default function Jukebox({
   const [pickedYtId, setPickedYtId] = useState<string | undefined>(undefined)
   const [err, setErr] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const alreadySubmittedBreak = hasSubmittedInBreak(by)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setErr('')
+    if (hasSubmittedInBreak(by)) {
+      setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
+      return
+    }
     if (!title.trim()) return
 
     const parsed = ytUrl.trim() ? parseVideo(ytUrl.trim()) : parseVideo(title.trim())
@@ -772,9 +829,15 @@ export default function Jukebox({
     const cleanBy = check.cleanBy || by.trim()
     try { localStorage.setItem('csengeto-arena-name', cleanBy) } catch { /* ignore */ }
 
-    const ok = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
-    if (!ok) {
-      setErr('Erre a számra vagy videóra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
+    const res = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
+    if (!res.ok) {
+      if (res.reason === 'break_limit') {
+        setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
+      } else if (res.reason === 'voted') {
+        setErr('Erre a számra vagy videóra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
+      } else {
+        setErr('Érvénytelen beküldés — ellenőrizd a megadott adatokat!')
+      }
       return
     }
     setTitle('')
@@ -910,13 +973,18 @@ export default function Jukebox({
                   setErr('')
                 }}
               />
-              <button type="submit" className="cta" disabled={!title.trim() || !by.trim()}>
-                🚀 Beküldés
+              <button type="submit" className="cta" disabled={!title.trim() || !by.trim() || alreadySubmittedBreak}>
+                {alreadySubmittedBreak ? '⏸️ Már küldtél be' : '🚀 Beküldés'}
               </button>
             </div>
+            {alreadySubmittedBreak && (
+              <small style={{ color: '#facc15', fontWeight: 600 }}>
+                ⏸️ Ebben a szünetben már küldtél be {isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.
+              </small>
+            )}
             {err && <small style={{ color: 'var(--warn)', fontWeight: 600 }}>{err}</small>}
             <small style={{ color: 'var(--mut)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-              🛡️ Szabályok: A név megadása kötelező (névtelenül nem küldhető be). A szüneti lejátszáshoz legalább {MIN_VOTES_TO_PLAY} szavazat szükséges. Egy ember csak egyszer szavazhat egy számra. Lejátszás után automatikusan törlődik a listából, napváltáskor pedig az összes megmaradt kívánság törlődik.
+              🛡️ Szabályok: A név megadása kötelező (névtelenül nem küldhető be). Egy ember egy szünetben csak 1 {isVideoDay ? 'videót' : 'zenét'} küldhet be. A szüneti lejátszáshoz legalább {MIN_VOTES_TO_PLAY} szavazat szükséges, és egy elemre csak egyszer lehet szavazni. Lejátszás után automatikusan törlődik a listából, napváltáskor pedig az összes megmaradt kívánság törlődik.
             </small>
           </div>
         </form>
