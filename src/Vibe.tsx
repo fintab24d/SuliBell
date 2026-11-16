@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 
@@ -49,6 +49,7 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
   const [counts, setCounts] = useState<Record<string, number>>(() => loadLocalCounts(day))
   const [floats, setFloats] = useState<FloatEmoji[]>([])
   const [cooldown, setCooldown] = useState(false)
+  const cooldownRef = useRef(false)
   const chanRef = useRef<any>(null)
   const bcRef = useRef<BroadcastChannel | null>(null)
   const uidRef = useRef(1)
@@ -159,10 +160,14 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
     }
   }, [schoolId, day, spawnEmoji])
 
-  const sendVibe = (vibeId: string) => {
-    if (cooldown) return
+  const sendVibe = useCallback((vibeId: string) => {
+    if (cooldownRef.current) return
+    cooldownRef.current = true
     setCooldown(true)
-    setTimeout(() => setCooldown(false), 750)
+    setTimeout(() => {
+      cooldownRef.current = false
+      setCooldown(false)
+    }, 750)
 
     spawnEmoji(vibeId, 3)
     setCounts(prev => {
@@ -183,13 +188,13 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
     if (schoolId) {
       supabase.rpc('add_vibe', { p_school: schoolId, p_day: day, p_vibe: vibeId }).then(() => {})
     }
-  }
+  }, [day, schoolId, spawnEmoji])
 
   return { counts, floats, sendVibe, cooldown }
 }
 
 /** Lebegő emoji-eső réteg a képernyőn (főoldalon és TV-n is) */
-export function VibeOverlay({ floats }: { floats: FloatEmoji[] }) {
+export const VibeOverlay = memo(function VibeOverlay({ floats }: { floats: FloatEmoji[] }) {
   if (!floats.length) return null
   return (
     <div className="vibe-sky" aria-hidden="true">
@@ -210,10 +215,10 @@ export function VibeOverlay({ floats }: { floats: FloatEmoji[] }) {
       ))}
     </div>
   )
-}
+})
 
 /** Interaktív Hangulat- és Reakciófal panel */
-export function VibePanel({
+export const VibePanel = memo(function VibePanel({
   counts,
   onSend,
   cooldown,
@@ -313,4 +318,4 @@ export function VibePanel({
       )}
     </section>
   )
-}
+})

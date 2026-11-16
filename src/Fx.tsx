@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { FxEngine, type CelebrateKind } from './lib/fx'
 import { fxSound } from './lib/sound'
 
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Neon háttér-réteg: részecskék, kattintás-szikrák, fényfolt a paneleken, csengetéskor robbanás. Csak a Neon stílusban él. */
-export default function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: string; bellKey: string; tv: boolean; wx?: number | null; night?: boolean; sound?: boolean }) {
+const Fx = memo(function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: string; bellKey: string; tv: boolean; wx?: number | null; night?: boolean; sound?: boolean }) {
   const refBg = useRef<HTMLCanvasElement>(null)
   const refFg = useRef<HTMLCanvasElement>(null)
   const eng = useRef<FxEngine | null>(null)
@@ -47,23 +47,44 @@ export default function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: st
     eng.current?.bell(r ? r.left + r.width / 2 : window.innerWidth / 2, r ? r.top + r.height / 2 : window.innerHeight / 3, r ? r.width / 2 : 180)
   }, [bellKey])
 
-  // Fényfolt: a panelek az egér alatt finoman felfénylenek (csak egérrel).
+  // Fényfolt: a panelek az egér alatt finoman felfénylenek (csak egérrel, cache-elt recttel, nulla layout thrashinggel).
   useEffect(() => {
     if (off || !matchMedia('(hover: hover)').matches) return
     let raf = 0
+    let cachedEl: HTMLElement | null = null
+    let cachedRect: DOMRect | null = null
+    let cachedAt = 0
+    const invalidate = () => { cachedRect = null }
     const on = (ev: PointerEvent) => {
       if (raf) return
+      const ds = document.documentElement.dataset
+      if (ds.potato === '1' || ds.perf === 'lite') return
+      const clientX = ev.clientX
+      const clientY = ev.clientY
+      const target = ev.target as HTMLElement | null
       raf = requestAnimationFrame(() => {
         raf = 0
-        const el = (ev.target as HTMLElement | null)?.closest?.('.panel, .ev, .stat, .wd') as HTMLElement | null
+        const el = target?.closest?.('.panel, .ev, .stat, .wd') as HTMLElement | null
         if (!el) return
-        const b = el.getBoundingClientRect()
-        el.style.setProperty('--mx', `${ev.clientX - b.left}px`)
-        el.style.setProperty('--my', `${ev.clientY - b.top}px`)
+        const now = performance.now()
+        if (el !== cachedEl || !cachedRect || now - cachedAt > 250) {
+          cachedEl = el
+          cachedRect = el.getBoundingClientRect()
+          cachedAt = now
+        }
+        el.style.setProperty('--mx', `${Math.round(clientX - cachedRect.left)}px`)
+        el.style.setProperty('--my', `${Math.round(clientY - cachedRect.top)}px`)
       })
     }
     window.addEventListener('pointermove', on, { passive: true })
-    return () => { window.removeEventListener('pointermove', on); cancelAnimationFrame(raf) }
+    window.addEventListener('scroll', invalidate, { passive: true })
+    window.addEventListener('resize', invalidate, { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', on)
+      window.removeEventListener('scroll', invalidate)
+      window.removeEventListener('resize', invalidate)
+      cancelAnimationFrame(raf)
+    }
   }, [off])
 
   return off ? null : (
@@ -72,16 +93,17 @@ export default function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: st
       <canvas ref={refFg} className="fxcanvas-fg" aria-hidden="true" />
     </>
   )
-}
+})
+export default Fx
 
 /** Az utolsó 10 másodperc: hatalmas számok, élfény, gyűrű-lüktetés (másodpercenként újraindul). */
-export function FinalCount({ phase, remaining }: { phase: string; remaining: number }) {
+export const FinalCount = memo(function FinalCount({ phase, remaining }: { phase: string; remaining: number }) {
   if (!(phase === 'lesson' || phase === 'break' || phase === 'before') || remaining < 1 || remaining > 10) return null
   return <div key={remaining} className={`final ${phase}`} aria-hidden="true"><i /><b>{remaining}</b></div>
-}
+})
 
 /** Csengetéskor rövid felirat: "Becsengettek" / "Kicsengettek" / "Vége a tanításnak". */
-export function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: string; label?: string }) {
+export const BellFlash = memo(function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: string; label?: string }) {
   const [msg, setMsg] = useState<{ id: string; phase: string; title: string; sub: string } | null>(null)
   const prev = useRef('')
   useEffect(() => {
@@ -97,7 +119,7 @@ export function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: s
     return () => clearTimeout(t)
   }, [bellKey])
   return msg ? <div key={msg.id} className={`bellbanner ${msg.phase}`} role="status"><b>{msg.title}</b>{msg.sub && <span>{msg.sub}</span>}</div> : null
-}
+})
 
 /** Nagy pillanatok és rejtett Easter Eggek:
  *  - Visszaszámláló 0 / hétvége előtti utolsó óra
@@ -107,7 +129,7 @@ export function BellFlash({ bellKey, phase, label }: { bellKey: string; phase: s
  *  - Nagy óra 7× kattintás → Időutazó mód
  *  - Verziószám 5× kattintás → Kódmágus mód
  *  - Időjárás ikon 5× kattintás → Időjárás-varázslat */
-export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean }) {
+export const Celebrate = memo(function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean }) {
   const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
   const eggTimerRef = useRef<number>(0)
 
@@ -259,4 +281,4 @@ export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: 
   }, [])
 
   return msg ? <div key={msg.id} className="bellbanner after party" role="status"><b>{msg.title}</b><span>{msg.sub}</span></div> : null
-}
+})

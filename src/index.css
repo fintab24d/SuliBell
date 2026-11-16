@@ -1318,3 +1318,86 @@ html.egg-warp #root main {
   .kofi-tv-qr span{font-size:1.5vh}
   .kofi-tv-empty,.kofi-tv-list li{font-size:1.85vh}
 }
+
+/* ==================== 🥔 POTATO / RATYI PC MÓD (MAXIMÁLIS SEBESSÉG, ZÉRÓ GPU-TEHER) ==================== */
+.potato-btn.on {
+  border-color: #facc15 !important;
+  color: #fde047 !important;
+  background: rgba(250, 204, 21, 0.16) !important;
+}
+:root[data-theme="light"] .potato-btn.on {
+  color: #92400e !important;
+  border-color: #d97706 !important;
+  background: rgba(250, 204, 21, 0.28) !important;
+}
+:root[data-potato="1"] body {
+  background-image: none !important;
+  background-color: #070914 !important;
+}
+:root[data-potato="1"][data-theme="light"] body {
+  background-color: #f2f4fa !important;
+}
+:root[data-potato="1"] body::before,
+:root[data-potato="1"] body::after,
+:root[data-potato="1"] .kofi-panel::before,
+:root[data-potato="1"] .kofi-panel::after,
+:root[data-potato="1"] .bell-fx,
+:root[data-potato="1"] .vibe-sky,
+:root[data-potato="1"] .fxcanvas,
+:root[data-potato="1"] .fxcanvas-fg,
+:root[data-potato="1"] .fx-ledges-root {
+  display: none !important;
+}
+:root[data-potato="1"] *,
+:root[data-potato="1"] *::before,
+:root[data-potato="1"] *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+:root[data-potato="1"] .panel,
+:root[data-potato="1"] .bento-hdr,
+:root[data-potato="1"] .ev,
+:root[data-potato="1"] .ticker,
+:root[data-potato="1"] .admin,
+:root[data-potato="1"] .scroll-cue,
+:root[data-potato="1"] .askbox,
+:root[data-potato="1"] .mymodal {
+  background: #101426 !important;
+  border-color: rgba(160, 175, 255, 0.28) !important;
+}
+:root[data-potato="1"][data-theme="light"] .panel,
+:root[data-potato="1"][data-theme="light"] .bento-hdr,
+:root[data-potato="1"][data-theme="light"] .ev,
+:root[data-potato="1"][data-theme="light"] .ticker,
+:root[data-potato="1"][data-theme="light"] .admin,
+:root[data-potato="1"][data-theme="light"] .scroll-cue,
+:root[data-potato="1"][data-theme="light"] .askbox,
+:root[data-potato="1"][data-theme="light"] .mymodal {
+  background: #ffffff !important;
+  border-color: rgba(80, 70, 160, 0.28) !important;
+}
+:root[data-potato="1"] .kofi-panel {
+  border: 2px solid #facc15 !important;
+}
+:root[data-potato="1"] .kofi-cta {
+  background: #facc15 !important;
+  color: #1f1300 !important;
+}
+/* Reflex játék célpontok Potato módban is élesen látszódjanak */
+:root[data-potato="1"] .rcell.active {
+  background: rgba(45, 226, 255, 0.28) !important;
+  border: 2px solid #2de2ff !important;
+}
+:root[data-potato="1"] .rcell.active.gold {
+  background: rgba(250, 204, 21, 0.32) !important;
+  border: 2px solid #facc15 !important;
+}
+:root[data-potato="1"] .rcell.active.bomb {
+  background: rgba(255, 79, 106, 0.32) !important;
+  border: 2px solid #ff4f6a !important;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { voterId } from './Poll'
@@ -501,7 +501,7 @@ function saveQuizOffset(day: string, offset: number) {
   } catch { /* ignore */ }
 }
 
-export default function Arena({
+export default memo(function Arena({
   schoolId,
   day,
   phase,
@@ -988,4 +988,4 @@ export default function Arena({
       )}
     </section>
   )
-}
+})

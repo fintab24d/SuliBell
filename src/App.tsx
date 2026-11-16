@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { audioReady, enableAudio, preload, ring } from './lib/sound'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
@@ -54,7 +54,7 @@ function Digits({ text }: { text: string }) {
 }
 
 /** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint, figyelembe véve az elmaradó órákat is. */
-function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined, sb?: SandboxConfig | null) {
+function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined, sb?: SandboxConfig | null, potato?: boolean) {
   const { data, offline } = useSchool()
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
@@ -69,7 +69,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     const onWake = () => {
       if (!document.hidden) syncNow()
     }
-    const t = window.setInterval(syncNow, 250)
+    const t = window.setInterval(syncNow, potato ? 1000 : 250)
     document.addEventListener('visibilitychange', onWake)
     document.addEventListener('resume', onWake)
     window.addEventListener('focus', onWake)
@@ -81,13 +81,67 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
       window.removeEventListener('focus', onWake)
       window.removeEventListener('pageshow', onWake)
     }
-  }, [])
+  }, [potato])
+  const now = new Date(nowSec * 1000)
+  const rawZ = data ? zoned(now, data.settings.timezone) : null
+  const dayDate = rawZ?.date ?? ''
+  const dayWeekday = rawZ?.weekday ?? 1
+  const dayPrep = useMemo(() => {
+    if (!data || !dayDate) return null
+    const ov = Object.fromEntries((data.schedule_dates ?? []).map((x: any) => [x.day, x.schedule_id])) as Record<string, string>
+    const baseSchedule = scheduleFor(dayDate, data.schedules, ov)
+    const allLessons: Lesson[] = onlyMyLessons([...(baseSchedule?.lessons ?? [])].sort((a, b) => a.position - b.position), dayWeekday, tv ? undefined : getMyEntry)
+    const schedule = baseSchedule ? { ...baseSchedule, lessons: allLessons } : baseSchedule
+    const maxPos = allLessons.length ? Math.max(...allLessons.map(l => l.position)) : 0
+    const baseChanges = ((data.changes ?? []) as any[]).filter(c => c.day === dayDate)
+    const dayChanges = sb ? [...baseChanges, ...sb.extraChanges.map(c => ({ ...c, day: dayDate }))] : baseChanges
+    const cancelledIds = new Set<string>()
+    for (const l of allLessons) {
+      const myEntry = !tv ? getMyEntry?.(dayWeekday, l.position) : undefined
+      const isMyFree = !!formatMyLesson(l, myEntry).isFree
+      if (isLessonCancelled(l, dayChanges, isMyFree, maxPos)) {
+        cancelledIds.add(l.id)
+      }
+    }
+    const activeLessons = allLessons.filter(l => !cancelledIds.has(l.id))
+    const cancelledLessons = allLessons.filter(l => cancelledIds.has(l.id))
+    let closed = sb?.simClosedReason ?? data.closed.find((c: any) => c.day === dayDate)?.reason
+    if (!closed && allLessons.length > 0 && activeLessons.length === 0) {
+      closed = 'Minden mai óra elmarad.'
+    }
+    const effData = sb ? {
+      ...data,
+      changes: dayChanges,
+      menus: sb.testMenu.trim() ? [{ id: 'sb-m', day: dayDate, text: sb.testMenu.trim() }, ...(data.menus ?? []).filter((m: any) => m.day !== dayDate)] : data.menus,
+      announcements: sb.testAnnouncement.trim() ? [{ id: 'sb-a', text: sb.testAnnouncement.trim(), active_until: null }, ...(data.announcements ?? [])] : data.announcements,
+      settings: {
+        ...data.settings,
+        alert_active: sb.alertActive ? true : data.settings.alert_active,
+        alert_text: sb.alertActive ? sb.alertText : data.settings.alert_text,
+      },
+    } : data
+    const byPos = (x: any[]) => [...x].sort((p: any, q: any) => p.position - q.position)
+    const monday = addDays(dayDate, 1 - dayWeekday)
+    const week = [0, 1, 2, 3, 4, 5, 6].map(i => {
+      const date = addDays(monday, i), sch = scheduleFor(date, effData.schedules, ov), ls = sch ? byPos(sch.lessons) : []
+      const off = (effData.closed as { day: string; reason: string }[]).find(c => c.day === date)?.reason
+      return { date, i, dim: !!off || !ls.length, info: off ?? '' }
+    }).filter(w => w.i < 5 || !w.dim)
+    const upcoming = (effData.closed as { day: string; reason: string }[]).filter(c => c.day > dayDate).sort((x, y) => x.day.localeCompare(y.day)).slice(0, 4)
+    parseBannedWordsFromAnnouncements(effData.announcements)
+    const partners = parsePartnersFromAnnouncements(effData.announcements)
+    const kofi = parseKofiFromAnnouncements(effData.announcements)
+    return { effData, ov, schedule, activeLessons, cancelledLessons, cancelledIds, closed, week, upcoming, partners, kofi }
+  }, [data, dayDate, dayWeekday, tv, getMyEntry, sb])
+
   return useMemo(() => {
     const now = new Date(nowSec * 1000)
-    if (!data) return { data, offline, cancelledIds: new Set<string>() }
-    const rawZ = zoned(now, data.settings.timezone)
+    if (!data || !dayPrep || !rawZ) return { data, offline, cancelledIds: new Set<string>() }
+
     const z = sb && sb.simSecs !== null ? { ...rawZ, secs: sb.simSecs } : rawZ
-    const ov = Object.fromEntries((data.schedule_dates ?? []).map(x => [x.day, x.schedule_id]))
+    const st = computeState(z.secs, dayPrep.activeLessons, dayPrep.closed, !dayPrep.schedule, dayPrep.cancelledLessons)
+    const ov: Record<string, string> = dayPrep.ov
+    if (true as boolean) return { data: dayPrep.effData, offline, z, schedule: dayPrep.schedule, state: st, now, cancelledIds: dayPrep.cancelledIds, ovMap: dayPrep.ov, week: dayPrep.week, upcoming: dayPrep.upcoming, partners: dayPrep.partners, kofi: dayPrep.kofi }
     const baseSchedule = scheduleFor(z.date, data.schedules, ov)
     const allLessons: Lesson[] = onlyMyLessons([...(baseSchedule?.lessons ?? [])].sort((a, b) => a.position - b.position), z.weekday, tv ? undefined : getMyEntry)
     const schedule = baseSchedule ? { ...baseSchedule, lessons: allLessons } : baseSchedule
@@ -121,7 +175,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
       },
     } : data
     return { data: effData, offline, z, schedule, state, now, cancelledIds }
-  }, [nowSec, data, offline, tv, getMyEntry, sb])
+  }, [nowSec, data, offline, dayPrep, rawZ, sb])
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
@@ -229,7 +283,7 @@ function DayStrip({ L, secs, phase, cancelledIds }: { L: any[]; secs: number; ph
   </div>
 }
 
-function ScrollCue({ isVideoDay }: { isVideoDay: boolean }) {
+const ScrollCue = memo(function ScrollCue({ isVideoDay }: { isVideoDay: boolean }) {
   const [show, setShow] = useState(false)
 
   useEffect(() => {
@@ -269,13 +323,19 @@ function ScrollCue({ isVideoDay }: { isVideoDay: boolean }) {
       <span className="scroll-cue-arr" aria-hidden="true">↓</span>
     </button>
   )
-}
+})
 
 export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const sb = useSandbox(!!sandbox)
   const tv = sandbox ? sb.simTv : location.pathname.startsWith('/display')
   const { map: myMap, update: updateMyMap, getEntry, hasAny: hasMySchedule } = useMySchedule()
-  const { data, offline, z, schedule, state, now, cancelledIds } = useBell(tv, getEntry, sandbox ? sb : null) as any
+  const [potato, setPotato] = useState(() => { try { return localStorage.getItem('potato') === '1' } catch { return false } })
+  useEffect(() => { if (potato) document.documentElement.dataset.potato = '1'; else delete document.documentElement.dataset.potato }, [potato])
+  const togglePotato = () => { const v = !potato; try { localStorage.setItem('potato', v ? '1' : '0') } catch { /* nem baj */ } setPotato(v) }
+  const { data, offline, z, schedule, state, now, cancelledIds, ovMap, week: weekFromBell, upcoming: upcomingFromBell, partners: partnersFromBell, kofi: kofiFromBell } = useBell(tv, getEntry, sandbox ? sb : null, potato) as any
+  const upcoming: { day: string; reason: string }[] = upcomingFromBell ?? []
+  const partners: ReturnType<typeof parsePartnersFromAnnouncements> = partnersFromBell ?? []
+  const kofi: ReturnType<typeof parseKofiFromAnnouncements> = kofiFromBell ?? { url: '', donors: [] }
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
   const style = 'neon'
   useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
@@ -287,7 +347,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     return () => document.documentElement.classList.remove('tv-lock')
   }, [tv])
   const [fxOn, setFxOn] = useState(() => localStorage.getItem('fx') !== '0')
-  const fx = fxOn && data?.settings.particles !== false && style === 'neon'
+  const fx = !potato && fxOn && data?.settings.particles !== false && style === 'neon'
   const { poll, counts } = usePoll(data?.id)
   const videos = useVideos(data?.id)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
@@ -352,7 +412,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       window.removeEventListener('focus', onWake)
       window.removeEventListener('pageshow', onWake)
     }
-  }, [])
+  }, [potato])
   const [dismissed, setDismissed] = useState('')   // a kiemelt közleményt a látogató bezárhatja (a TV-n nem)
   useEffect(() => { if (audioOn) preload(data?.settings.bell_sound_url) }, [audioOn, data?.settings.bell_sound_url])   // saját csengőhang előtöltése
   // Telepítés gomb (Chrome, Edge, Android): a böngésző jelzi, ha az oldal telepíthető
@@ -361,7 +421,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     const on = (e: Event) => { e.preventDefault(); setInstallEv(e) }, done = () => setInstallEv(null)
     window.addEventListener('beforeinstallprompt', on); window.addEventListener('appinstalled', done)
     return () => { window.removeEventListener('beforeinstallprompt', on); window.removeEventListener('appinstalled', done) }
-  }, [])
+  }, [potato])
   const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true
   const qr = useQr(location.origin + '/telepites', tv && data?.settings.tv_show_qr !== false)
   const rawWx = useWeather(data?.settings.weather_lat ?? null, data?.settings.weather_lon ?? null, data?.settings.timezone, !!data?.settings.weather_enabled)
@@ -381,7 +441,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   if (!data) return <main><div className="panel"><div className="title">{offline ? 'Nincs kapcsolat és nincs mentett adat.' : 'Betöltés…'}</div></div></main>
   const s: BellState = state
   const byPos = (x: any[]) => [...x].sort((p: any, q: any) => p.position - q.position)
-  const ovMap = Object.fromEntries(((data.schedule_dates ?? []) as any[]).map(x => [x.day, x.schedule_id])) as Record<string, string>
+
   const pvRaw = s.phase === 'closed' || s.phase === 'after' ? nextSchoolDay(z.date, data.schedules, data.closed, ovMap) : undefined
   const pv = pvRaw ? { ...pvRaw, schedule: { ...pvRaw.schedule, lessons: onlyMyLessons(pvRaw.schedule.lessons, new Date(pvRaw.date + 'T12:00:00Z').getUTCDay() || 7, tv ? undefined : getEntry) } } : undefined
   const tl = s.phase === 'closed' ? pv?.schedule : schedule            // zárva: a következő tanítási nap rendje látszik
@@ -397,7 +457,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const events = ((data.countdowns ?? []) as any[])
     .map(c => ({ ...c, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))
     .filter(c => c.left > 0).sort((x, y) => x.left - y.left).slice(0, 4)
-  const upcoming = (data.closed as { day: string; reason: string }[]).filter(c => c.day > z.date).sort((x, y) => x.day.localeCompare(y.day)).slice(0, 4)
+
   const p = (on: boolean) => (on ? ({ '--p': `${s.progress * 100}%` } as CSSProperties) : undefined)
 
   // ---- A mai nap adatai (csak tanítási napon, az elmaradó órákat kihagyva a számolóból) ----
@@ -425,21 +485,21 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     <ul>{bellList.map((b: any) => <li key={b.t + b.txt}><b>{hm(b.t)}</b><span>{b.txt}</span><span>{away(b.t)}</span></li>)}</ul></div>
 
   // ---- E heti rend (hétfő–péntek, plusz a hétvége, ha van rendje) ----
-  const monday = addDays(z.date, 1 - z.weekday)
-  const week = [0, 1, 2, 3, 4, 5, 6].map(i => {
-    const date = addDays(monday, i), sch = scheduleFor(date, data.schedules, ovMap), ls = sch ? byPos(sch.lessons) : []
+  const week: { date: string; i: number; dim: boolean; info: string }[] = weekFromBell ?? []
+  const _unusedWeek = false && [0].map(i => {
+    const date = z.date, sch = undefined as any, ls = [] as any[]
     const off = (data.closed as { day: string; reason: string }[]).find(c => c.day === date)?.reason
-    return { date, i, dim: !!off || !ls.length, info: off ?? '' }
+    void _unusedWeek; void off; void sch; return { date, i, dim: !ls.length, info: '' }
   }).filter(w => w.i < 5 || !w.dim)
 
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
   const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[])
     .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
     .concat(discordNotes.map(dn => ({ id: dn.id, text: dn.text, active_until: null })))
-  parseBannedWordsFromAnnouncements(data.announcements)
-  const partners = parsePartnersFromAnnouncements(data.announcements)
+
+
   const partnersBox = !tv && partners.length > 0 && <section className="panel partners-panel"><div className="tag">🤝 Társoldalak és hasznos linkek</div><div className="partners-grid">{partners.map(p => <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="partner-card"><span className="p-ico" aria-hidden="true">{p.icon || '🌐'}</span><div className="p-info"><b>{p.name}</b>{p.desc && <small>{p.desc}</small>}</div><span className="p-arr" aria-hidden="true">↗</span></a>)}</div></section>
-  const kofi = parseKofiFromAnnouncements(data.announcements)
+
   const kofiHref = kofi.url && !/^https?:\/\/(www\.)?ko-fi\.com\/?$/i.test(kofi.url) ? kofi.url : 'https://ko-fi.com/sulibell'
   const kofiTvBox = tv && (
     <section className="panel kofi-tv">
@@ -754,9 +814,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         </main>
         {maintPrepBanner}
       {maintOverlay}
-        <VibeOverlay floats={vibeFloats} />
+        {!potato && <VibeOverlay floats={vibeFloats} />}
         {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} />}
-        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
+        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
         {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
         {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
       </>
@@ -803,8 +863,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <button className={hasMySchedule ? 'on' : ''} onClick={() => setMyModalOpen(true)} title="Saját tantárgyak és termek beállítása">📚 Saját óráim</button>
             <NotifyButton schoolId={data.id} />
             {data.settings.particles !== false && (
-              <button className={fxOn ? 'on' : ''} onClick={() => { const v = !fxOn; localStorage.setItem('fx', v ? '1' : '0'); setFxOn(v) }} title="Háttéreffektek">✨</button>
+              <button className={fxOn && !potato ? 'on' : ''} onClick={() => { const v = !fxOn; localStorage.setItem('fx', v ? '1' : '0'); setFxOn(v) }} title="Háttéreffektek">✨</button>
             )}
+            <button type="button" className={`potato-btn${potato ? ' on' : ''}`} onClick={togglePotato} title={potato ? 'Potato / Ratyi PC mód kikapcsolása' : 'Potato / Ratyi PC mód: minden nehéz effekt, átlátszóság és animáció kikapcsolása a maximális sebességért'}>🥔 {potato ? 'Potato: BE' : 'Potato PC'}</button>
             <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>
           </div>
         </header>
@@ -941,9 +1002,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       </main>
       {maintPrepBanner}
       {maintOverlay}
-      <VibeOverlay floats={vibeFloats} />
+      {!potato && <VibeOverlay floats={vibeFloats} />}
       {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} />}
-      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={((data.countdowns ?? []) as any[]).map(c => ({ id: c.id, title: c.title, left: Math.round((instantOf(c.target_date, toSec(c.target_time), data.settings.timezone) - now.getTime()) / 1000) }))} />
+      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
       {!isUpdating && !overlay && <ScrollCue isVideoDay={mediaModeForDay(z.date) === 'video'} />}

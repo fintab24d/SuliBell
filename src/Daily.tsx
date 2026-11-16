@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 
 const QUOTES: [string, string][] = [
   ['Nem az a fontos, hogy milyen lassan haladsz, hanem hogy ne állj meg.', 'Konfuciusz'],
@@ -52,7 +52,7 @@ function dayIndex(day: string, salt: number, len: number) {
 }
 
 /** Napi idézet és érdekesség – minden nap más, és a "Következő" gombbal lapozható. */
-export default function Daily({ day }: { day: string }) {
+export default memo(function Daily({ day }: { day: string }) {
   const [offset, setOffset] = useState(0)
   const q = QUOTES[(dayIndex(day, 7, QUOTES.length) + offset) % QUOTES.length]
   const f = FACTS[(dayIndex(day, 13, FACTS.length) + offset) % FACTS.length]
@@ -75,4 +75,4 @@ export default function Daily({ day }: { day: string }) {
       </div>
     </section>
   )
-}
+})

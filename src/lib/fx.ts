@@ -1429,17 +1429,17 @@ export class FxEngine {
 
         cBg.globalAlpha = (isDark ? 0.045 : 0.035) * mul
         cBg.fillStyle = '#cde2ff'
+        const mLen = Math.max(this.w, this.h) * 0.85
+        cBg.beginPath()
         for (let i = 0; i < 6; i++) {
           const ang = 1.85 + i * 0.34 + Math.sin(t * 0.28 + i) * 0.05
-          const len = Math.max(this.w, this.h) * 0.85
           const halfW = 0.035 + (i % 2) * 0.02
-          cBg.beginPath()
           cBg.moveTo(sx, sy)
-          cBg.lineTo(sx + Math.cos(ang - halfW) * len, sy + Math.sin(ang - halfW) * len)
-          cBg.lineTo(sx + Math.cos(ang + halfW) * len, sy + Math.sin(ang + halfW) * len)
+          cBg.lineTo(sx + Math.cos(ang - halfW) * mLen, sy + Math.sin(ang - halfW) * mLen)
+          cBg.lineTo(sx + Math.cos(ang + halfW) * mLen, sy + Math.sin(ang + halfW) * mLen)
           cBg.closePath()
-          cBg.fill()
         }
+        cBg.fill()
 
         // Holdkorong
         const moonSize = Math.min(this.w, this.h) * 0.17 * mul + 28 * this.sc
@@ -1459,32 +1459,35 @@ export class FxEngine {
         cBg.arc(sx, sy, sunR, 0, TAU)
         cBg.fill()
 
-        // 12 rövid, körben forgó korona-sugár a napkorong körül
+        // 12 rövid, körben forgó korona-sugár a napkorong körül (egyetlen batch fill!)
         cBg.fillStyle = isDark ? '#ffe39a' : '#ffd25a'
+        cBg.globalAlpha = (isDark ? 0.16 : 0.24) * mul
+        cBg.beginPath()
         for (let i = 0; i < 12; i++) {
           const ang = t * 0.12 + (i * TAU) / 12
           const len = sunR * (2.6 + 0.5 * Math.sin(t * 1.1 + i))
-          cBg.globalAlpha = (isDark ? 0.16 : 0.24) * mul
-          cBg.beginPath()
           cBg.moveTo(sx, sy)
           cBg.lineTo(sx + Math.cos(ang - 0.09) * len, sy + Math.sin(ang - 0.09) * len)
           cBg.lineTo(sx + Math.cos(ang + 0.09) * len, sy + Math.sin(ang + 0.09) * len)
           cBg.closePath()
-          cBg.fill()
         }
+        cBg.fill()
 
-        // 10 hosszú, legyezőszerű napsugár az égen át
+        // 10 hosszú, legyezőszerű napsugár az égen át (2 alpha-csoportba batch-elve!)
         cBg.fillStyle = isDark ? '#ffe39a' : '#ffcf5c'
-        for (let i = 0; i < 10; i++) {
-          const ang = 1.55 + i * 0.26 + Math.sin(t * 0.32 + i * 0.8) * 0.05
-          const len = Math.max(this.w, this.h) * (0.95 + (i % 3) * 0.16)
-          const halfW = 0.028 + (i % 3) * 0.018
-          cBg.globalAlpha = ((isDark ? 0.042 : 0.068) + (i % 2) * 0.018) * mul
+        const maxDim = Math.max(this.w, this.h)
+        for (let parity = 0; parity < 2; parity++) {
+          cBg.globalAlpha = ((isDark ? 0.042 : 0.068) + parity * 0.018) * mul
           cBg.beginPath()
-          cBg.moveTo(sx, sy)
-          cBg.lineTo(sx + Math.cos(ang - halfW) * len, sy + Math.sin(ang - halfW) * len)
-          cBg.lineTo(sx + Math.cos(ang + halfW) * len, sy + Math.sin(ang + halfW) * len)
-          cBg.closePath()
+          for (let i = parity; i < 10; i += 2) {
+            const ang = 1.55 + i * 0.26 + Math.sin(t * 0.32 + i * 0.8) * 0.05
+            const len = maxDim * (0.95 + (i % 3) * 0.16)
+            const halfW = 0.028 + (i % 3) * 0.018
+            cBg.moveTo(sx, sy)
+            cBg.lineTo(sx + Math.cos(ang - halfW) * len, sy + Math.sin(ang - halfW) * len)
+            cBg.lineTo(sx + Math.cos(ang + halfW) * len, sy + Math.sin(ang + halfW) * len)
+            cBg.closePath()
+          }
           cBg.fill()
         }
       }

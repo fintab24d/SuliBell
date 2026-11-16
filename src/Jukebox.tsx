@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { parseVideo } from './lib/video'
@@ -767,7 +767,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   return { songs, voted, mode, channels: discordChannels, hasSubmittedInBreak, addSong, voteSong, removeSong, finishSong, clearAllSongs }
 }
 
-export default function Jukebox({
+export default memo(function Jukebox({
   schoolId,
   day,
   breakKey,
@@ -1061,4 +1061,4 @@ export default function Jukebox({
       )}
     </section>
   )
-}
+})

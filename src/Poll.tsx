@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { APP_NAME } from './lib/brand'
 
@@ -30,7 +30,7 @@ export function usePoll(schoolId?: string) {
     refresh()
     const onWake = () => { if (!document.hidden) refresh() }
     const onRefresh = () => { refresh() }
-    const t = setInterval(() => { if (!document.hidden) refresh() }, 5000)
+    const t = setInterval(() => { if (!document.hidden) refresh() }, 15000)
     const ch = schoolId
       ? supabase
           .channel(`sulibell-polls-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
@@ -58,7 +58,7 @@ export function usePoll(schoolId?: string) {
 export const myVote = (id: string) => { try { const v = localStorage.getItem('vote-' + id); return v == null ? null : +v } catch { return null } }
 
 /** Szavazó kártya: gombok, ha még nem szavaztál; eredménysávok, ha igen (vagy a TV-n mindig). */
-export function PollCard({ poll, counts, tv, qr, onVoted }: { poll: PollT; counts: number[]; tv?: boolean; qr?: string; onVoted?: () => void }) {
+export const PollCard = memo(function PollCard({ poll, counts, tv, qr, onVoted }: { poll: PollT; counts: number[]; tv?: boolean; qr?: string; onVoted?: () => void }) {
   const [mine, setMine] = useState<number | null>(() => myVote(poll.id))
   const [err, setErr] = useState('')
   const total = counts.reduce((a, b) => a + b, 0)
@@ -83,7 +83,7 @@ export function PollCard({ poll, counts, tv, qr, onVoted }: { poll: PollT; count
     {showBars && <p className="meta">{total} szavazat{mine != null && !tv ? ', köszönjük!' : ''}</p>}
     {qr && <div className="pollqr"><img src={qr} alt="QR-kód a szavazáshoz" /><span>Szavazz telefonon</span></div>}
   </section>
-}
+})
 
 /** /szavazas: a TV-n lévő QR-kód ide visz; egyetlen kérdés, nagy gombok. */
 export default function Vote() {
