@@ -449,6 +449,7 @@ const QOFFSET_PREFIX = 'csengeto-arena-qoffset-'
 const OLD_PLAYED_PREFIX = 'csengeto-arena-played-'
 
 function pruneOldArenaDays(day: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i)

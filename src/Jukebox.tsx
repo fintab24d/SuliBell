@@ -60,6 +60,7 @@ export const MIN_VOTES_TO_PLAY = 5
  * szavazatot, beküldési korlátot és törölt elemet, így az új nap mindig tiszta lappal indul.
  */
 export function pruneOldJukeboxDays(currentDay: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(currentDay)) return
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i)
@@ -210,10 +211,17 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   songsRef.current = songs
 
   useEffect(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
     pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
     setVoted(loadVotedSet(day))
     setSubmitted(loadSubmittedSet(day))
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === VOTED_PREFIX + day) setVoted(loadVotedSet(day))
+      else if (e.key === SUB_PREFIX + day) setSubmitted(loadSubmittedSet(day))
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
   }, [day])
 
   const hasSubmittedInBreak = useCallback((byName?: string) => {
@@ -644,7 +652,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   }, [schoolId, day, mode, breakKey, songs, voted, submitted, broadcastSong])
 
   const voteSong = useCallback((songId: string) => {
-    if (voted.has(songId)) return
+    if (voted.has(songId) || loadVotedSet(day).has(songId)) return
     const found = songs.find(s => s.id === songId)
     if (!found) return
     const updated: SongWish = { ...found, votes: found.votes + 1 }
@@ -657,7 +665,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     })
 
     setVoted(prev => {
-      const next = new Set(prev)
+      const next = new Set([...loadVotedSet(day), ...prev])
       next.add(songId)
       saveVotedSet(day, next)
       return next
@@ -790,10 +798,12 @@ export default memo(function Jukebox({
   const [pickedYtId, setPickedYtId] = useState<string | undefined>(undefined)
   const [err, setErr] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const alreadySubmittedBreak = hasSubmittedInBreak(by)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (submitting) return
     setErr('')
     if (hasSubmittedInBreak(by)) {
       setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
@@ -813,37 +823,42 @@ export default memo(function Jukebox({
       return
     }
 
-    // 1. Névtelen beküldés tiltása + 2. Káromkodás, NSFW & Explicit szűrő
-    const check = await validateMediaSubmission({
-      title: title.trim(),
-      by: by.trim(),
-      ytId: explicitOrParsedYt,
-      url: ytUrl.trim() || undefined,
-    })
+    setSubmitting(true)
+    try {
+      // 1. Névtelen beküldés tiltása + 2. Káromkodás, NSFW & Explicit szűrő (párhuzamosan, gyorsítótárazva)
+      const check = await validateMediaSubmission({
+        title: title.trim(),
+        by: by.trim(),
+        ytId: explicitOrParsedYt,
+        url: ytUrl.trim() || undefined,
+      })
 
-    if (!check.valid) {
-      setErr(check.error || 'A beküldés nem felel meg az iskolai szabályzatnak.')
-      return
-    }
-
-    const cleanBy = check.cleanBy || by.trim()
-    try { localStorage.setItem('csengeto-arena-name', cleanBy) } catch { /* ignore */ }
-
-    const res = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
-    if (!res.ok) {
-      if (res.reason === 'break_limit') {
-        setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
-      } else if (res.reason === 'voted') {
-        setErr('Erre a számra vagy videóra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
-      } else {
-        setErr('Érvénytelen beküldés — ellenőrizd a megadott adatokat!')
+      if (!check.valid) {
+        setErr(check.error || 'A beküldés nem felel meg az iskolai szabályzatnak.')
+        return
       }
-      return
+
+      const cleanBy = check.cleanBy || by.trim()
+      try { localStorage.setItem('csengeto-arena-name', cleanBy) } catch { /* ignore */ }
+
+      const res = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
+      if (!res.ok) {
+        if (res.reason === 'break_limit') {
+          setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
+        } else if (res.reason === 'voted') {
+          setErr('Erre a számra vagy videóra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
+        } else {
+          setErr('Érvénytelen beküldés — ellenőrizd a megadott adatokat!')
+        }
+        return
+      }
+      setTitle('')
+      setYtUrl('')
+      setPickedYtId(undefined)
+      setShowForm(false)
+    } finally {
+      setSubmitting(false)
     }
-    setTitle('')
-    setYtUrl('')
-    setPickedYtId(undefined)
-    setShowForm(false)
   }
 
   // TV nézet: kompakt Top 3 Kívánságlista kártya
@@ -973,8 +988,8 @@ export default memo(function Jukebox({
                   setErr('')
                 }}
               />
-              <button type="submit" className="cta" disabled={!title.trim() || !by.trim() || alreadySubmittedBreak}>
-                {alreadySubmittedBreak ? '⏸️ Már küldtél be' : '🚀 Beküldés'}
+              <button type="submit" className="cta" disabled={submitting || !title.trim() || !by.trim() || alreadySubmittedBreak}>
+                {alreadySubmittedBreak ? '⏸️ Már küldtél be' : submitting ? '⏳ Küldés…' : '🚀 Beküldés'}
               </button>
             </div>
             {alreadySubmittedBreak && (

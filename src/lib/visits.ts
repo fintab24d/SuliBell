@@ -34,23 +34,27 @@ export async function trackPageVisit(schoolId: string, pathname: string): Promis
 
   try {
     if (sessionStorage.getItem(sessKey)) return
-    sessionStorage.setItem(sessKey, '1')
   } catch { /* privát mód fallback */ }
 
   let isUnique = false
   try {
     if (!localStorage.getItem(uniqKey)) {
       isUnique = true
-      localStorage.setItem(uniqKey, '1')
     }
   } catch { /* privát mód fallback */ }
 
   try {
-    await supabase.rpc('track_visit', {
+    const { error } = await supabase.rpc('track_visit', {
       p_school_id: schoolId,
       p_path: norm,
       p_is_unique: isUnique,
     })
+    if (!error) {
+      try { sessionStorage.setItem(sessKey, '1') } catch { /* ignore */ }
+      if (isUnique) {
+        try { localStorage.setItem(uniqKey, '1') } catch { /* ignore */ }
+      }
+    }
   } catch { /* ha az update22.sql még nem futott le, ne okozzon hibát */ }
 }
 
@@ -63,7 +67,7 @@ export function useOnlinePresence(schoolId: string | undefined, kind: 'web' | 't
     let ch: ReturnType<typeof supabase.channel> | null = null
     try {
       const key = `${kind}_${Math.random().toString(36).slice(2, 10)}`
-      ch = supabase.channel(`school-online-${schoolId}-${key}`, {
+      ch = supabase.channel(`school-online-${schoolId}`, {
         config: { presence: { key } },
       })
 
@@ -84,6 +88,8 @@ export function useOnlinePresence(schoolId: string | undefined, kind: 'web' | 't
       }
 
       ch.on('presence', { event: 'sync' }, sync)
+        .on('presence', { event: 'join' }, sync)
+        .on('presence', { event: 'leave' }, sync)
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED' && kind !== 'admin' && ch) {
             try {

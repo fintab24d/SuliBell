@@ -259,17 +259,28 @@ export function checkProfanity(input: string): { clean: boolean; matchedWord?: s
   return { clean: true }
 }
 
+const ytSafeCache = new Map<string, { ok: boolean; title?: string; error?: string }>()
+const mediaCheckCache = new Map<string, { valid: boolean; error?: string }>()
+
 /**
  * YouTube videó ellenőrzése (korhatár, 18+, privát, nem beágyazható)
  */
 export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; title?: string; error?: string }> {
+  const cached = ytSafeCache.get(ytId)
+  if (cached) return cached
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 1600)
   try {
-    const res = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`)
+    const res = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`, {
+      signal: ctrl.signal,
+    })
     if (res.status === 401 || res.status === 403) {
-      return {
+      const r = {
         ok: false,
         error: 'Ez a videó korhatáros (18+) vagy a tulajdonosa letiltotta a beágyazását. Kérjük, válassz másik videót!'
       }
+      ytSafeCache.set(ytId, r)
+      return r
     }
     if (!res.ok) {
       return {
@@ -285,26 +296,34 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
     // A YouTube által visszaadott hivatalos címet és csatornanevet is ellenőrizzük!
     const titleCheck = checkProfanity(title)
     if (!titleCheck.clean) {
-      return {
+      const r = {
         ok: false,
         title,
         error: `A videó címe („${title.slice(0, 40)}”) nem felel meg az iskolai szabályzatnak (nem megengedett vagy explicit jelölés: ${titleCheck.matchedWord}).`
       }
+      ytSafeCache.set(ytId, r)
+      return r
     }
 
     const authorCheck = checkProfanity(author)
     if (!authorCheck.clean) {
-      return {
+      const r = {
         ok: false,
         title,
         error: `A videó készítője/csatornája („${author.slice(0, 32)}”) nem megengedett vagy explicit tartalmú.`
       }
+      ytSafeCache.set(ytId, r)
+      return r
     }
 
-    return { ok: true, title }
+    const okRes = { ok: true, title }
+    ytSafeCache.set(ytId, okRes)
+    return okRes
   } catch {
-    // Offline vagy hálózati hiba esetén engedékenyek vagyunk
+    // Offline vagy hálózati hiba / időtúllépés esetén engedékenyek vagyunk
     return { ok: true }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -436,40 +455,47 @@ export async function validateMediaSubmission(params: {
     }
   }
 
-  // 3. YouTube videó ellenőrzése (ha van YouTube azonosító)
-  if (params.ytId) {
-    const ytCheck = await verifyYouTubeSafe(params.ytId)
-    if (!ytCheck.ok) {
-      return {
-        valid: false,
-        error: ytCheck.error || 'A videó nem felel meg az iskolai szabályzatnak.'
-      }
-    }
+  const cacheKey = `${params.ytId ?? ''}|${cleanTitle.toLowerCase()}|${params.url ?? ''}`
+  const cachedServer = mediaCheckCache.get(cacheKey)
+  if (cachedServer) {
+    return cachedServer.valid
+      ? { valid: true, cleanTitle, cleanBy }
+      : { valid: false, error: cachedServer.error }
   }
 
-  // 4. Szerveroldali Explicit / 18+ metaadat-ellenőrzés (YouTube Music, YouTube korhatár, Deezer, iTunes)
-  if (supabase) {
-    try {
-      const invokePromise = supabase.functions.invoke('discord-bridge', {
-        body: {
-          action: 'check_media',
-          ytId: params.ytId,
-          title: cleanTitle,
-          url: params.url,
-        },
-      })
-      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000))
-      const res = await Promise.race([invokePromise, timeoutPromise])
-      if (res && !res.error && res.data && res.data.ok === false) {
-        return {
-          valid: false,
-          error: res.data.error || 'Explicit-ként (18+ / szókimondó) jelölt zene vagy videó nem küldhető be!'
-        }
-      }
-    } catch {
-      // Hálózati/időtúllépési hiba esetén a kliensoldali szűrés eredményét tartjuk meg
-    }
+  // 3. YouTube videó ellenőrzése és 4. Szerveroldali metaadat-ellenőrzés PÁRHUZAMOSAN (max 1.8 mp)
+  const ytPromise = params.ytId ? verifyYouTubeSafe(params.ytId) : Promise.resolve({ ok: true } as { ok: boolean; error?: string })
+  const serverPromise = supabase
+    ? Promise.race([
+        supabase.functions.invoke('discord-bridge', {
+          body: {
+            action: 'check_media',
+            ytId: params.ytId,
+            title: cleanTitle,
+            url: params.url,
+          },
+        }),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 1800)),
+      ]).catch(() => null)
+    : Promise.resolve(null)
+
+  const [ytCheck, res] = await Promise.all([ytPromise, serverPromise])
+
+  if (!ytCheck.ok) {
+    const errRes = { valid: false, error: ytCheck.error || 'A videó nem felel meg az iskolai szabályzatnak.' }
+    mediaCheckCache.set(cacheKey, errRes)
+    return errRes
   }
 
+  if (res && !(res as any).error && (res as any).data && (res as any).data.ok === false) {
+    const errRes = {
+      valid: false,
+      error: (res as any).data.error || 'Explicit-ként (18+ / szókimondó) jelölt zene vagy videó nem küldhető be!',
+    }
+    mediaCheckCache.set(cacheKey, errRes)
+    return errRes
+  }
+
+  mediaCheckCache.set(cacheKey, { valid: true })
   return { valid: true, cleanTitle, cleanBy }
 }
