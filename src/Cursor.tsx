@@ -16,13 +16,15 @@ export default function Cursor() {
     html.classList.add('cursor-on')
 
     const up = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') return
+      if (e.pointerType === 'touch' || html.dataset.potato === '1') return
       const p = document.createElement('div')              // szikra-kör a kattintás helyén
       p.className = 'cur-pop'
       p.style.left = `${e.clientX}px`
       p.style.top = `${e.clientY}px`
       p.innerHTML = '<i></i>'
-      p.addEventListener('animationend', () => p.remove(), { once: true })
+      const cleanup = () => p.remove()
+      p.addEventListener('animationend', cleanup, { once: true })
+      window.setTimeout(cleanup, 600)
       el.appendChild(p)
     }
 

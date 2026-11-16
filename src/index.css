@@ -1343,6 +1343,7 @@ html.egg-warp #root main {
 :root[data-potato="1"] .kofi-panel::after,
 :root[data-potato="1"] .bell-fx,
 :root[data-potato="1"] .vibe-sky,
+:root[data-potato="1"] .cur,
 :root[data-potato="1"] .fxcanvas,
 :root[data-potato="1"] .fxcanvas-fg,
 :root[data-potato="1"] .fx-ledges-root {
