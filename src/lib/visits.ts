@@ -60,35 +60,43 @@ export function useOnlinePresence(schoolId: string | undefined, kind: 'web' | 't
 
   useEffect(() => {
     if (!schoolId) return
-    const key = `${kind}_${Math.random().toString(36).slice(2, 10)}`
-    const ch = supabase.channel(`school-online-${schoolId}`, {
-      config: { presence: { key } },
-    })
-
-    const sync = () => {
-      const state = ch.presenceState<{ kind?: string }>()
-      let web = 0
-      let tv = 0
-      for (const entries of Object.values(state)) {
-        for (const item of entries) {
-          if (item.kind === 'tv') tv++
-          else if (item.kind === 'web') web++
-        }
-      }
-      setCounts({ web, tv, total: web + tv })
-    }
-
-    ch.on('presence', { event: 'sync' }, sync)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED' && kind !== 'admin') {
-          try {
-            await ch.track({ kind, at: Date.now() })
-          } catch { /* ignore */ }
-        }
+    let ch: ReturnType<typeof supabase.channel> | null = null
+    try {
+      const key = `${kind}_${Math.random().toString(36).slice(2, 10)}`
+      ch = supabase.channel(`school-online-${schoolId}-${key}`, {
+        config: { presence: { key } },
       })
 
+      const sync = () => {
+        if (!ch) return
+        try {
+          const state = ch.presenceState<{ kind?: string }>()
+          let web = 0
+          let tv = 0
+          for (const entries of Object.values(state)) {
+            for (const item of entries) {
+              if (item.kind === 'tv') tv++
+              else if (item.kind === 'web') web++
+            }
+          }
+          setCounts({ web, tv, total: web + tv })
+        } catch { /* ignore */ }
+      }
+
+      ch.on('presence', { event: 'sync' }, sync)
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED' && kind !== 'admin' && ch) {
+            try {
+              await ch.track({ kind, at: Date.now() })
+            } catch { /* ignore */ }
+          }
+        })
+    } catch { /* ignore */ }
+
     return () => {
-      void supabase.removeChannel(ch)
+      if (ch) {
+        try { void supabase.removeChannel(ch) } catch { /* ignore */ }
+      }
     }
   }, [schoolId, kind])
 

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Component, Suspense, lazy, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import Cursor from './Cursor'
@@ -19,12 +19,80 @@ const page = location.pathname.startsWith('/admin')
         ? <Vote />
         : <App />
 
+class ErrorBoundary extends Component<{ children: ReactNode; fallbackNull?: boolean }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('SuliBell render hiba:', error)
+    if (!this.props.fallbackNull && /dynamically imported module|Loading chunk|module script/i.test(error?.message ?? '')) {
+      ;(window as any).__sbRecover?.()
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      if (this.props.fallbackNull) return null
+      return (
+        <main style={{ padding: 24, display: 'grid', placeItems: 'center', minHeight: '100svh' }}>
+          <div className="panel" style={{ maxWidth: 480, textAlign: 'center', padding: 24 }}>
+            <div className="tag" style={{ marginBottom: 10 }}>⚠️ Váratlan hiba</div>
+            <h2 style={{ marginTop: 0 }}>Az oldal megjelenítése megszakadt</h2>
+            <p className="meta" style={{ wordBreak: 'break-word' }}>
+              {this.state.error.message || 'Ismeretlen megjelenítési hiba.'}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>
+              <button
+                type="button"
+                className="cta"
+                onClick={() => {
+                  if (typeof (window as any).__sbHardReload === 'function') {
+                    ;(window as any).__sbHardReload()
+                  } else {
+                    location.reload()
+                  }
+                }}
+              >
+                🔄 Oldal újratöltése
+              </button>
+              {location.pathname !== '/' && (
+                <a className="btn" href="/" style={{ textDecoration: 'none' }}>
+                  ← Főoldal
+                </a>
+              )}
+            </div>
+          </div>
+        </main>
+      )
+    }
+    return this.props.children
+  }
+}
+
+window.addEventListener('vite:preloadError', ev => {
+  ev.preventDefault()
+  if (typeof (window as any).__sbRecover === 'function') {
+    ;(window as any).__sbRecover()
+  } else {
+    location.reload()
+  }
+})
+
+;(window as any).__sbMounted = true
+
 createRoot(document.getElementById('root')!).render(
   <>
-    <Cursor />
-    <Suspense fallback={<main><div className="panel"><div className="title">Betöltés…</div></div></main>}>
-      {page}
-    </Suspense>
+    <ErrorBoundary fallbackNull>
+      <Cursor />
+    </ErrorBoundary>
+    <ErrorBoundary>
+      <Suspense fallback={<main><div className="panel"><div className="title">Betöltés…</div></div></main>}>
+        {page}
+      </Suspense>
+    </ErrorBoundary>
   </>
 )
 

@@ -1,5 +1,7 @@
 // Egyszerű service worker: az oldal internet nélkül is elindul, online állapotban viszont mindig a legfrissebb verziót adja.
-const CACHE = 'sulibell-v5'
+const CACHE = 'sulibell-v6'
+const isHtml = res => ((res && res.headers && res.headers.get('content-type')) || '').toLowerCase().includes('text/html')
+
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c =>
@@ -24,18 +26,35 @@ self.addEventListener('fetch', e => {
     )
     return
   }
-  // Hash-elt Vite bundle (/assets/*): biztonságosan cache-elhető
+  // Hash-elt Vite bundle (/assets/*): csak valódi assetet cache-elünk (HTML-t soha!)
   if (/^\/assets\//.test(u.pathname)) {
     e.respondWith(caches.match(r).then(hit => {
-      if (hit) return hit
-      return fetch(r).then(res => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(r, copy)) } return res })
+      if (hit && hit.ok && !isHtml(hit)) return hit
+      if (hit) caches.open(CACHE).then(c => c.delete(r))
+      return fetch(r).then(res => {
+        if (res.ok && !isHtml(res)) {
+          const copy = res.clone()
+          caches.open(CACHE).then(c => c.put(r, copy))
+        } else {
+          // Ha egy régi chunk 404/HTML lett deploy után, töröljük a cache-elt HTML-t is
+          caches.open(CACHE).then(c => c.delete('/'))
+          if (isHtml(res)) return new Response('', { status: 404, statusText: 'Stale asset' })
+        }
+        return res
+      })
     }))
     return
   }
   // Minden más saját fájl (ikonok, manifest): előbb hálózat, offline esetén cache
   e.respondWith(
     fetch(r, { cache: 'no-cache' })
-      .then(res => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(r, copy)) } return res })
+      .then(res => {
+        if (res.ok && !isHtml(res)) {
+          const copy = res.clone()
+          caches.open(CACHE).then(c => c.put(r, copy))
+        }
+        return res
+      })
       .catch(() => caches.match(r))
   )
 })
