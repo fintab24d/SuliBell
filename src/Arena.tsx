@@ -737,11 +737,17 @@ export default function Arena({
       const bonus = 15 + qStreak * 5
       setQScore(s => s + bonus)
       setQStreak(s => s + 1)
+      setQTime(t => t + 5)
       setQFlash('ok')
     } else {
       if (sound) fxSound('boom', 0)
       setQStreak(0)
       setQScore(s => Math.max(0, s - 5))
+      setQTime(t => {
+        const next = Math.max(0, t - 10)
+        if (next <= 0) setQState('over')
+        return next
+      })
       setQFlash('bad')
     }
     saveQuizOffset(day, absIdx + 1)
@@ -900,7 +906,11 @@ export default function Arena({
                 <div className="arena-hud">
                   <span>Pont: <b>{qScore}</b></span>
                   <span>Széria: <b className="combo">🔥 {qStreak}</b></span>
-                  <span>Idő: <b>{qTime} mp</b></span>
+                  <span>
+                    Idő: <b>{qTime} mp</b>
+                    {qFlash === 'ok' && <b style={{ color: '#4ade80', marginLeft: 6 }}>+5 mp</b>}
+                    {qFlash === 'bad' && <b style={{ color: '#ff4f6a', marginLeft: 6 }}>−10 mp</b>}
+                  </span>
                 </div>
 
                 <div className="quiz-stage">
@@ -921,7 +931,7 @@ export default function Arena({
                   ) : (
                     <div className="arena-over static">
                       {qState === 'over' && <h3>🎉 Szép munka! Pontszámod: {qScore}</h3>}
-                      <p>Mindenki ugyanazt a napi feladatsort kapja! Hány kérdésre tudsz helyesen válaszolni 30 mp alatt?</p>
+                      <p>Mindenki ugyanazt a napi feladatsort kapja! Helyes válasz: <b>+5 mp</b>, hibás válasz: <b>−10 mp</b>.</p>
                       {!validatePlayerName(name).valid && (
                         <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
                           🔒 Add meg a neved a kvíz indításához (névtelen játék nem engedélyezett)!
