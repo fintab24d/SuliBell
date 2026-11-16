@@ -689,7 +689,6 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               ) : (
                 <>
                   {pollCard}
-            {kofiBox}
             {partnersBox}
                   {restBox || (events[0] && evCard(events[0], 0))}
                   <div className="tv-subgrid">
@@ -868,8 +867,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             )}
           </div>
 
-          {/* 3. OSZLOP (JOBB): Élő Hangulatfal, Zenegép, Mini-Aréna, Szavazás */}
+          {/* 3. OSZLOP (JOBB): Ko-fi Támogatás, Élő Hangulatfal, Zenegép, Mini-Aréna, Szavazás */}
           <div className="dash-col col-side">
+            {kofiBox}
             <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
 
             <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} />
@@ -877,7 +877,6 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} sound={!!data.settings.sound_enabled && audioOn} />
 
             {pollCard}
-            {kofiBox}
             {partnersBox}
           </div>
         </div>
