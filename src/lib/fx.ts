@@ -155,9 +155,41 @@ function makeMoonSprite() {
   return s
 }
 
+function makeStickerSprite(glyph: string, glow?: string) {
+  const s = document.createElement('canvas')
+  s.width = s.height = 48
+  const c = s.getContext('2d')!
+  if (glow) {
+    c.shadowColor = glow
+    c.shadowBlur = 8
+  }
+  c.font = '700 26px "Google Sans", "Segoe UI Emoji", "Apple Color Emoji", sans-serif'
+  c.textAlign = 'center'
+  c.textBaseline = 'middle'
+  c.fillStyle = '#ffffff'
+  c.fillText(glyph, 24, 25)
+  return s
+}
+
+export type CelebrateKind =
+  | 'fireworks'
+  | 'confetti'
+  | 'both'
+  | 'arcade'
+  | 'matrix'
+  | 'cats'
+  | 'chill'
+  | 'gold'
+  | 'warp'
+  | 'hacker'
+  | 'weather'
+
 interface Orb { x: number; y: number; vx: number; vy: number; r: number; a: number; ci: number; cj: number; t: number; ph: number }
 interface Dust { x: number; y: number; vx: number; vy: number; r: number; a: number; ci: number; ph: number; sp: number }
 interface Spark { x: number; y: number; vx: number; vy: number; r: number; life: number; max: number; ci: number }
+interface Sticker { x: number; y: number; vx: number; vy: number; g: number; rot: number; vr: number; size: number; life: number; max: number; glyph: string; glow?: string }
+interface PixelSpark { x: number; y: number; vx: number; vy: number; size: number; life: number; max: number; col: string }
+interface MatrixCol { x: number; y: number; v: number; stepAcc: number; stepMs: number; ch: string }
 interface Drop { x: number; y: number; v: number; len: number; a: number; bucket: 0 | 1 | 2; ph: number; r: number }
 interface MistBand { x: number; y: number; vx: number; w: number; h: number; a: number; ph: number; fg: boolean }
 interface Bolt { pts: [number, number][]; branches: [number, number][][]; life: number; max: number }
@@ -224,7 +256,9 @@ export class FxEngine {
   private sparks: Spark[] = []
   private waves: Wave[] = []
   private pal: RGB[] = []
+  private palCss: string[] = []
   private sprites: HTMLCanvasElement[] = []
+  private stickerCache = new Map<string, HTMLCanvasElement>()
   private snowSprite!: HTMLCanvasElement
   private sunSprite!: HTMLCanvasElement
   private moonSprite!: HTMLCanvasElement
@@ -250,8 +284,13 @@ export class FxEngine {
   private visibleLedges: Ledge[] = []
   private ledgesDirty = true
   private lastLedgeScan = 0
+  private hasLedgeActivity = false
   private rockets: Rocket[] = []
   private papers: Paper[] = []
+  private stickers: Sticker[] = []
+  private pixels: PixelSpark[] = []
+  private matrixCols: MatrixCol[] = []
+  private matrixUntil = 0
   private queue: { t: number; fn: () => void }[] = []
   private flash = 0
   private nextBolt = 0
@@ -282,13 +321,14 @@ export class FxEngine {
     const mem = typeof navigator !== 'undefined' ? ((navigator as { deviceMemory?: number }).deviceMemory || 8) : 8
     this.lowSpec = cores <= 2 || mem <= 2
     this.midSpec = !this.lowSpec && (cores <= 4 || mem <= 4)
-    this.baseMaxFps = tv ? 30 : this.lowSpec ? 34 : this.midSpec ? 42 : 50
+    this.baseMaxFps = tv ? 28 : this.lowSpec ? 32 : this.midSpec ? 40 : 48
     this.currentMaxFps = this.baseMaxFps
     if (this.lowSpec) this.perfScale = 0.72
     else if (this.midSpec) this.perfScale = 0.88
 
     const cs = getComputedStyle(document.documentElement)
     this.pal = VARS.map((v, i) => parseColor(cs.getPropertyValue(v)) ?? FALLBACK[i])
+    this.palCss = this.pal.map(([r, g, b]) => `rgb(${r},${g},${b})`)
     this.sprites = this.pal.map(makeSprite)
     this.snowSprite = makeSprite([235, 245, 255])
     this.sunSprite = makeMistSprite([255, 210, 95])
@@ -412,16 +452,239 @@ export class FxEngine {
     this.fitMists()
   }
 
-  /** Nagy pillanat: tűzijáték és/vagy konfetti. */
-  celebrate(kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) {
+  private getStickerSprite(glyph: string, glow?: string): HTMLCanvasElement {
+    const k = glow ? `${glyph}|${glow}` : glyph
+    let spr = this.stickerCache.get(k)
+    if (!spr) {
+      spr = makeStickerSprite(glyph, glow)
+      this.stickerCache.set(k, spr)
+    }
+    return spr
+  }
+
+  private spawnStickerFountain(glyphs: string[], count: number, ox: number, oy: number, opts?: { spread?: number; upMin?: number; upMax?: number; g?: number; sizeMin?: number; sizeMax?: number; life?: number; glow?: string }) {
+    const cnt = Math.max(6, Math.round(count * this.perfScale))
+    const upMin = opts?.upMin ?? 220
+    const upMax = opts?.upMax ?? 520
+    const spread = opts?.spread ?? 260
+    const grav = opts?.g ?? 420
+    const life = opts?.life ?? 2.4
+    for (let i = 0; i < cnt; i++) {
+      this.stickers.push({
+        x: ox + rnd(-28, 28),
+        y: oy + rnd(-12, 12),
+        vx: rnd(-spread, spread),
+        vy: -rnd(upMin, upMax),
+        g: grav,
+        rot: rnd(-0.5, 0.5),
+        vr: rnd(-3.5, 3.5),
+        size: rnd(opts?.sizeMin ?? 22, opts?.sizeMax ?? 38) * this.sc,
+        life: rnd(life * 0.7, life),
+        max: life,
+        glyph: glyphs[i % glyphs.length],
+        glow: opts?.glow,
+      })
+    }
+    if (this.stickers.length > 140) this.stickers.splice(0, this.stickers.length - 140)
+  }
+
+  /** Nagy pillanat vagy Easter Egg: mindegyik típushoz egyedi vizuális effekt tartozik. */
+  celebrate(kind: CelebrateKind = 'both', power = 1, ox?: number, oy?: number) {
     const k = (this.tv ? 0.7 : 1) * this.perfScale
+    const cx = ox ?? this.w * 0.5
+    const cy = oy ?? this.h * 0.45
+
+    if (kind === 'matrix') {
+      // Zuhanó zöld Mátrix-karakterek az egész képernyőn
+      const glyphs = 'アイウエオカキクケコサシスセソタチツテト0123456789ABCDEF'
+      const cols = Math.max(14, Math.round((this.w / 28) * this.perfScale))
+      this.matrixCols = []
+      for (let i = 0; i < cols; i++) {
+        this.matrixCols.push({
+          x: (i + 0.5) * (this.w / cols) + rnd(-6, 6),
+          y: rnd(-this.h * 0.7, 0),
+          v: rnd(210, 420) * this.sc,
+          stepAcc: 0,
+          stepMs: rnd(0.06, 0.14),
+          ch: glyphs[(Math.random() * glyphs.length) | 0],
+        })
+      }
+      this.matrixUntil = this.time + 7.5
+      this.onSound?.('pop', 0)
+      return
+    }
+
+    if (kind === 'arcade') {
+      // 8-bites pixel robbanások + nagy tűzijátékok
+      const cols = ['#ff4fc3', '#2de2ff', '#facc15', '#39ff7a', '#a855f7']
+      const burstOrigins: [number, number][] = [
+        [this.w * 0.25, this.h * 0.32],
+        [this.w * 0.75, this.h * 0.32],
+        [this.w * 0.5, this.h * 0.45],
+      ]
+      burstOrigins.forEach(([bx, by], idx) => {
+        this.queue.push({
+          t: this.time + idx * 0.28,
+          fn: () => {
+            this.onSound?.('boom', (bx / this.w) * 2 - 1)
+            const cnt = Math.round(52 * this.perfScale)
+            for (let i = 0; i < cnt; i++) {
+              const a = (i / cnt) * TAU
+              const sp = rnd(120, 380) * this.sc
+              this.pixels.push({
+                x: bx,
+                y: by,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp,
+                size: rnd(5, 11) * this.sc,
+                life: rnd(0.9, 1.6),
+                max: 1.6,
+                col: cols[i % cols.length],
+              })
+            }
+            if (this.pixels.length > 260) this.pixels.splice(0, this.pixels.length - 260)
+            this.waves.push({ x: bx, y: by, r0: 8, r1: 240 * this.sc, t: 0, max: 0.55, ci: idx % this.pal.length })
+          },
+        })
+      })
+      const n = Math.max(4, Math.round(6 * power * this.perfScale))
+      for (let i = 0; i < n; i++) this.queue.push({ t: this.time + 0.5 + i * 0.45, fn: () => this.launch(rnd(0.15, 0.85)) })
+      return
+    }
+
+    if (kind === 'cats') {
+      this.spawnStickerFountain(['🐱', '🐾', '😺', '💖'], 42, this.w * 0.5, this.h * 0.85, {
+        spread: this.w * 0.38,
+        upMin: 360,
+        upMax: 680,
+        g: 390,
+        life: 3.1,
+        glow: 'rgba(255,79,195,0.65)',
+      })
+      this.onSound?.('pop', 0)
+      return
+    }
+
+    if (kind === 'chill') {
+      // Alulról lassan felszálló pihenő-buborékok + nyugodt hullámok
+      const cnt = Math.round(32 * this.perfScale)
+      const glyphs = ['🫧', '☕', '🛋️', '✨', '🎧']
+      for (let i = 0; i < cnt; i++) {
+        this.queue.push({
+          t: this.time + rnd(0, 1.4),
+          fn: () => {
+            this.stickers.push({
+              x: rnd(this.w * 0.08, this.w * 0.92),
+              y: this.h + 24,
+              vx: rnd(-35, 35),
+              vy: -rnd(120, 230),
+              g: -18,
+              rot: rnd(-0.2, 0.2),
+              vr: rnd(-0.8, 0.8),
+              size: rnd(24, 40) * this.sc,
+              life: rnd(2.8, 4.2),
+              max: 4.2,
+              glyph: glyphs[(Math.random() * glyphs.length) | 0],
+              glow: 'rgba(45,226,255,0.55)',
+            })
+          },
+        })
+      }
+      for (let i = 0; i < 3; i++) {
+        this.waves.push({ x: cx, y: cy, r0: 12, r1: Math.min(this.w, this.h) * (0.45 + i * 0.14), t: -i * 0.22, max: 1.5, ci: 1 })
+      }
+      this.onSound?.('pop', 0)
+      return
+    }
+
+    if (kind === 'gold') {
+      // Arany harang + csillagzuhatag + arany konfetti
+      this.spawnStickerFountain(['🔔', '⭐', '✨', '👑'], 34, this.w * 0.5, this.h * 0.42, {
+        spread: this.w * 0.36,
+        upMin: 220,
+        upMax: 520,
+        g: 340,
+        life: 3.0,
+        glow: 'rgba(250,204,21,0.75)',
+      })
+      const goldCols: RGB[] = [[250, 204, 21], [254, 240, 138], [245, 158, 11], [255, 255, 255]]
+      const n = Math.round(90 * k)
+      for (let i = 0; i < n; i++) {
+        const c = goldCols[i % goldCols.length]
+        this.queue.push({
+          t: this.time + rnd(0, 1.5),
+          fn: () => this.papers.push({
+            x: rnd(0, this.w), y: rnd(-40, -8), vx: rnd(-40, 40), vy: rnd(130, 250),
+            rot: rnd(0, TAU), vr: rnd(-6, 6), w: rnd(7, 13) * this.sc, h: rnd(4, 8) * this.sc,
+            colStr: `rgb(${c[0]},${c[1]},${c[2]})`, ph: rnd(0, TAU),
+          }),
+        })
+      }
+      this.waves.push({ x: cx, y: cy, r0: 16, r1: Math.min(this.w, this.h) * 0.65, t: 0, max: 1.2, ci: 2 })
+      this.onSound?.('boom', 0)
+      return
+    }
+
+    if (kind === 'warp') {
+      // Időörvény: órából kiinduló koncentrikus gyűrűk + hipertér csillagcsíkok
+      for (let i = 0; i < 6; i++) {
+        this.waves.push({
+          x: cx,
+          y: cy,
+          r0: 18,
+          r1: Math.max(this.w, this.h) * (0.35 + i * 0.14),
+          t: -i * 0.14,
+          max: 1.15,
+          ci: i % this.pal.length,
+        })
+      }
+      const n = Math.round(110 * this.perfScale)
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + rnd(-0.08, 0.08)
+        const sp = rnd(260, 760) * this.sc
+        this.sparks.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rnd(3, 6.5), life: rnd(0.8, 1.5), max: 1.5, ci: i % this.pal.length })
+      }
+      this.capSparks()
+      this.onSound?.('launch', 0)
+      return
+    }
+
+    if (kind === 'hacker') {
+      this.spawnStickerFountain(['0', '1', '</>', '{ }', '⚡'], 36, cx, cy, {
+        spread: 240,
+        upMin: 340,
+        upMax: 620,
+        g: 460,
+        life: 2.3,
+        sizeMin: 18,
+        sizeMax: 28,
+        glow: 'rgba(45,226,255,0.75)',
+      })
+      this.onSound?.('pop', 0)
+      return
+    }
+
+    if (kind === 'weather') {
+      this.spawnStickerFountain(['☀️', '🌙', '⚡', '❄️', '🌈', '☁️'], 34, cx, cy, {
+        spread: 280,
+        upMin: 240,
+        upMax: 520,
+        g: 360,
+        life: 2.6,
+        glow: 'rgba(120,200,255,0.65)',
+      })
+      this.waves.push({ x: cx, y: cy, r0: 10, r1: 220 * this.sc, t: 0, max: 0.85, ci: 1 })
+      this.onSound?.('pop', 0)
+      return
+    }
+
     if (kind !== 'confetti') {
       const n = Math.max(4, Math.round(9 * power * this.perfScale))
       for (let i = 0; i < n; i++) this.queue.push({ t: this.time + 0.2 + i * 0.55 + rnd(0, 0.25), fn: () => this.launch(rnd(0.12, 0.88)) })
     }
     if (kind !== 'fireworks') {
-      const n = Math.round(140 * power * k)
-      for (let i = 0; i < n; i++) this.queue.push({ t: this.time + rnd(0, 2.2), fn: () => this.papers.push(this.newPaper()) })
+      const n = Math.round(120 * power * k)
+      for (let i = 0; i < n; i++) this.queue.push({ t: this.time + rnd(0, 2.0), fn: () => this.papers.push(this.newPaper()) })
       for (const at of [0, 0.35, 0.8]) this.queue.push({ t: this.time + at, fn: () => this.onSound?.('pop', rnd(-0.8, 0.8)) })
     }
   }
@@ -465,24 +728,24 @@ export class FxEngine {
     this.drops.length = Math.min(this.drops.length, want)
   }
 
-  private newDrop(anywhere: boolean): Drop {
+  private resetDrop(d: Drop, anywhere: boolean): Drop {
     const snow = this.wkind === 'snow'
     const drizzle = this.wkind === 'drizzle'
     const storm = this.wkind === 'storm'
-    const x = snow ? rnd(-20, this.w + 20) : rnd(-20, this.w + (storm ? 320 : 220))
-    const y = anywhere ? rnd(0, this.h) : rnd(-60, -5)
+    d.x = snow ? rnd(-20, this.w + 20) : rnd(-20, this.w + (storm ? 320 : 220))
+    d.y = anywhere ? rnd(0, this.h) : rnd(-60, -5)
     const a = snow ? rnd(0.5, 0.92) : drizzle ? rnd(0.24, 0.48) : storm ? rnd(0.52, 0.95) : rnd(0.4, 0.85)
-    const bucket: 0 | 1 | 2 = a < 0.45 ? 0 : a < 0.72 ? 1 : 2
-    return {
-      x,
-      y,
-      v: snow ? rnd(42, 92) : drizzle ? rnd(360, 540) : storm ? rnd(920, 1320) : rnd(680, 960),
-      len: (drizzle ? rnd(8, 15) : storm ? rnd(24, 44) : rnd(16, 30)) * this.sc,
-      a,
-      bucket,
-      ph: rnd(0, TAU),
-      r: snow ? rnd(3.2, 7.5) : 4
-    }
+    d.a = a
+    d.bucket = a < 0.45 ? 0 : a < 0.72 ? 1 : 2
+    d.v = snow ? rnd(42, 92) : drizzle ? rnd(360, 540) : storm ? rnd(920, 1320) : rnd(680, 960)
+    d.len = (drizzle ? rnd(8, 15) : storm ? rnd(24, 44) : rnd(16, 30)) * this.sc
+    d.ph = rnd(0, TAU)
+    d.r = snow ? rnd(3.2, 7.5) : 4
+    return d
+  }
+
+  private newDrop(anywhere: boolean): Drop {
+    return this.resetDrop({ x: 0, y: 0, v: 0, len: 0, a: 0, bucket: 0, ph: 0, r: 4 }, anywhere)
   }
 
   private fitMists() {
@@ -717,7 +980,7 @@ export class FxEngine {
   private onDown = (e: PointerEvent) => this.burst(e.clientX, e.clientY, 16, 1)
   private pick(focusWeight: number) { return Math.random() < focusWeight ? this.focus : (Math.random() * this.pal.length) | 0 }
   private capSparks() {
-    const maxSparks = this.lowSpec ? 320 : 650
+    const maxSparks = this.lowSpec ? 180 : 420
     if (this.sparks.length > maxSparks) this.sparks.splice(0, this.sparks.length - maxSparks)
   }
 
@@ -772,13 +1035,13 @@ export class FxEngine {
     // Adaptív teljesítmény-figyelő: ha gyengébb PC-n megugrik a kirajzolási idő, simán visszaveszünk sűrűséget/FPS-t (feature-vesztés nélkül)
     if (now - this.lastPerfAdjust > 2000) {
       this.lastPerfAdjust = now
-      if (this.avgWorkMs > 12 && this.perfScale > 0.56) {
+      if (this.avgWorkMs > 9.5 && this.perfScale > 0.56) {
         this.perfScale = Math.max(0.55, +(this.perfScale - 0.12).toFixed(2))
-        this.currentMaxFps = Math.max(28, this.baseMaxFps - 12)
+        this.currentMaxFps = Math.max(26, this.baseMaxFps - 12)
         this.syncPerfAttr()
         this.fitDrops()
         this.fitMists()
-      } else if (this.avgWorkMs < 5.5 && this.perfScale < (this.lowSpec ? 0.72 : 1)) {
+      } else if (this.avgWorkMs < 4.5 && this.perfScale < (this.lowSpec ? 0.72 : 1)) {
         this.perfScale = Math.min(this.lowSpec ? 0.75 : 1, +(this.perfScale + 0.08).toFixed(2))
         this.currentMaxFps = this.baseMaxFps
         this.syncPerfAttr()
@@ -882,19 +1145,24 @@ export class FxEngine {
         }
 
         if (hit || d.y > h + 30 || d.x < -80 || d.x > w + 340) {
-          Object.assign(d, this.newDrop(false))
+          this.resetDrop(d, false)
         }
       }
     }
 
-    // Hófelhalmozódás / olvadás a kártyákon
+    // Hófelhalmozódás / olvadás a kártyákon + aktivitás jelzése
+    let ledgeActive = false
     for (const l of this.ledges) {
       if (isSnow) {
         l.snowDepth = Math.min(1, l.snowDepth + dt * 0.032)
       } else if (l.snowDepth > 0) {
         l.snowDepth = Math.max(0, l.snowDepth - dt * (isRainLike ? 0.35 : 0.06))
       }
+      if (l.snowDepth > 0.04 || l.splashes.length > 0 || l.ripples.length > 0 || !l.empty) {
+        ledgeActive = true
+      }
     }
+    this.hasLedgeActivity = ledgeActive
 
     // Vihar villámcsapások időzítése
     if (wk === 'storm' && this.time > this.nextBolt) {
@@ -957,6 +1225,55 @@ export class FxEngine {
         this.waves.pop()
       }
     }
+    for (let i = this.stickers.length - 1; i >= 0; i--) {
+      const s = this.stickers[i]
+      s.life -= dt
+      if (s.life <= 0) {
+        this.stickers[i] = this.stickers[this.stickers.length - 1]
+        this.stickers.pop()
+        continue
+      }
+      s.vy += s.g * dt
+      s.vx *= 1 - 0.5 * dt
+      s.x += s.vx * dt
+      s.y += s.vy * dt
+      s.rot += s.vr * dt
+    }
+    for (let i = this.pixels.length - 1; i >= 0; i--) {
+      const p = this.pixels[i]
+      p.life -= dt
+      if (p.life <= 0) {
+        this.pixels[i] = this.pixels[this.pixels.length - 1]
+        this.pixels.pop()
+        continue
+      }
+      p.vy += 120 * dt
+      p.vx *= 1 - 1.5 * dt
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+    }
+    if (this.matrixCols.length) {
+      const glyphs = 'アイウエオカキクケコサシスセソタチツテト0123456789ABCDEF'
+      const aliveMatrix = this.time < this.matrixUntil
+      for (let i = this.matrixCols.length - 1; i >= 0; i--) {
+        const mc = this.matrixCols[i]
+        mc.y += mc.v * dt
+        mc.stepAcc += dt
+        if (mc.stepAcc >= mc.stepMs) {
+          mc.stepAcc = 0
+          mc.ch = glyphs[(Math.random() * glyphs.length) | 0]
+        }
+        if (mc.y > h + 180) {
+          if (aliveMatrix) {
+            mc.y = rnd(-140, -10)
+            mc.v = rnd(210, 420) * this.sc
+          } else {
+            this.matrixCols[i] = this.matrixCols[this.matrixCols.length - 1]
+            this.matrixCols.pop()
+          }
+        }
+      }
+    }
   }
 
   private spr(c: CanvasRenderingContext2D, ci: number, x: number, y: number, r: number, a: number) {
@@ -966,6 +1283,7 @@ export class FxEngine {
 
   /** Látható kártyák hósapkáinak, eső-csobbanásainak és vízgyűrűinek kirajzolása (zero shadowBlur, inkrementális hó-cache). */
   private drawLedges() {
+    if (!this.hasLedgeActivity) return
     const isDark = this.additive
     const hWin = this.h
     for (const l of this.ledges) {
@@ -1099,10 +1417,8 @@ export class FxEngine {
             const fy = ((i * 131 + 17) % 61) / 100
             const tw = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1.2 + (i % 5) * 0.35) + i * 1.7))
             cBg.globalAlpha = tw * mul
-            const sr = (i % 4 === 0 ? 1.8 : 1.1) * this.sc
-            cBg.beginPath()
-            cBg.arc(fx * this.w, fy * this.h, sr, 0, TAU)
-            cBg.fill()
+            const sz = (i % 4 === 0 ? 3.2 : 2) * this.sc
+            cBg.fillRect(fx * this.w - sz * 0.5, fy * this.h - sz * 0.5, sz, sz)
           }
         }
 
@@ -1255,14 +1571,15 @@ export class FxEngine {
 
     for (const wv of this.waves) {
       if (wv.t < 0) continue
-      const p = wv.t / wv.max, e = 1 - Math.pow(1 - p, 3)
-      const [r, g, b] = this.pal[wv.ci]
+      const p = wv.t / wv.max, e = 1 - (1 - p) * (1 - p) * (1 - p)
       cBg.beginPath()
       cBg.arc(wv.x, wv.y, wv.r0 + (wv.r1 - wv.r0) * e, 0, TAU)
-      cBg.strokeStyle = `rgba(${r},${g},${b},${((1 - p) * 0.85 * k).toFixed(2)})`
+      cBg.globalAlpha = (1 - p) * 0.85 * k
+      cBg.strokeStyle = this.palCss[wv.ci]
       cBg.lineWidth = 2 + 6 * (1 - p)
       cBg.stroke()
     }
+    cBg.globalAlpha = 1
 
     this.drawWeatherBg(cBg, isDark)
 
@@ -1328,12 +1645,62 @@ export class FxEngine {
     // Kattintás és mozgás szikrák az előtérben
     cFg.globalCompositeOperation = isDark ? 'lighter' : 'source-over'
     for (const s of this.sparks) {
-      const f = s.life / s.max
-      const al = Math.pow(Math.max(0, Math.min(1, f)), 1.4) * k
+      const f = Math.max(0, Math.min(1, s.life / s.max))
+      const al = f * Math.sqrt(f) * k
       this.spr(cFg, s.ci, s.x, s.y, s.r * (0.6 + 0.4 * f) * 2.4, al)
       this.spr(cFg, s.ci, s.x - s.vx * 0.018, s.y - s.vy * 0.018, s.r * 1.6, al * 0.6)
     }
     cFg.globalAlpha = 1
+
+    // 8-bites árkád pixel szikrák
+    if (this.pixels.length) {
+      cFg.globalCompositeOperation = 'source-over'
+      for (const p of this.pixels) {
+        cFg.globalAlpha = Math.max(0, Math.min(1, p.life / p.max))
+        cFg.fillStyle = p.col
+        const hs = p.size * 0.5
+        cFg.fillRect(p.x - hs, p.y - hs, p.size, p.size)
+      }
+      cFg.globalAlpha = 1
+    }
+
+    // Mátrix kód-eső az előtérben
+    if (this.matrixCols.length) {
+      const glyphs = 'アイウエオカキクケコサシスセソタチツテト0123456789ABCDEF'
+      const fade = this.time < this.matrixUntil ? 1 : Math.max(0, 1 - (this.time - this.matrixUntil) * 0.8)
+      const fz = Math.round(18 * this.sc)
+      cFg.globalCompositeOperation = 'source-over'
+      cFg.font = `700 ${fz}px monospace`
+      cFg.textAlign = 'center'
+      for (const mc of this.matrixCols) {
+        for (let step = 0; step < 6; step++) {
+          const yy = mc.y - step * fz * 1.15
+          if (yy < -fz || yy > this.h + fz) continue
+          cFg.globalAlpha = (step === 0 ? 0.96 : Math.max(0.1, 0.72 - step * 0.12)) * fade
+          cFg.fillStyle = step === 0 ? '#eafff0' : step === 1 ? '#4ade80' : '#16a34a'
+          const gIdx = (mc.ch.charCodeAt(0) + step * 7) % glyphs.length
+          cFg.fillText(step === 0 ? mc.ch : glyphs[gIdx], mc.x, yy)
+        }
+      }
+      cFg.globalAlpha = 1
+    }
+
+    // Egyedi matricák / emojik / kódjelek (cica, chill, arany, hacker, időjárás)
+    if (this.stickers.length) {
+      const dpr = this.dpr
+      cFg.globalCompositeOperation = 'source-over'
+      for (const s of this.stickers) {
+        const spr = this.getStickerSprite(s.glyph, s.glow)
+        const f = Math.max(0, Math.min(1, s.life / s.max))
+        cFg.globalAlpha = f < 0.25 ? f * 4 : 1
+        const cs = Math.cos(s.rot)
+        const sn = Math.sin(s.rot)
+        cFg.setTransform(dpr * cs, dpr * sn, -dpr * sn, dpr * cs, s.x * dpr, s.y * dpr)
+        cFg.drawImage(spr, -s.size * 0.5, -s.size * 0.5, s.size, s.size)
+      }
+      cFg.setTransform(dpr, 0, 0, dpr, 0, 0)
+      cFg.globalAlpha = 1
+    }
 
     // Ünneplés: rakéták és konfetti az előtérben (save/restore nélkül, közvetlen mátrixszal)
     cFg.globalCompositeOperation = 'source-over'

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FxEngine } from './lib/fx'
+import { FxEngine, type CelebrateKind } from './lib/fx'
 import { fxSound } from './lib/sound'
 
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -28,7 +28,10 @@ export default function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: st
   useEffect(() => { eng.current?.setWeather(wx) }, [wx])      // valódi időjárás: eső, hó, vihar
   useEffect(() => { eng.current?.setNight(!!night) }, [night]) // napszak: nappal Nap, este Hold
   useEffect(() => {                                                    // tűzijáték / konfetti a nagy pillanatokra
-    const on = (e: Event) => { const d = (e as CustomEvent).detail ?? {}; eng.current?.celebrate(d.kind ?? 'both', d.power ?? 1) }
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail ?? {}
+      eng.current?.celebrate(d.kind ?? 'both', d.power ?? 1, d.ox, d.oy)
+    }
     window.addEventListener('sulibell:celebrate', on)
     return () => window.removeEventListener('sulibell:celebrate', on)
   }, [])
@@ -108,9 +111,16 @@ export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: 
   const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
   const eggTimerRef = useRef<number>(0)
 
-  const fire = (title: string, sub: string, kind: 'fireworks' | 'confetti' | 'both' = 'both', power = 1) => {
+  const fire = (title: string, sub: string, kind: CelebrateKind = 'both', power = 1, originEl?: Element | null) => {
     if (enabled && sound) fxSound('fanfare', 0)
-    if (enabled) window.dispatchEvent(new CustomEvent('sulibell:celebrate', { detail: { kind, power } }))
+    let ox: number | undefined
+    let oy: number | undefined
+    if (originEl) {
+      const r = originEl.getBoundingClientRect()
+      ox = r.left + r.width * 0.5
+      oy = r.top + r.height * 0.5
+    }
+    if (enabled) window.dispatchEvent(new CustomEvent('sulibell:celebrate', { detail: { kind, power, ox, oy } }))
     setMsg({ id: Date.now() + Math.random(), title, sub })
   }
 
@@ -165,15 +175,19 @@ export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: 
     const onClick = (e: Event) => {
       const target = e.target as HTMLElement | null
       if (!target) return
-      if (target.closest('.brand') && bump('brand', 5)) {
-        fire('Parti!', 'Szuper rejtett funkciót találtál', 'both', 1.6)
-      } else if (target.closest('.timebox') && bump('clock', 7)) {
+      const brandEl = target.closest('.brand')
+      const clockEl = target.closest('.timebox')
+      const verEl = target.closest('.foot .ver')
+      const wxEl = target.closest('.wx')
+      if (brandEl && bump('brand', 5)) {
+        fire('Parti!', 'Szuper rejtett funkciót találtál', 'both', 1.6, brandEl)
+      } else if (clockEl && bump('clock', 7)) {
         flashHtmlClass('egg-warp', 6500)
-        fire('⏳ Időutazó mód!', 'Sajnos az órát így sem tudod előretekerni a kicsengetésig 😅', 'both', 1.5)
-      } else if (target.closest('.foot .ver') && bump('ver', 5)) {
-        fire('🛠️ Kódmágus!', 'Ezt a titkot a diákok 99%-a sosem találja meg. Szép munka!', 'confetti', 1.4)
-      } else if (target.closest('.wx') && bump('wx', 5)) {
-        fire('🌦️ Időjárás-varázsló!', 'Hószünetet ugyan nem tudunk rendelni, de jár a konfetti ✨', 'confetti', 1.3)
+        fire('⏳ Időutazó mód!', 'Sajnos az órát így sem tudod előretekerni a kicsengetésig 😅', 'warp', 1.5, clockEl)
+      } else if (verEl && bump('ver', 5)) {
+        fire('🛠️ Kódmágus!', 'Ezt a titkot a diákok 99%-a sosem találja meg. Szép munka!', 'hacker', 1.4, verEl)
+      } else if (wxEl && bump('wx', 5)) {
+        fire('🌦️ Időjárás-varázsló!', 'Hószünetet ugyan nem tudunk rendelni, de jár egy varázs-kavalkád ✨', 'weather', 1.3, wxEl)
       }
     }
 
@@ -202,7 +216,7 @@ export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: 
         if (kIdx === KONAMI.length) {
           kIdx = 0
           flashHtmlClass('egg-arcade', 8000)
-          fire('👾 KONAMI-KÓD FELOLDVA!', 'Titkos 8-bites árkád mód aktiválva (+1000 tiszteletpont!)', 'both', 1.8)
+          fire('👾 KONAMI-KÓD FELOLDVA!', 'Titkos 8-bites árkád mód aktiválva (+1000 tiszteletpont!)', 'arcade', 1.6)
         }
       } else {
         kIdx = low === KONAMI[0] ? 1 : 0
@@ -214,17 +228,17 @@ export function Celebrate({ phase, awayDays, events, enabled, sound }: { phase: 
         if (buf.endsWith('matrix')) {
           buf = ''
           flashHtmlClass('egg-matrix', 8000)
-          fire('🕶️ Mátrix-mód!', '„Nem a csengő késik, a Mátrix hajlik meg.”', 'confetti', 1.4)
+          fire('🕶️ Mátrix-mód!', '„Nem a csengő késik, a Mátrix hajlik meg.”', 'matrix', 1.4)
         } else if (buf.endsWith('cica') || buf.endsWith('miau')) {
           buf = ''
-          fire('🐱 Titkos Iskolamacska!', 'Miaú! A folyosói kabalamacska áldását adta a napodra.', 'confetti', 1.25)
+          fire('🐱 Titkos Iskolamacska!', 'Miaú! A folyosói kabalamacska áldását adta a napodra.', 'cats', 1.25)
         } else if (buf.endsWith('szunet') || buf.endsWith('pihi')) {
           buf = ''
-          fire('🛋️ Szünet-idézés!', 'Hivatalosan is szünetre szavaztál (sajnos a csengő dönt 😅).', 'both', 1.25)
+          fire('🛋️ Szünet-idézés!', 'Hivatalosan is szünetre szavaztál (sajnos a csengő dönt 😅).', 'chill', 1.25)
         } else if (buf.endsWith('sulibell')) {
           buf = ''
           flashHtmlClass('egg-gold', 8000)
-          fire('🔔 Arany Harang!', 'Megtaláltad a névadó titkos varázsszót!', 'both', 1.6)
+          fire('🔔 Arany Harang!', 'Megtaláltad a névadó titkos varázsszót!', 'gold', 1.6)
         }
       }
     }
