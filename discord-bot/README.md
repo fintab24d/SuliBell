@@ -1,6 +1,9 @@
 # SuliBell Discord Zenelejátszó Bot
 
-Önálló Node.js zenelejátszó bot a SuliBell Discord szerverhez (YouTube keresés, linkek, lejátszási listák, várólista, slash `/` és `!` parancsok).
+Önálló Node.js zenelejátszó bot a SuliBell Discord szerverhez:
+- **Támogatott források:** YouTube (dal & playlist), **Spotify** (dal, album, playlist), **SoundCloud** (dal & set/playlist), **Apple Music** (dal, album, playlist), valamint szöveges keresés.
+- **Saját mentett playlistek:** létrehozhatsz, bővíthetsz és egyetlen paranccsal elindíthatsz szerver-szintű playlisteket (`playlists.json`).
+- **Kettős vezérlés:** teljes slash (`/play`, `/playlist ...`) és `!` prefix parancs támogatás.
 
 ## Beállítás (egyszeri)
 
@@ -20,14 +23,9 @@
 
 ## Parancsok
 
-- `/play <dal vagy YouTube link>` vagy `!play <dal vagy YouTube link>`
-- `/skip` vagy `!skip` — jelenlegi dal átugrása
-- `/pause` / `/resume` — szüneteltetés / folytatás
-- `/stop` — leállítás és várólista törlése
-- `/queue` — várólista megtekintése
-- `/np` — éppen szóló dal
-- `/leave` — kilépés a hangcsatornából
-- `/help` — súgó
-
-## 24/7 futtatás
-Mivel a hangfolyam folyamatos WebSocket + UDP kapcsolatot igényel, a botot érdemes saját gépen, egy olcsó VPS-en (pl. Oracle Free Tier / Hetzner), vagy Render/Railway/Fly.io worker-ként futtatni (a Supabase Edge Function nem tud folyamatos hangcsatornában maradni).
+- `/play <link vagy keresés>` vagy `!play <link vagy keresés>` — YouTube, Spotify, SoundCloud, Apple Music dal/album/playlist indítása
+- `/playlist create <név>` — új saját playlist létrehozása
+- `/playlist add <név> <link vagy cím>` — dal vagy külső playlist hozzáadása
+- `/playlist play <név>` — mentett playlist lejátszása
+- `/playlist show <név>` / `/playlist list` / `/playlist delete <név>` (prefix: `!pl ...`)
+- `/skip`, `/pause`, `/resume`, `/stop`, `/shuffle`, `/loop off|track|queue`, `/queue`, `/np`, `/leave`, `/help`
