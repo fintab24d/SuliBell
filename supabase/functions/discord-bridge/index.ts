@@ -1595,62 +1595,62 @@ Deno.serve(async (req: Request) => {
       }
 
       const existingMsgs: any[] = await discordApi(`/channels/${textCh.id}/messages?limit=10`).catch(() => [])
-      const alreadyGuide = existingMsgs.some((m: any) => m.author?.bot && m.embeds?.[0]?.title?.includes('Zenelejátszó Bot'))
-      let guideMsgId: string | undefined
+      const oldGuide = existingMsgs.find((m: any) => m.author?.bot && m.embeds?.[0]?.title?.includes('Zenelejátszó'))
+      const guideEmbed = {
+        title: '🎶 Zenelejátszó (Jockie Music) — Használati Útmutató',
+        description:
+          'Ebbe a szobába írd a zenelejátszó parancsokat! Előtte **lépj be bármelyik hangcsatornába** a szerveren, és a **Jockie Music** bot automatikusan csatlakozik hozzád.\n\n**Támogatott források:** 🟢 Spotify (dal, album, playlist) • 🍎 Apple Music • 🟠 SoundCloud • 🔴 YouTube • 🟣 Deezer',
+        color: 0x6366f1,
+        fields: [
+          {
+            name: '▶️ Lejátszás & Várólista',
+            value: [
+              '`m!play <dal vagy link>` *(vagy `/play`)* — Dal vagy teljes playlist elindítása / hozzáadása',
+              '`m!queue` *(vagy `m!q`)* — Várólista megtekintése',
+              '`m!np` — Éppen szóló dal adatai',
+              '`m!lyrics` — Az aktuális dal szövege',
+            ].join('\n'),
+          },
+          {
+            name: '🎛️ Vezérlés',
+            value: [
+              '`m!skip` *(vagy `m!s`)* — Aktuális dal átugrása',
+              '`m!pause` / `m!resume` — Szüneteltetés / folytatás',
+              '`m!shuffle` — Várólista megkeverése',
+              '`m!loop` — Ismétlés be- és kikapcsolása',
+              '`m!volume <1-100>` — Hangerő állítása',
+              '`m!stop` — Lejátszás leállítása és várólista törlése',
+              '`m!leave` — Bot kiléptetése a hangcsatornából',
+            ].join('\n'),
+          },
+          {
+            name: '📃 Playlistek lejátszása',
+            value:
+              'Másold be bármelyik nyilvános **Spotify, Apple Music, SoundCloud vagy YouTube** playlist linkjét a `m!play <link>` parancs mögé, és a bot sorba rakja az összes dalt!',
+          },
+        ],
+        footer: { text: 'Jockie Music • Írd be: m!help az összes parancsért' },
+        timestamp: new Date().toISOString(),
+      }
 
-      if (!alreadyGuide) {
-        const guideMsg = await discordApi(`/channels/${textCh.id}/messages`, 'POST', {
-          embeds: [
-            {
-              title: '🎶 SuliBell Zenelejátszó Bot — Használati Útmutató',
-              description:
-                'Ebbe a szobába írd a zenelejátszó parancsokat! Előtte **lépj be bármelyik hangcsatornába** a szerveren, és a bot automatikusan csatlakozik hozzád.\n\n**Támogatott források:** 🔴 YouTube (dal & playlist) • 🟢 Spotify (dal, album, playlist) • 🟠 SoundCloud (dal & set) • 🍎 Apple Music (dal, album, playlist)',
-              color: 0x6366f1,
-              fields: [
-                {
-                  name: '▶️ Lejátszás & Várólista',
-                  value: [
-                    '`/play <dal vagy link>` vagy `!play <dal vagy link>` — Dal vagy teljes playlist elindítása / hozzáadása',
-                    '`/queue` vagy `!queue` — Várólista megtekintése',
-                    '`/np` vagy `!np` — Éppen szóló dal adatai',
-                  ].join('\n'),
-                },
-                {
-                  name: '🎛️ Vezérlés',
-                  value: [
-                    '`/skip` vagy `!skip` — Aktuális dal átugrása',
-                    '`/pause` / `/resume` (`!pause` / `!resume`) — Szüneteltetés / folytatás',
-                    '`/shuffle` vagy `!shuffle` — Várólista megkeverése',
-                    '`/loop off|track|queue` — Ismétlés (ki / egy dal / teljes lista)',
-                    '`/stop` vagy `!stop` — Lejátszás leállítása és várólista törlése',
-                    '`/leave` vagy `!leave` — Bot kiléptetése a hangcsatornából',
-                  ].join('\n'),
-                },
-                {
-                  name: '📂 Saját Mentett Playlistek',
-                  value: [
-                    '`/playlist create <név>` (`!pl create <név>`) — Új playlist létrehozása',
-                    '`/playlist add <név> <dal vagy link>` (`!pl add ...`) — Dal vagy külső playlist mentése',
-                    '`/playlist play <név>` (`!pl play <név>`) — Mentett playlist elindítása',
-                    '`/playlist show <név>` — Playlist tartalma • `/playlist list` — Összes playlist • `/playlist delete <név>` — Törlés',
-                  ].join('\n'),
-                },
-              ],
-              footer: { text: 'SuliBell Zenelejátszó • /help vagy !help bármikor megjeleníti a súgót' },
-              timestamp: new Date().toISOString(),
-            },
-          ],
+      if (oldGuide?.id) {
+        await discordApi(`/channels/${textCh.id}/messages/${oldGuide.id}`, 'PATCH', {
+          embeds: [guideEmbed],
         })
-        guideMsgId = guideMsg?.id
-        if (guideMsgId) {
-          await discordApi(`/channels/${textCh.id}/pins/${guideMsgId}`, 'PUT').catch(() => {})
+      } else {
+        const guideMsg = await discordApi(`/channels/${textCh.id}/messages`, 'POST', {
+          embeds: [guideEmbed],
+        })
+        if (guideMsg?.id) {
+          await discordApi(`/channels/${textCh.id}/pins/${guideMsg.id}`, 'PUT').catch(() => {})
         }
       }
 
       return reply({
         ok: true,
         channel: { id: textCh.id, name: textCh.name, created: createdText },
-        guidePosted: !alreadyGuide,
+        guideUpdated: Boolean(oldGuide?.id),
+        guidePosted: !oldGuide?.id,
       })
     }
 
