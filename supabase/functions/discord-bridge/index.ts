@@ -852,7 +852,7 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     else if (n.includes('belépés') || n.includes('belepes') || n.includes('kilépés')) map.joins = c.id
     else if (n.includes('közlemény') || n.includes('kozlemeny')) map.announcements = c.id
     else if (n.includes('frissítés') || n.includes('frissites')) map.updates = c.id
-    else if (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene')) {
+    else if (!n.includes('parancs') && (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene'))) {
       map.music = c.id
       map.musicName = `#${c.name}`
     }
@@ -1562,6 +1562,96 @@ Deno.serve(async (req: Request) => {
       }
 
       return reply({ ok: true, owner_id: ownerId, created, existing })
+    }
+
+    if (action === 'setup_music_room') {
+      const guildId = getGuild()
+      const chs: any[] = await discordApi(`/guilds/${guildId}/channels`)
+      const publicCat = chs.find((c: any) => c.type === 4 && /társalg|közösség|diák|szórakoz/i.test(String(c.name || '')))
+      const publicAllow = pStr(
+        PERM.VIEW_CHANNEL,
+        PERM.SEND_MESSAGES,
+        PERM.EMBED_LINKS,
+        PERM.ATTACH_FILES,
+        PERM.READ_MESSAGE_HISTORY,
+        PERM.ADD_REACTIONS,
+      )
+      const publicOverwrites = [
+        { id: guildId, type: 0, allow: publicAllow, deny: '0' },
+      ]
+
+      let textCh = chs.find((c: any) => c.type === 0 && String(c.name || '').toLowerCase().includes('zene-parancs'))
+      let createdText = false
+      if (!textCh) {
+        const payload: Record<string, unknown> = {
+          name: '🎶-zene-parancsok',
+          type: 0,
+          topic: '🎶 Zenelejátszó bot parancsok — lépj be egy hangcsatornába, és írd ide a /play, !play vagy /playlist parancsokat!',
+          permission_overwrites: publicOverwrites,
+        }
+        if (publicCat?.id) payload.parent_id = publicCat.id
+        textCh = await discordApi(`/guilds/${guildId}/channels`, 'POST', payload)
+        createdText = true
+      }
+
+      const existingMsgs: any[] = await discordApi(`/channels/${textCh.id}/messages?limit=10`).catch(() => [])
+      const alreadyGuide = existingMsgs.some((m: any) => m.author?.bot && m.embeds?.[0]?.title?.includes('Zenelejátszó Bot'))
+      let guideMsgId: string | undefined
+
+      if (!alreadyGuide) {
+        const guideMsg = await discordApi(`/channels/${textCh.id}/messages`, 'POST', {
+          embeds: [
+            {
+              title: '🎶 SuliBell Zenelejátszó Bot — Használati Útmutató',
+              description:
+                'Ebbe a szobába írd a zenelejátszó parancsokat! Előtte **lépj be bármelyik hangcsatornába** a szerveren, és a bot automatikusan csatlakozik hozzád.\n\n**Támogatott források:** 🔴 YouTube (dal & playlist) • 🟢 Spotify (dal, album, playlist) • 🟠 SoundCloud (dal & set) • 🍎 Apple Music (dal, album, playlist)',
+              color: 0x6366f1,
+              fields: [
+                {
+                  name: '▶️ Lejátszás & Várólista',
+                  value: [
+                    '`/play <dal vagy link>` vagy `!play <dal vagy link>` — Dal vagy teljes playlist elindítása / hozzáadása',
+                    '`/queue` vagy `!queue` — Várólista megtekintése',
+                    '`/np` vagy `!np` — Éppen szóló dal adatai',
+                  ].join('\n'),
+                },
+                {
+                  name: '🎛️ Vezérlés',
+                  value: [
+                    '`/skip` vagy `!skip` — Aktuális dal átugrása',
+                    '`/pause` / `/resume` (`!pause` / `!resume`) — Szüneteltetés / folytatás',
+                    '`/shuffle` vagy `!shuffle` — Várólista megkeverése',
+                    '`/loop off|track|queue` — Ismétlés (ki / egy dal / teljes lista)',
+                    '`/stop` vagy `!stop` — Lejátszás leállítása és várólista törlése',
+                    '`/leave` vagy `!leave` — Bot kiléptetése a hangcsatornából',
+                  ].join('\n'),
+                },
+                {
+                  name: '📂 Saját Mentett Playlistek',
+                  value: [
+                    '`/playlist create <név>` (`!pl create <név>`) — Új playlist létrehozása',
+                    '`/playlist add <név> <dal vagy link>` (`!pl add ...`) — Dal vagy külső playlist mentése',
+                    '`/playlist play <név>` (`!pl play <név>`) — Mentett playlist elindítása',
+                    '`/playlist show <név>` — Playlist tartalma • `/playlist list` — Összes playlist • `/playlist delete <név>` — Törlés',
+                  ].join('\n'),
+                },
+              ],
+              footer: { text: 'SuliBell Zenelejátszó • /help vagy !help bármikor megjeleníti a súgót' },
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        })
+        guideMsgId = guideMsg?.id
+        if (guideMsgId) {
+          await discordApi(`/channels/${textCh.id}/pins/${guideMsgId}`, 'PUT').catch(() => {})
+        }
+      }
+
+      return reply({
+        ok: true,
+        channel: { id: textCh.id, name: textCh.name, created: createdText },
+        guidePosted: !alreadyGuide,
+      })
     }
 
     if (action === 'setup_vip') {
