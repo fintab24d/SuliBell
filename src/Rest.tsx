@@ -45,7 +45,7 @@ function Snake({ tv }: { tv: boolean }) {
   const savePlayerName = (v: string) => {
     setPlayerName(v)
     if (nameErr) {
-      const val = validatePlayerName(v)
+      const val = validatePlayerName(v, true)
       if (val.valid) setNameErr('')
     }
     try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
@@ -57,7 +57,7 @@ function Snake({ tv }: { tv: boolean }) {
   }
 
   const start = () => {
-    const val = validatePlayerName(playerName)
+    const val = validatePlayerName(playerName, true)
     if (!val.valid) {
       setNameErr(val.error || 'A játékhoz add meg a neved!')
       return
@@ -164,7 +164,7 @@ function Snake({ tv }: { tv: boolean }) {
         <div style={{ margin: '8px 0' }}>
           <input
             type="text"
-            placeholder="Becenév / osztály (kötelező!)"
+            placeholder="Osztály + név (pl. 10.A Dani) *"
             value={playerName}
             onChange={e => savePlayerName(e.target.value)}
             maxLength={20}
@@ -224,14 +224,14 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
   const savePlayerName = (v: string) => {
     setPlayerName(v)
     if (nameErr) {
-      const val = validatePlayerName(v)
+      const val = validatePlayerName(v, true)
       if (val.valid) setNameErr('')
     }
     try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
   }
 
   const start = () => {
-    const val = validatePlayerName(playerName)
+    const val = validatePlayerName(playerName, true)
     if (!val.valid) {
       setNameErr(val.error || 'A játékhoz add meg a neved!')
       return
@@ -317,7 +317,7 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
         <div style={{ margin: '8px 0' }}>
           <input
             type="text"
-            placeholder="Becenév / osztály (kötelező!)"
+            placeholder="Osztály + név (pl. 10.A Dani) *"
             value={playerName}
             onChange={e => savePlayerName(e.target.value)}
             maxLength={20}

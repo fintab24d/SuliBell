@@ -365,29 +365,50 @@ export function isAnonymousName(name: string): boolean {
 }
 
 /**
+ * Ellenőrzi, hogy a megadott név tartalmaz-e érvényes osztályjelölést:
+ * szám + A, D, CG, P vagy E (pl. 10.A, 10A, 11.CG, 9/D, 12. P).
+ */
+export function hasValidClassTag(name: string): boolean {
+  if (!name || typeof name !== 'string') return false
+  return /(?:^|[^\d])([1-9]\d?)\s*[./\-\s]?\s*(cg|a|d|p|e)(?=[^\p{L}\d]|$)/iu.test(name.trim())
+}
+
+/**
  * Játékos- és beküldőnév szigorú ellenőrzése:
  * - Nem lehet üres / névtelen
  * - Legalább 2 karakter
  * - Nem tartalmazhat káromkodást / tiltott szót
+ * - Játékoknál (requireClass = true) kötelező az osztály megadása is
  */
-export function validatePlayerName(name: string): { valid: boolean; error?: string; cleanName?: string } {
+export function validatePlayerName(name: string, requireClass = false): { valid: boolean; error?: string; cleanName?: string } {
   const clean = (name || '').trim().slice(0, 22)
   if (!clean) {
     return {
       valid: false,
-      error: 'A név megadása kötelező! Névtelenül nem lehet játszani vagy beküldeni.',
+      error: requireClass
+        ? 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A Dani)!'
+        : 'A név megadása kötelező! Névtelenül nem lehet játszani vagy beküldeni.',
     }
   }
   if (clean.length < 2) {
     return {
       valid: false,
-      error: 'A neved legalább 2 karakter hosszú legyen (pl. Név vagy Osztály)!',
+      error: requireClass
+        ? 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A)!'
+        : 'A neved legalább 2 karakter hosszú legyen (pl. Név vagy Osztály)!',
     }
   }
   if (isAnonymousName(clean)) {
     return {
       valid: false,
-      error: 'A „Névtelen” azonosító nem engedélyezett. Kérjük, add meg a valódi neved vagy osztályodat!',
+      error: 'A „Névtelen” azonosító nem engedélyezett. Kérjük, add meg a valódi neved és osztályodat!',
+    }
+  }
+
+  if (requireClass && !hasValidClassTag(clean)) {
+    return {
+      valid: false,
+      error: 'A játékhoz kötelező az osztály megadása is: szerepeljen benne egy szám, utána A, D, CG, P vagy E (pl. 10.A vagy 11.CG Dani)!',
     }
   }
 

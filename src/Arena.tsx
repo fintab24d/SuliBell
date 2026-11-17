@@ -352,7 +352,7 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
 
   const submitScore = useCallback((name: string, mode: 'reflex' | 'quiz', score: number) => {
     if (score <= 0) return
-    const validation = validatePlayerName(name)
+    const validation = validatePlayerName(name, true)
     if (!validation.valid || !validation.cleanName) return
     const cleanName = validation.cleanName
     const entry: LeaderEntry = {
@@ -584,7 +584,7 @@ export default memo(function Arena({
   const saveName = (v: string) => {
     setName(v)
     if (nameError) {
-      const val = validatePlayerName(v)
+      const val = validatePlayerName(v, true)
       if (val.valid) setNameError('')
     }
     try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
@@ -642,7 +642,7 @@ export default memo(function Arena({
       )
       return
     }
-    const val = validatePlayerName(name)
+    const val = validatePlayerName(name, true)
     if (!val.valid) {
       setNameError(val.error || 'A játékhoz add meg a neved vagy osztályod!')
       nameInputRef.current?.focus()
@@ -712,7 +712,7 @@ export default memo(function Arena({
       )
       return
     }
-    const val = validatePlayerName(name)
+    const val = validatePlayerName(name, true)
     if (!val.valid) {
       setNameError(val.error || 'A kvízhez add meg a neved vagy osztályod!')
       nameInputRef.current?.focus()
@@ -828,8 +828,8 @@ export default memo(function Arena({
                   ref={nameInputRef}
                   type="text"
                   className={`arena-name ${nameError ? 'err' : ''}`}
-                  placeholder="Becenév / osztály (kötelező!)"
-                  maxLength={20}
+                  placeholder="Osztály + név (pl. 10.A Dani) *"
+                  maxLength={22}
                   value={name}
                   onChange={e => saveName(e.target.value)}
                   aria-label="Játékosnév (kötelező)"
@@ -871,9 +871,9 @@ export default memo(function Arena({
                     <div className="arena-over">
                       {rState === 'over' && <h3>🎉 Vége! Pontszámod: {rScore}</h3>}
                       <p>Kapd el a felvillanó ⚡ (+10) és ⭐ (+25) csempéket, de kerüld a 💣 bombát!</p>
-                      {!validatePlayerName(name).valid && (
+                      {!validatePlayerName(name, true).valid && (
                         <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
-                          🔒 Add meg a neved a játék indításához (névtelen játék nem engedélyezett)!
+                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A) a játék indításához!'}
                         </p>
                       )}
                       {reflexLocked ? (
@@ -933,9 +933,9 @@ export default memo(function Arena({
                     <div className="arena-over static">
                       {qState === 'over' && <h3>🎉 Szép munka! Pontszámod: {qScore}</h3>}
                       <p>Mindenki ugyanazt a napi feladatsort kapja! Helyes válasz: <b>+5 mp</b>, hibás válasz: <b>−10 mp</b>.</p>
-                      {!validatePlayerName(name).valid && (
+                      {!validatePlayerName(name, true).valid && (
                         <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
-                          🔒 Add meg a neved a kvíz indításához (névtelen játék nem engedélyezett)!
+                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A) a kvíz indításához!'}
                         </p>
                       )}
                       {quizLocked ? (
