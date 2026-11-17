@@ -5,7 +5,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node --max-http-header-size=131072 index.js"
   },
   "dependencies": {
     "@discordjs/voice": "^0.17.0",

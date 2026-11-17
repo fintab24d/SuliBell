@@ -427,6 +427,51 @@ async function resolveSoundCloud(url, requestedBy) {
   return []
 }
 
+async function searchYoutubeSafe(query) {
+  try {
+    const results = await play.search(query, { limit: 1, source: { youtube: 'video' } })
+    if (results.length) {
+      const top = results[0]
+      return {
+        title: top.title || query,
+        url: top.url,
+        duration: top.durationRaw || '?:??',
+        thumbnail: top.thumbnails?.[0]?.url,
+      }
+    }
+  } catch (err) {
+    console.warn('play.search fallback aktiválva:', err?.message || err)
+  }
+
+  // Fallback: natív fetch-alapú YouTube keresés (nem érinti a node:http header limit)
+  try {
+    const r = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7' },
+    })
+    if (!r.ok) return null
+    const html = await r.text()
+    const m = /"videoId":"([a-zA-Z0-9_-]{11})"/.exec(html)
+    if (!m) return null
+    const ytId = m[1]
+    const url = `https://www.youtube.com/watch?v=${ytId}`
+    let title = query
+    try {
+      const oe = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`).then((x) =>
+        x.ok ? x.json() : null
+      )
+      if (oe?.title) title = oe.title
+    } catch {}
+    return {
+      title,
+      url,
+      duration: '?:??',
+      thumbnail: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`,
+    }
+  } catch {
+    return null
+  }
+}
+
 // --- Általános bemenet feloldó (YouTube, Spotify, SoundCloud, Apple Music, keresés) ---
 async function resolveInput(query, requestedBy) {
   const trimmed = query.trim()
@@ -477,16 +522,15 @@ async function resolveInput(query, requestedBy) {
   }
 
   // 5. Szöveges keresés (YouTube)
-  const results = await play.search(trimmed, { limit: 1, source: { youtube: 'video' } })
-  if (!results.length) return []
-  const top = results[0]
+  const top = await searchYoutubeSafe(trimmed)
+  if (!top) return []
   return [
     {
-      title: top.title || trimmed,
+      title: top.title,
       url: top.url,
-      duration: top.durationRaw || '?:??',
+      duration: top.duration,
       requestedBy,
-      thumbnail: top.thumbnails?.[0]?.url,
+      thumbnail: top.thumbnail,
       source: 'youtube',
     },
   ]
@@ -506,11 +550,11 @@ async function createStreamForTrack(track) {
   let targetUrl = track.url
   if (!targetUrl || track.source === 'spotify' || track.source === 'apple' || track.source === 'soundcloud') {
     const q = track.searchQuery || track.title
-    const found = await play.search(q, { limit: 1, source: { youtube: 'video' } })
-    if (!found.length) throw new Error(`Nem található stream a dalhoz: ${track.title}`)
-    targetUrl = found[0].url
-    if (!track.thumbnail) track.thumbnail = found[0].thumbnails?.[0]?.url
-    if (track.duration === '?:??' && found[0].durationRaw) track.duration = found[0].durationRaw
+    const found = await searchYoutubeSafe(q)
+    if (!found) throw new Error(`Nem található stream a dalhoz: ${track.title}`)
+    targetUrl = found.url
+    if (!track.thumbnail && found.thumbnail) track.thumbnail = found.thumbnail
+    if (track.duration === '?:??' && found.duration) track.duration = found.duration
   }
 
   return play.stream(targetUrl, { discordPlayerCompatibility: true })
