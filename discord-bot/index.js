@@ -655,6 +655,10 @@ async function ensureQueueState(guild, voiceChannel, textChannel) {
       playNext(guild.id, null).catch(() => {})
     })
 
+    connection.on('error', (err) => {
+      console.error('VoiceConnection hiba:', err)
+    })
+
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
         await Promise.race([
@@ -685,7 +689,18 @@ async function ensureQueueState(guild, voiceChannel, textChannel) {
     }
   }
 
-  await entersState(state.connection, VoiceConnectionStatus.Ready, 15_000)
+  try {
+    await entersState(state.connection, VoiceConnectionStatus.Ready, 25_000)
+  } catch (err) {
+    clearIdleTimer(state)
+    try {
+      state.connection?.destroy()
+    } catch {}
+    queues.delete(guild.id)
+    throw new Error(
+      `Nem sikerült csatlakozni a hangcsatornához (${voiceChannel.name}). Ellenőrizd, hogy a botnak van-e Connect/Speak joga ebben a szobában!`
+    )
+  }
   return state
 }
 
