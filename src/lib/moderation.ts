@@ -366,11 +366,21 @@ export function isAnonymousName(name: string): boolean {
 
 /**
  * Ellenőrzi, hogy a megadott név tartalmaz-e érvényes osztályjelölést:
- * szám + A, D, CG, P vagy E (pl. 10.A, 10A, 11.CG, 9/D, 12. P).
+ * szám + egy vagy több osztálybetű az A, D, CG, P, E közül (pl. 10.A, 11.CG, 9.ACDG, 10.A/D).
  */
 export function hasValidClassTag(name: string): boolean {
   if (!name || typeof name !== 'string') return false
-  return /(?:^|[^\d])([1-9]\d?)\s*[./\-\s]?\s*(cg|a|d|p|e)(?=[^\p{L}\d]|$)/iu.test(name.trim())
+  const re = /(?:^|[^\d])([1-9]\d?)\s*[./\-\s]?\s*([acdgpe](?:[\s/+&-]*[acdgpe]){0,5})(?=[^\p{L}\d]|$)/giu
+  let m: RegExpExecArray | null
+  while ((m = re.exec(name.trim())) !== null) {
+    const letters = m[2].replace(/[^a-z]/gi, '').toLowerCase()
+    if (!letters || letters.length > 6) continue
+    const hasC = letters.includes('c')
+    const hasG = letters.includes('g')
+    if (hasC !== hasG) continue
+    return true
+  }
+  return false
 }
 
 /**
@@ -408,7 +418,7 @@ export function validatePlayerName(name: string, requireClass = false): { valid:
   if (requireClass && !hasValidClassTag(clean)) {
     return {
       valid: false,
-      error: 'A játékhoz kötelező az osztály megadása is: szerepeljen benne egy szám, utána A, D, CG, P vagy E (pl. 10.A vagy 11.CG Dani)!',
+      error: 'A játékhoz kötelező az osztály megadása is: szám után A, D, CG, P vagy E (kevert osztály is lehet, pl. 10.A vagy 9.ACDG)!',
     }
   }
 
