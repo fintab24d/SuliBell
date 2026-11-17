@@ -717,11 +717,47 @@ async function runWelcomeAndJoinSetup(map: ChannelMap) {
     }).catch(() => {})
 
     const oldMsgs: any[] = await discordApi(`/channels/${map.welcome}/messages?limit=10`).catch(() => [])
-    const alreadySuliBell = oldMsgs.some(
+    const existingSuliBell = oldMsgs.find(
       m => m.author?.bot && m.embeds?.[0]?.title?.includes('SuliBell')
     )
 
-    if (!alreadySuliBell) {
+    const welcomeEmbed = {
+      title: '🔔 Üdvözlünk a SuliBell hivatalos Discord szerverén!',
+      description:
+        'Üdv a **SuliBell** közösségében! 🚀\nEz a Discord szerver **élőben össze van kötve a SuliBell weboldallal** — az iskolai csengővel, visszaszámlálóval és szüneti zenegéppel!',
+      color: 0x2de2ff,
+      fields: [
+        {
+          name: '⏱️ Mi az a SuliBell?',
+          value:
+            'Másodperc-pontos csengetési visszaszámláló, saját órarend-szűrő, szüneti zene- és videólejátszó, közhangulat-mérő és AI-asszisztens a sulidhoz.',
+        },
+        {
+          name: '🎵 Élő Zenekérés a Szünetekre',
+          value: `Írj be egy zenecímet vagy YouTube-linket a <#${map.music || ''}> szobába, és a **SuliBell Bot** automatikusan felteszi a weboldal szüneti kívánságlistájára! Ha reakciót nyomtok rá itt Discordon, azzal **szavazatot (🔥)** adtok neki az oldalon is!`,
+        },
+        {
+          name: '📢 Órarend-változások, Menza & Közlemények',
+          value: `A <#${map.announcements || ''}> csatornában azonnal megjelenik minden új iskolai közlemény, elmaradó óra, helyettesítés, napi étlap és szavazás.`,
+        },
+        {
+          name: '💡 Ötletek & 🐛 Hibajelentés',
+          value: `Van egy jó ötleted a SuliBellhez, vagy hibát találtál? Írd meg a ${map.ideas ? `<#${map.ideas}>` : '**💡-ötletek-javaslatok**'} vagy ${map.bugs ? `<#${map.bugs}>` : '**🐛-hibajelentés**'} csatornába közvetlenül a fejlesztőknek!`,
+        },
+        {
+          name: '🚪 Belépések és Kilépések',
+          value: `A <#${map.joins || ''}> szobában követheted, ki csatlakozott a SuliBell közösséghez vagy ki lépett ki.`,
+        },
+      ],
+      footer: { text: 'SuliBell • A te iskolád, a te ritmusod! 🔔' },
+      timestamp: new Date().toISOString(),
+    }
+
+    if (existingSuliBell?.id) {
+      await discordApi(`/channels/${map.welcome}/messages/${existingSuliBell.id}`, 'PATCH', {
+        embeds: [welcomeEmbed],
+      })
+    } else {
       for (const om of oldMsgs) {
         if (om.author?.bot) {
           await discordApi(`/channels/${map.welcome}/messages/${om.id}`, 'DELETE').catch(() => {})
@@ -729,39 +765,7 @@ async function runWelcomeAndJoinSetup(map: ChannelMap) {
       }
 
       await discordApi(`/channels/${map.welcome}/messages`, 'POST', {
-        embeds: [
-          {
-            title: '🔔 Üdvözlünk a SuliBell hivatalos Discord szerverén!',
-            description:
-              'Üdv a **SuliBell** közösségében! 🚀\nEz a Discord szerver **élőben össze van kötve a SuliBell weboldallal** — az iskolai csengővel, visszaszámlálóval és szüneti zenegéppel!',
-            color: 0x2de2ff,
-            fields: [
-              {
-                name: '⏱️ Mi az a SuliBell?',
-                value:
-                  'Másodperc-pontos csengetési visszaszámláló, saját órarend-szűrő, szüneti zene- és videólejátszó, közhangulat-mérő és AI-asszisztens a sulidhoz.',
-              },
-              {
-                name: '🎵 Élő Zenekérés a Szünetekre',
-                value: `Írj be egy zenecímet vagy YouTube-linket a <#${map.music || ''}> szobába, és a **SuliBell Bot** automatikusan felteszi a weboldal szüneti kívánságlistájára! Ha reakciót nyomtok rá itt Discordon, azzal **szavazatot (🔥)** adtok neki az oldalon is!`,
-              },
-              {
-                name: '📢 Órarend-változások, Menza & Közlemények',
-                value: `A <#${map.announcements || ''}> csatornában azonnal megjelenik minden új iskolai közlemény, elmaradó óra, helyettesítés, napi étlap és szavazás.`,
-              },
-              {
-                name: '💡 Ötletek & 🐛 Hibajelentés',
-                value: `Van egy jó ötleted a SuliBellhez, vagy hibát találtál? Írd meg az <#${map.ideas || ''}> vagy <#${map.bugs || ''}> csatornába közvetlenül a fejlesztőknek!`,
-              },
-              {
-                name: '🚪 Belépések és Kilépések',
-                value: `A <#${map.joins || ''}> szobában követheted, ki csatlakozott a SuliBell közösséghez vagy ki lépett ki.`,
-              },
-            ],
-            footer: { text: 'SuliBell • A te iskolád, a te ritmusod! 🔔' },
-            timestamp: new Date().toISOString(),
-          },
-        ],
+        embeds: [welcomeEmbed],
       })
     }
   }
