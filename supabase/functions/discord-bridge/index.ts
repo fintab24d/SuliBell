@@ -852,7 +852,7 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     else if (n.includes('belépés') || n.includes('belepes') || n.includes('kilépés')) map.joins = c.id
     else if (n.includes('közlemény') || n.includes('kozlemeny')) map.announcements = c.id
     else if (n.includes('frissítés') || n.includes('frissites')) map.updates = c.id
-    else if (!n.includes('parancs') && (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene'))) {
+    else if (!n.includes('parancs') && !n.includes('tulajdonos') && !n.includes('moderátor') && !n.includes('moderator') && !n.includes('dev') && !n.includes('tanár') && !n.includes('tanar') && (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene'))) {
       map.music = c.id
       map.musicName = `#${c.name}`
     }
@@ -1652,6 +1652,167 @@ Deno.serve(async (req: Request) => {
         guideUpdated: Boolean(oldGuide?.id),
         guidePosted: !oldGuide?.id,
       })
+    }
+
+    if (action === 'setup_private_music_rooms') {
+      const guildId = getGuild()
+      const [guild, chs, roles, me]: [any, any[], any[], any] = await Promise.all([
+        discordApi(`/guilds/${guildId}`),
+        discordApi(`/guilds/${guildId}/channels`),
+        discordApi(`/guilds/${guildId}/roles`),
+        discordApi('/users/@me').catch(() => null),
+      ])
+
+      const ownerId = String(guild?.owner_id || '')
+      const botTextAllow = pStr(
+        PERM.VIEW_CHANNEL,
+        PERM.SEND_MESSAGES,
+        PERM.EMBED_LINKS,
+        PERM.READ_MESSAGE_HISTORY,
+        PERM.ADD_REACTIONS,
+      )
+      const jockieRole = roles.find((r: any) => String(r.name || '').toLowerCase().includes('jockie'))
+
+      const ensureBotOverwrites = (baseOverwrites: any[]) => {
+        const list = baseOverwrites.map((o: any) => ({ ...o }))
+        if (me?.id && !list.some((o: any) => o.id === String(me.id))) {
+          list.push({ id: String(me.id), type: 1, allow: botTextAllow, deny: '0' })
+        }
+        if (jockieRole?.id && !list.some((o: any) => o.id === jockieRole.id)) {
+          list.push({ id: jockieRole.id, type: 0, allow: botTextAllow, deny: '0' })
+        }
+        return list
+      }
+
+      const ownerVoice = chs.find((c: any) => c.type === 2 && String(c.name || '').toLowerCase().includes('tulajdonos'))
+      const modVoice = chs.find((c: any) => c.type === 2 && /moder[aá]tor/i.test(String(c.name || '')))
+      const devVoice = chs.find((c: any) => c.type === 2 && /\bdev\b/i.test(String(c.name || '')))
+      const teacherVoice = chs.find((c: any) => c.type === 2 && /tan[aá]r/i.test(String(c.name || '')))
+
+      const ownerOverwrites = ensureBotOverwrites([
+        { id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) },
+        ...(ownerId ? [{ id: ownerId, type: 1, allow: botTextAllow, deny: '0' }] : []),
+      ])
+
+      const copyVoiceOverwrites = (voiceCh: any, fallbackRoleRegex: RegExp) => {
+        if (voiceCh && Array.isArray(voiceCh.permission_overwrites) && voiceCh.permission_overwrites.length > 0) {
+          const cloned = voiceCh.permission_overwrites.map((o: any) => {
+            if (o.id === guildId) {
+              return { id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) }
+            }
+            return {
+              id: o.id,
+              type: o.type,
+              allow: botTextAllow,
+              deny: '0',
+            }
+          })
+          if (!cloned.some((o: any) => o.id === guildId)) {
+            cloned.unshift({ id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) })
+          }
+          return ensureBotOverwrites(cloned)
+        }
+        const matchedRoles = roles.filter((r: any) => fallbackRoleRegex.test(String(r.name || '')))
+        return ensureBotOverwrites([
+          { id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) },
+          ...matchedRoles.map((r: any) => ({ id: r.id, type: 0, allow: botTextAllow, deny: '0' })),
+        ])
+      }
+
+      const specs = [
+        {
+          key: 'owner_music',
+          name: '👑-tulajdonosi-zene',
+          topic: '👑 Privát Jockie Music zene-parancs szoba a Tulajdonosi hangcsatornához.',
+          parent_id: ownerVoice?.parent_id || undefined,
+          overwrites: ownerOverwrites,
+          voiceLabel: '👑-tulajdonosi-hang',
+        },
+        {
+          key: 'mod_music',
+          name: '🛡️-moderátori-zene',
+          topic: '🛡️ Privát Jockie Music zene-parancs szoba a Moderátori hangcsatornához.',
+          parent_id: modVoice?.parent_id || undefined,
+          overwrites: copyVoiceOverwrites(modVoice, /moder[aá]tor|f[oő]admin|tulajdonos/i),
+          voiceLabel: modVoice?.name || 'Moderátori Szoba',
+        },
+        {
+          key: 'dev_music',
+          name: '💻-dev-zene',
+          topic: '💻 Privát Jockie Music zene-parancs szoba a Dev hangcsatornához.',
+          parent_id: devVoice?.parent_id || undefined,
+          overwrites: copyVoiceOverwrites(devVoice, /dev|fejleszt|tulajdonos/i),
+          voiceLabel: devVoice?.name || 'Dev Meeting',
+        },
+        {
+          key: 'teacher_music',
+          name: '🎓-tanári-zene',
+          topic: '🎓 Privát Jockie Music zene-parancs szoba a Tanári hangcsatornához.',
+          parent_id: teacherVoice?.parent_id || undefined,
+          overwrites: copyVoiceOverwrites(teacherVoice, /tan[aá]r|f[oő]admin|tulajdonos/i),
+          voiceLabel: teacherVoice?.name || 'Tanári Szoba (Hang)',
+        },
+      ]
+
+      const results: Array<{ key: string; id: string; name: string; created: boolean }> = []
+      const normalize = (s: string) => String(s || '').toLowerCase().replace(/^[^\p{L}\p{N}]+/gu, '')
+
+      for (const sp of specs) {
+        let ch = chs.find((c: any) => c.type === 0 && (c.name === sp.name || normalize(c.name) === normalize(sp.name)))
+        let created = false
+        if (!ch) {
+          const payload: Record<string, unknown> = {
+            name: sp.name,
+            type: 0,
+            topic: sp.topic,
+            permission_overwrites: sp.overwrites,
+          }
+          if (sp.parent_id) payload.parent_id = sp.parent_id
+          ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', payload)
+          created = true
+        }
+
+        const msgs: any[] = await discordApi(`/channels/${ch.id}/messages?limit=5`).catch(() => [])
+        const hasGuide = msgs.some((m: any) => m.author?.bot && m.embeds?.[0]?.title?.includes('Jockie Music'))
+        if (!hasGuide) {
+          const guideMsg = await discordApi(`/channels/${ch.id}/messages`, 'POST', {
+            embeds: [
+              {
+                title: `🎶 ${sp.name} (Jockie Music) — Használati Útmutató`,
+                description:
+                  `Privát zene-parancs szoba a **${sp.voiceLabel}** hangcsatornához!\nLépj be a hangcsatornába, majd írd ide a parancsokat.\n\n**Támogatott:** 🟢 Spotify • 🍎 Apple Music • 🟠 SoundCloud • 🔴 YouTube • 🟣 Deezer`,
+                color: 0x6366f1,
+                fields: [
+                  {
+                    name: '▶️ Lejátszás & Várólista',
+                    value: [
+                      '`m!play <dal vagy link>` *(vagy `/play`)* — Dal vagy playlist indítása',
+                      '`m!queue` (`m!q`) — Várólista • `m!np` — Most szól • `m!lyrics` — Dalszöveg',
+                    ].join('\n'),
+                  },
+                  {
+                    name: '🎛️ Vezérlés',
+                    value: [
+                      '`m!skip` (`m!s`) — Átugrás • `m!pause` / `m!resume` — Szünet / folytatás',
+                      '`m!shuffle` — Keverés • `m!loop` — Ismétlés • `m!volume <1-100>` — Hangerő',
+                      '`m!stop` — Leállítás • `m!leave` — Kiléptetés',
+                    ].join('\n'),
+                  },
+                ],
+                footer: { text: 'Jockie Music • Írd be: m!help az összes parancsért' },
+                timestamp: new Date().toISOString(),
+              },
+            ],
+          }).catch(() => null)
+          if (guideMsg?.id) {
+            await discordApi(`/channels/${ch.id}/pins/${guideMsg.id}`, 'PUT').catch(() => {})
+          }
+        }
+
+        results.push({ key: sp.key, id: ch.id, name: ch.name, created })
+      }
+
+      return reply({ ok: true, rooms: results })
     }
 
     if (action === 'setup_vip') {
