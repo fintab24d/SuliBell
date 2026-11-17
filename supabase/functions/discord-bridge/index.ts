@@ -1463,6 +1463,107 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    if (action === 'setup_extra_rooms') {
+      const guildId = getGuild()
+      const [guild, chs, me]: [any, any[], any] = await Promise.all([
+        discordApi(`/guilds/${guildId}`),
+        discordApi(`/guilds/${guildId}/channels`),
+        discordApi('/users/@me').catch(() => null),
+      ])
+
+      const ownerId: string = String(guild?.owner_id || '')
+      if (!ownerId) return reply({ ok: false, error: 'Nem sikerült lekérdezni a szerver tulajdonosát (owner_id).' }, 500)
+
+      const publicCat = chs.find((c: any) => c.type === 4 && /társalg|közösség|diák|szórakoz/i.test(String(c.name || '')))
+      const publicAllow = pStr(
+        PERM.VIEW_CHANNEL,
+        PERM.SEND_MESSAGES,
+        PERM.EMBED_LINKS,
+        PERM.ATTACH_FILES,
+        PERM.READ_MESSAGE_HISTORY,
+        PERM.ADD_REACTIONS,
+      )
+      const publicOverwrites = [
+        { id: guildId, type: 0, allow: publicAllow, deny: '0' },
+      ]
+
+      const privateOverwrites: Array<{ id: string; type: number; allow: string; deny: string }> = [
+        {
+          id: guildId,
+          type: 0,
+          allow: '0',
+          deny: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT, PERM.SPEAK),
+        },
+        {
+          id: ownerId,
+          type: 1,
+          allow: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT, PERM.SPEAK),
+          deny: '0',
+        },
+      ]
+      if (me?.id && String(me.id) !== ownerId) {
+        privateOverwrites.push({
+          id: String(me.id),
+          type: 1,
+          allow: pStr(PERM.VIEW_CHANNEL, PERM.CONNECT),
+          deny: '0',
+        })
+      }
+
+      const desired = [
+        {
+          key: 'gaming',
+          name: '🎮-gaming',
+          type: 0,
+          topic: '🎮 Nyilvános gaming szoba — játékok, csapatkeresés, beszélgetés',
+          parent_id: publicCat?.id || undefined,
+          permission_overwrites: publicOverwrites,
+        },
+        {
+          key: 'meme',
+          name: '😂-mémek',
+          type: 0,
+          topic: '😂 Nyilvános mém szoba — vicces képek, videók és sulis mémek',
+          parent_id: publicCat?.id || undefined,
+          permission_overwrites: publicOverwrites,
+        },
+        {
+          key: 'owner_voice',
+          name: '👑-tulajdonosi-hang',
+          type: 2,
+          parent_id: undefined,
+          permission_overwrites: privateOverwrites,
+        },
+      ]
+
+      const created: Array<{ key: string; id: string; name: string; type: number }> = []
+      const existing: Array<{ key: string; id: string; name: string; type: number }> = []
+
+      const normalizeName = (s: string) => String(s || '').toLowerCase().replace(/^[^\p{L}\p{N}]+/gu, '')
+
+      for (const spec of desired) {
+        const found = chs.find((c: any) =>
+          c.type === spec.type &&
+          (c.name === spec.name || normalizeName(c.name) === normalizeName(spec.name))
+        )
+        if (found) {
+          existing.push({ key: spec.key, id: found.id, name: found.name, type: found.type })
+          continue
+        }
+        const payload: Record<string, unknown> = {
+          name: spec.name,
+          type: spec.type,
+          permission_overwrites: spec.permission_overwrites,
+        }
+        if (spec.topic) payload.topic = spec.topic
+        if (spec.parent_id) payload.parent_id = spec.parent_id
+        const ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', payload)
+        created.push({ key: spec.key, id: ch.id, name: ch.name, type: ch.type })
+      }
+
+      return reply({ ok: true, owner_id: ownerId, created, existing })
+    }
+
     if (action === 'setup_vip') {
       await runVipSetup(chMap)
       chMap = await ensureIntentAndChannels(true)
