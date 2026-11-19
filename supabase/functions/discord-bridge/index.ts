@@ -1703,17 +1703,33 @@ Deno.serve(async (req: Request) => {
         PERM.READ_MESSAGE_HISTORY,
         PERM.ADD_REACTIONS,
       )
+      const denyView = pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES)
       const jockieRole = roles.find((r: any) => String(r.name || '').toLowerCase().includes('jockie'))
+      const studentRole = roles.find((r: any) => {
+        const rn = String(r.name || '').toLowerCase()
+        return rn.includes('diák') || rn.includes('diak')
+      })
 
-      const ensureBotOverwrites = (baseOverwrites: any[]) => {
-        const list = baseOverwrites.map((o: any) => ({ ...o }))
-        if (me?.id && !list.some((o: any) => o.id === String(me.id))) {
-          list.push({ id: String(me.id), type: 1, allow: botTextAllow, deny: '0' })
+      const ensureStrictOverwrites = (allowedEntries: Array<{ id: string; type: number }>) => {
+        const map = new Map<string, { id: string; type: number; allow: string; deny: string }>()
+        map.set(guildId, { id: guildId, type: 0, allow: '0', deny: denyView })
+        if (studentRole?.id) {
+          map.set(studentRole.id, { id: studentRole.id, type: 0, allow: '0', deny: denyView })
         }
-        if (jockieRole?.id && !list.some((o: any) => o.id === jockieRole.id)) {
-          list.push({ id: jockieRole.id, type: 0, allow: botTextAllow, deny: '0' })
+        for (const a of allowedEntries) {
+          if (!a.id || a.id === guildId || a.id === studentRole?.id) continue
+          map.set(a.id, { id: a.id, type: a.type, allow: botTextAllow, deny: '0' })
         }
-        return list
+        if (ownerId) {
+          map.set(ownerId, { id: ownerId, type: 1, allow: botTextAllow, deny: '0' })
+        }
+        if (me?.id) {
+          map.set(String(me.id), { id: String(me.id), type: 1, allow: botTextAllow, deny: '0' })
+        }
+        if (jockieRole?.id) {
+          map.set(jockieRole.id, { id: jockieRole.id, type: 0, allow: botTextAllow, deny: '0' })
+        }
+        return Array.from(map.values())
       }
 
       const ownerVoice = chs.find((c: any) => c.type === 2 && String(c.name || '').toLowerCase().includes('tulajdonos'))
@@ -1721,35 +1737,15 @@ Deno.serve(async (req: Request) => {
       const devVoice = chs.find((c: any) => c.type === 2 && /\bdev\b/i.test(String(c.name || '')))
       const teacherVoice = chs.find((c: any) => c.type === 2 && /tan[aá]r/i.test(String(c.name || '')))
 
-      const ownerOverwrites = ensureBotOverwrites([
-        { id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) },
-        ...(ownerId ? [{ id: ownerId, type: 1, allow: botTextAllow, deny: '0' }] : []),
-      ])
+      const roleIdsMatching = (rx: RegExp) =>
+        roles
+          .filter((r: any) => rx.test(String(r.name || '')))
+          .map((r: any) => ({ id: String(r.id), type: 0 }))
 
-      const copyVoiceOverwrites = (voiceCh: any, fallbackRoleRegex: RegExp) => {
-        if (voiceCh && Array.isArray(voiceCh.permission_overwrites) && voiceCh.permission_overwrites.length > 0) {
-          const cloned = voiceCh.permission_overwrites.map((o: any) => {
-            if (o.id === guildId) {
-              return { id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) }
-            }
-            return {
-              id: o.id,
-              type: o.type,
-              allow: botTextAllow,
-              deny: '0',
-            }
-          })
-          if (!cloned.some((o: any) => o.id === guildId)) {
-            cloned.unshift({ id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) })
-          }
-          return ensureBotOverwrites(cloned)
-        }
-        const matchedRoles = roles.filter((r: any) => fallbackRoleRegex.test(String(r.name || '')))
-        return ensureBotOverwrites([
-          { id: guildId, type: 0, allow: '0', deny: pStr(PERM.VIEW_CHANNEL, PERM.SEND_MESSAGES) },
-          ...matchedRoles.map((r: any) => ({ id: r.id, type: 0, allow: botTextAllow, deny: '0' })),
-        ])
-      }
+      const ownerOverwrites = ensureStrictOverwrites(roleIdsMatching(/tulajdonos|owner/i))
+      const modOverwrites = ensureStrictOverwrites(roleIdsMatching(/moder[aá]tor|f[oő]admin|tulajdonos/i))
+      const devOverwrites = ensureStrictOverwrites(roleIdsMatching(/dev|fejleszt|tulajdonos/i))
+      const teacherOverwrites = ensureStrictOverwrites(roleIdsMatching(/tan[aá]r|tulajdonos/i))
 
       const specs = [
         {
@@ -1765,7 +1761,7 @@ Deno.serve(async (req: Request) => {
           name: '🛡️-moderátori-zene',
           topic: '🛡️ Privát Jockie Music zene-parancs szoba a Moderátori hangcsatornához.',
           parent_id: modVoice?.parent_id || undefined,
-          overwrites: copyVoiceOverwrites(modVoice, /moder[aá]tor|f[oő]admin|tulajdonos/i),
+          overwrites: modOverwrites,
           voiceLabel: modVoice?.name || 'Moderátori Szoba',
         },
         {
@@ -1773,7 +1769,7 @@ Deno.serve(async (req: Request) => {
           name: '💻-dev-zene',
           topic: '💻 Privát Jockie Music zene-parancs szoba a Dev hangcsatornához.',
           parent_id: devVoice?.parent_id || undefined,
-          overwrites: copyVoiceOverwrites(devVoice, /dev|fejleszt|tulajdonos/i),
+          overwrites: devOverwrites,
           voiceLabel: devVoice?.name || 'Dev Meeting',
         },
         {
@@ -1781,17 +1777,19 @@ Deno.serve(async (req: Request) => {
           name: '🎓-tanári-zene',
           topic: '🎓 Privát Jockie Music zene-parancs szoba a Tanári hangcsatornához.',
           parent_id: teacherVoice?.parent_id || undefined,
-          overwrites: copyVoiceOverwrites(teacherVoice, /tan[aá]r|f[oő]admin|tulajdonos/i),
+          overwrites: teacherOverwrites,
           voiceLabel: teacherVoice?.name || 'Tanári Szoba (Hang)',
         },
       ]
 
-      const results: Array<{ key: string; id: string; name: string; created: boolean }> = []
+      const roleNameById = new Map<string, string>(roles.map((r: any) => [String(r.id), String(r.name || r.id)]))
+      const results: Array<{ key: string; id: string; name: string; created: boolean; updatedPerms: boolean; allowed: string[]; denied: string[] }> = []
       const normalize = (s: string) => String(s || '').toLowerCase().replace(/^[^\p{L}\p{N}]+/gu, '')
 
       for (const sp of specs) {
         let ch = chs.find((c: any) => c.type === 0 && (c.name === sp.name || normalize(c.name) === normalize(sp.name)))
         let created = false
+        let updatedPerms = false
         if (!ch) {
           const payload: Record<string, unknown> = {
             name: sp.name,
@@ -1802,6 +1800,11 @@ Deno.serve(async (req: Request) => {
           if (sp.parent_id) payload.parent_id = sp.parent_id
           ch = await discordApi(`/guilds/${guildId}/channels`, 'POST', payload)
           created = true
+        } else {
+          await discordApi(`/channels/${ch.id}`, 'PATCH', {
+            permission_overwrites: sp.overwrites,
+          })
+          updatedPerms = true
         }
 
         const msgs: any[] = await discordApi(`/channels/${ch.id}/messages?limit=5`).catch(() => [])
@@ -1841,7 +1844,15 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        results.push({ key: sp.key, id: ch.id, name: ch.name, created })
+        results.push({
+          key: sp.key,
+          id: ch.id,
+          name: ch.name,
+          created,
+          updatedPerms,
+          allowed: sp.overwrites.filter((o: any) => o.allow !== '0').map((o: any) => o.type === 1 ? `user:${o.id}` : (roleNameById.get(o.id) || o.id)),
+          denied: sp.overwrites.filter((o: any) => o.deny !== '0').map((o: any) => o.type === 1 ? `user:${o.id}` : (roleNameById.get(o.id) || o.id)),
+        })
       }
 
       return reply({ ok: true, rooms: results })
