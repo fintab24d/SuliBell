@@ -1954,6 +1954,39 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    if (action === 'lock_soundboard_upload') {
+      const guildId = getGuild()
+      const roles: any[] = await discordApi(`/guilds/${guildId}/roles`)
+      const CREATE_GUILD_EXPRESSIONS = 1n << 43n
+      const MANAGE_GUILD_EXPRESSIONS = 1n << 30n
+      const EXPR_MASK = CREATE_GUILD_EXPRESSIONS | MANAGE_GUILD_EXPRESSIONS
+
+      const updated: Array<{ id: string; name: string; allowed: boolean; status: string }> = []
+
+      for (const r of roles) {
+        if (r.managed) continue
+        const rn = String(r.name || '')
+        const allowUpload = /tulajdonos|owner|dev|fejleszt|moder[aá]tor/i.test(rn)
+        const curPerm = BigInt(r.permissions || '0')
+        const nextPerm = allowUpload ? (curPerm | EXPR_MASK) : (curPerm & ~EXPR_MASK)
+
+        if (nextPerm === curPerm) {
+          updated.push({ id: r.id, name: rn, allowed: allowUpload, status: 'unchanged' })
+          continue
+        }
+        try {
+          await discordApi(`/guilds/${guildId}/roles/${r.id}`, 'PATCH', {
+            permissions: nextPerm.toString(),
+          })
+          updated.push({ id: r.id, name: rn, allowed: allowUpload, status: 'updated' })
+        } catch (err: any) {
+          updated.push({ id: r.id, name: rn, allowed: allowUpload, status: `error: ${err?.message || 'failed'}` })
+        }
+      }
+
+      return reply({ ok: true, roles: updated })
+    }
+
     if (action === 'setup_vip') {
       await runVipSetup(chMap)
       chMap = await ensureIntentAndChannels(true)
