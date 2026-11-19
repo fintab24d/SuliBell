@@ -34,6 +34,7 @@ interface ChannelMap {
   logs?: string
   deployGit?: string
   studentRoleId?: string
+  botRoleId?: string
   vipCat?: string
   vipInfo?: string
   vipChat?: string
@@ -822,6 +823,9 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     if (rn.includes('diák') || rn.includes('diak')) {
       map.studentRoleId = r.id
     }
+    if (rn === 'bot' || rn === '🤖 bot' || rn === 'botok') {
+      map.botRoleId = r.id
+    }
     if (rn.includes('vip') || rn.includes('támogató') || rn.includes('tamogato')) {
       map.vipRoleId = r.id
     }
@@ -845,6 +849,10 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     }
     if (c.type === 15 && (n.includes('ötlet') || n.includes('otlet'))) {
       map.ideas = c.id
+      continue
+    }
+    if (c.type === 15 && n.includes('hiba')) {
+      map.bugs = c.id
       continue
     }
     if (c.type !== 0) continue
@@ -929,11 +937,16 @@ async function checkMemberJoinsAndLeaves(chMap: ChannelMap) {
     for (const [uid, info] of Object.entries(currentMap)) {
       if (!prevMap[uid]) {
         changed = true
-        if (chMap.studentRoleId) {
+        const memberObj = members.find((x: any) => x.user?.id === uid)
+        const isBotUser = Boolean(memberObj?.user?.bot)
+        if (isBotUser) {
+          if (chMap.botRoleId) {
+            discordApi(`/guilds/${guildId}/members/${uid}/roles/${chMap.botRoleId}`, 'PUT').catch(() => {})
+          }
+        } else if (chMap.studentRoleId) {
           discordApi(`/guilds/${guildId}/members/${uid}/roles/${chMap.studentRoleId}`, 'PUT').catch(() => {})
         }
         if (chMap.vipRoleId) {
-          const memberObj = members.find((x: any) => x.user?.id === uid)
           const uName = String(memberObj?.user?.username || '').toLowerCase()
           const gName = String(memberObj?.user?.global_name || '').toLowerCase()
           const dName = String(info.name || '').toLowerCase()
@@ -1817,6 +1830,102 @@ Deno.serve(async (req: Request) => {
       }
 
       return reply({ ok: true, rooms: results })
+    }
+
+    if (action === 'setup_bot_role_and_bug_forum') {
+      const guildId = getGuild()
+      const [chs, roles, members]: [any[], any[], any[]] = await Promise.all([
+        discordApi(`/guilds/${guildId}/channels`),
+        discordApi(`/guilds/${guildId}/roles`),
+        discordApi(`/guilds/${guildId}/members?limit=1000`),
+      ])
+
+      // 1. "🤖 Bot" rang létrehozása / keresése és kiosztása a botoknak Diák rang helyett
+      let botRole = roles.find((r: any) => {
+        const rn = String(r.name || '').toLowerCase()
+        return rn === 'bot' || rn === '🤖 bot' || rn === 'botok'
+      })
+      let botRoleCreated = false
+      if (!botRole) {
+        botRole = await discordApi(`/guilds/${guildId}/roles`, 'POST', {
+          name: '🤖 Bot',
+          color: 0x5865f2,
+          hoist: true,
+          mentionable: false,
+        })
+        botRoleCreated = true
+      }
+
+      const studentRole = roles.find((r: any) => {
+        const rn = String(r.name || '').toLowerCase()
+        return rn.includes('diák') || rn.includes('diak')
+      })
+
+      const updatedBots: Array<{ id: string; username: string; addedBotRole: boolean; removedStudentRole: boolean }> = []
+      for (const m of members) {
+        if (!m.user?.bot) continue
+        const uid = m.user.id
+        const memberRoles: string[] = Array.isArray(m.roles) ? m.roles : []
+        let addedBotRole = false
+        let removedStudentRole = false
+
+        if (botRole?.id && !memberRoles.includes(botRole.id)) {
+          await discordApi(`/guilds/${guildId}/members/${uid}/roles/${botRole.id}`, 'PUT').catch(() => {})
+          addedBotRole = true
+        }
+        if (studentRole?.id && memberRoles.includes(studentRole.id)) {
+          await discordApi(`/guilds/${guildId}/members/${uid}/roles/${studentRole.id}`, 'DELETE').catch(() => {})
+          removedStudentRole = true
+        }
+        updatedBots.push({ id: uid, username: m.user.username, addedBotRole, removedStudentRole })
+      }
+
+      // 2. Hibajelentés csatorna átalakítása Forum (type: 15) csatornává
+      let bugForum = chs.find((c: any) => c.type === 15 && String(c.name || '').toLowerCase().includes('hiba'))
+      const oldBugText = chs.find((c: any) => c.type === 0 && String(c.name || '').toLowerCase().includes('hiba'))
+      const ideasForum = chs.find((c: any) => c.type === 15 && (String(c.name || '').toLowerCase().includes('ötlet') || String(c.name || '').toLowerCase().includes('otlet')))
+      const communityCat = chs.find((c: any) => c.type === 4 && /diák|közösség|kozosseg/i.test(String(c.name || '')))
+
+      let bugForumCreated = false
+      let deletedOldTextId: string | undefined
+
+      if (!bugForum) {
+        const parentId = oldBugText?.parent_id || ideasForum?.parent_id || communityCat?.id || undefined
+        const payload: Record<string, unknown> = {
+          name: '🐛-hibajelentés',
+          type: 15,
+          topic: '🐛 Találtál egy hibát a SuliBellben? Nyiss itt egy új bejegyzést a leírással, és ha tudsz, csatolj képernyőképet is!',
+          default_auto_archive_duration: 4320,
+          available_tags: [
+            { name: '🐞 Bug', moderated: false },
+            { name: '📱 Mobil', moderated: false },
+            { name: '💻 Asztali', moderated: false },
+            { name: '✅ Javítva', moderated: true },
+          ],
+        }
+        if (parentId) payload.parent_id = parentId
+        if (oldBugText?.permission_overwrites) {
+          payload.permission_overwrites = oldBugText.permission_overwrites
+        }
+        bugForum = await discordApi(`/guilds/${guildId}/channels`, 'POST', payload)
+        bugForumCreated = true
+
+        if (oldBugText?.id) {
+          await discordApi(`/channels/${oldBugText.id}`, 'DELETE').catch(() => {})
+          deletedOldTextId = oldBugText.id
+        }
+      }
+
+      // Frissítsük az üdvözlő csatornát és a cache-t
+      chMap = await ensureIntentAndChannels(true)
+      await runWelcomeAndJoinSetup(chMap)
+
+      return reply({
+        ok: true,
+        botRole: { id: botRole?.id, name: botRole?.name, created: botRoleCreated },
+        updatedBots,
+        bugForum: { id: bugForum?.id, name: bugForum?.name, created: bugForumCreated, deletedOldTextId },
+      })
     }
 
     if (action === 'setup_vip') {

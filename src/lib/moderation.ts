@@ -174,6 +174,7 @@ const SAFE_WHITELIST = new Set([
   'passz', 'passzol', 'klassz',
   'szerkeszt', 'szerkesztes',
   'asszisztens', 'asszociacio',
+  'bazsi', 'bazsit', 'bazsival', 'bazsinak', 'bazsie', 'bazsika', 'bazsikat', 'bazsikanak',
 ])
 
 /**
@@ -225,14 +226,16 @@ export function checkProfanity(input: string): { clean: boolean; matchedWord?: s
   // Admin által megadott egyéni tiltott szavak ellenőrzése (Discord AutoMod stílusban)
   const customWords = getCustomBannedWords()
   if (customWords.length > 0) {
-    const compactNorm = normalized.replace(/\s+/g, '')
+    const nonSafeWords = words.filter(w => !SAFE_WHITELIST.has(w))
+    const filteredNorm = nonSafeWords.join(' ')
+    const compactNorm = nonSafeWords.join('')
     for (const rawCustom of customWords) {
       const cleanCustom = normalizeText(rawCustom.replace(/\*/g, ''))
       if (!cleanCustom || cleanCustom.length < 2) continue
 
       // Többszavas kifejezés
       if (cleanCustom.includes(' ')) {
-        if (normalized.includes(cleanCustom)) {
+        if (filteredNorm.includes(cleanCustom)) {
           return { clean: false, matchedWord: rawCustom }
         }
         continue
@@ -240,11 +243,11 @@ export function checkProfanity(input: string): { clean: boolean; matchedWord?: s
 
       // Csillagos minta (pl. *szó*) vagy részszó keresés
       const hasWildcard = rawCustom.includes('*')
-      if (hasWildcard && (normalized.includes(cleanCustom) || compactNorm.includes(cleanCustom))) {
+      if (hasWildcard && (filteredNorm.includes(cleanCustom) || compactNorm.includes(cleanCustom))) {
         return { clean: false, matchedWord: rawCustom }
       }
 
-      for (const w of words) {
+      for (const w of nonSafeWords) {
         if (
           w === cleanCustom ||
           w.startsWith(cleanCustom) ||

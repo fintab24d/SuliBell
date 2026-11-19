@@ -536,7 +536,7 @@ export default memo(function Arena({
   const [breakPlays, setBreakPlays] = useState<Record<string, number>>(() => loadBreakPlays(day))
   const [qBaseIdx, setQBaseIdx] = useState(() => loadQuizOffset(day))
 
-  const isBreak = phase === 'break'
+  const isBreak = phase === 'break' && (breakTotalSec ?? 0) <= 3600
   const currentBreakId = isBreak && breakKey ? breakKey : ''
   const breakMins = Math.round((breakTotalSec ?? 600) / 60)
   const isLongBreak = (breakTotalSec ?? 0) > 600
@@ -882,9 +882,13 @@ export default memo(function Arena({
                             ? `⏸️ Ebben a ${breakMins} perces szünetben már lejátszottad mind a(z) ${maxPlaysPerBreak} engedélyezett Reflex kört! A következő szünetben újra játszhatsz.`
                             : '⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!'}
                         </p>
-                      ) : isLongBreak && reflexLeft !== null && (
+                      ) : isLongBreak && reflexLeft !== null ? (
                         <p style={{ color: '#4ade80', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
                           ⏱️ Hosszú szünet ({breakMins} perc): ebben a szünetben még {reflexLeft} / {maxPlaysPerBreak} Reflex kör indítható!
+                        </p>
+                      ) : !isBreak && phase !== 'lesson' && (
+                        <p style={{ color: '#4ade80', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
+                          🎉 Tanítási szüneten kívül (pl. téli szünet, hétvége): korlátlan a játék!
                         </p>
                       )}
                       <button type="button" className="cta" onClick={startReflex} disabled={reflexLocked}>
@@ -944,9 +948,13 @@ export default memo(function Arena({
                             ? `⏸️ Ebben a ${breakMins} perces szünetben már lejátszottad mind a(z) ${maxPlaysPerBreak} engedélyezett Kvíz kört! A következő szünetben újra játszhatsz.`
                             : '⏸️ Ebben a szünetben már játszottál! Szünetenként 1 játék engedélyezett, a következő szünetben újra játszhatsz!'}
                         </p>
-                      ) : isLongBreak && quizLeft !== null && (
+                      ) : isLongBreak && quizLeft !== null ? (
                         <p style={{ color: '#4ade80', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
                           ⏱️ Hosszú szünet ({breakMins} perc): ebben a szünetben még {quizLeft} / {maxPlaysPerBreak} Kvíz kör indítható (új kérdésekkel)!
+                        </p>
+                      ) : !isBreak && phase !== 'lesson' && (
+                        <p style={{ color: '#4ade80', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
+                          🎉 Tanítási szüneten kívül (pl. téli szünet, hétvége): korlátlan a játék!
                         </p>
                       )}
                       <button type="button" className="cta" onClick={startQuiz} disabled={quizLocked}>
