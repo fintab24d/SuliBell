@@ -1425,6 +1425,14 @@ async function checkMediaExplicit(params: {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
+  // Gyors, ezredmásodperces szerveridő végpont az összes kliens (PC, TV, telefon) pontos szinkronjához
+  if (req.method === 'GET') {
+    return new Response(JSON.stringify({ ok: true, now: Date.now() }), {
+      status: 200,
+      headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    })
+  }
+
   try {
     let body: any = {}
     if (req.method === 'POST') {
@@ -1448,6 +1456,13 @@ Deno.serve(async (req: Request) => {
       body = { action: 'kofi_webhook', kofi: body }
     }
     const action = body.action || 'sync'
+
+    if (action === 'time') {
+      return new Response(JSON.stringify({ ok: true, now: Date.now() }), {
+        status: 200,
+        headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      })
+    }
 
     if (action === 'check_media') {
       const result = await checkMediaExplicit({

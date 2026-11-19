@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
+import { serverNowMs } from './serverTime'
 
 export const MAINT_PREFIX = '__MAINT__:'
 export const MAINT_PREP_MS = 10_000
@@ -181,7 +182,7 @@ export function useMaintenance(
   }, [schoolId, apply])
 
   const updateMaint = useCallback(async (patch: Partial<MaintState> & { forceReload?: boolean; immediate?: boolean }) => {
-    const now = Date.now()
+    const now = serverNowMs()
     const main = patch.main !== undefined ? patch.main : maint.main
     const tv = patch.tv !== undefined ? patch.tv : maint.tv
     const finished = (maint.main && !main) || (maint.tv && !tv)

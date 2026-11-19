@@ -369,13 +369,16 @@ export function isAnonymousName(name: string): boolean {
 
 /**
  * Ellenőrzi, hogy a megadott név tartalmaz-e érvényes osztályjelölést:
- * szám + egy vagy több osztálybetű az A, D, CG, P, E közül (pl. 10.A, 11.CG, 9.ACDG, 10.A/D).
+ * csak 9, 10, 11, 12 vagy 13 évfolyam + egy vagy több osztálybetű az A, D, CG, P, E közül
+ * (pl. 10.A, 11.CG, 9.ACDG, 13.P, 10.A/D).
  */
 export function hasValidClassTag(name: string): boolean {
   if (!name || typeof name !== 'string') return false
   const re = /(?:^|[^\d])([1-9]\d?)\s*[./\-\s]?\s*([acdgpe](?:[\s/+&-]*[acdgpe]){0,5})(?=[^\p{L}\d]|$)/giu
   let m: RegExpExecArray | null
   while ((m = re.exec(name.trim())) !== null) {
+    const grade = Number(m[1])
+    if (grade < 9 || grade > 13) continue
     const letters = m[2].replace(/[^a-z]/gi, '').toLowerCase()
     if (!letters || letters.length > 6) continue
     const hasC = letters.includes('c')
@@ -391,7 +394,7 @@ export function hasValidClassTag(name: string): boolean {
  * - Nem lehet üres / névtelen
  * - Legalább 2 karakter
  * - Nem tartalmazhat káromkodást / tiltott szót
- * - Játékoknál (requireClass = true) kötelező az osztály megadása is
+ * - Játékoknál (requireClass = true) kötelező az osztály megadása is (9–13 + A/D/CG/P/E)
  */
 export function validatePlayerName(name: string, requireClass = false): { valid: boolean; error?: string; cleanName?: string } {
   const clean = (name || '').trim().slice(0, 22)
@@ -399,7 +402,7 @@ export function validatePlayerName(name: string, requireClass = false): { valid:
     return {
       valid: false,
       error: requireClass
-        ? 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A Dani)!'
+        ? 'Add meg az osztályod (9–13 + A, D, CG, P vagy E, pl. 10.A Dani)!'
         : 'A név megadása kötelező! Névtelenül nem lehet játszani vagy beküldeni.',
     }
   }
@@ -407,7 +410,7 @@ export function validatePlayerName(name: string, requireClass = false): { valid:
     return {
       valid: false,
       error: requireClass
-        ? 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A)!'
+        ? 'Add meg az osztályod (9–13 + A, D, CG, P vagy E, pl. 10.A)!'
         : 'A neved legalább 2 karakter hosszú legyen (pl. Név vagy Osztály)!',
     }
   }
@@ -421,7 +424,7 @@ export function validatePlayerName(name: string, requireClass = false): { valid:
   if (requireClass && !hasValidClassTag(clean)) {
     return {
       valid: false,
-      error: 'A játékhoz kötelező az osztály megadása is: szám után A, D, CG, P vagy E (kevert osztály is lehet, pl. 10.A vagy 9.ACDG)!',
+      error: 'Csak 9, 10, 11, 12 vagy 13. osztály adható meg (utána A, D, CG, P vagy E — keverten is, pl. 10.A vagy 9.ACDG)!',
     }
   }
 

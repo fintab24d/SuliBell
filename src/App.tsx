@@ -20,6 +20,7 @@ import { isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements } from './
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
+import { serverNowMs, startServerTimeSync, subscribeServerTime } from './lib/serverTime'
 import { KIND } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
 import { computeState, fmtCount, fmtHM, addDays, instantOf, isLessonCancelled, nextSchoolDay, scheduleFor, schoolDaysBetween, toSec, zoned, type BellState, type Lesson } from './lib/engine'
@@ -56,11 +57,12 @@ function Digits({ text }: { text: string }) {
 /** 4×/mp-es ellenőrzéssel újraszámolja az állapotot a beállított időzóna (Europe/Budapest) szerint, figyelembe véve az elmaradó órákat is. */
 function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => MyLessonEntry | undefined, sb?: SandboxConfig | null, potato?: boolean) {
   const { data, offline } = useSchool()
-  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
+  const [nowSec, setNowSec] = useState(() => Math.floor(serverNowMs() / 1000))
   useEffect(() => {
-    let lastSec = Math.floor(Date.now() / 1000)
+    startServerTimeSync()
+    let lastSec = Math.floor(serverNowMs() / 1000)
     const syncNow = () => {
-      const s = Math.floor(Date.now() / 1000)
+      const s = Math.floor(serverNowMs() / 1000)
       if (s !== lastSec) {
         lastSec = s
         setNowSec(s)
@@ -69,6 +71,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     const onWake = () => {
       if (!document.hidden) syncNow()
     }
+    const unsubTime = subscribeServerTime(syncNow)
     const t = window.setInterval(syncNow, potato ? 1000 : 250)
     document.addEventListener('visibilitychange', onWake)
     document.addEventListener('resume', onWake)
@@ -76,6 +79,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     window.addEventListener('pageshow', onWake)
     return () => {
       clearInterval(t)
+      unsubTime()
       document.removeEventListener('visibilitychange', onWake)
       document.removeEventListener('resume', onWake)
       window.removeEventListener('focus', onWake)
@@ -633,7 +637,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   } else {
     const startsKey = typeof rawStartsAt === 'number' && rawStartsAt > 0 ? rawStartsAt : 0
     if (!maintSeenRef.current.on || maintSeenRef.current.startsAt !== startsKey) {
-      const nowMs = Date.now()
+      const nowMs = serverNowMs()
       let deadline = 0
       try {
         const saved = JSON.parse(localStorage.getItem(maintDlKey) ?? 'null')
@@ -648,7 +652,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       maintSeenRef.current = { on: true, startsAt: startsKey, deadline }
     }
   }
-  const prepLeftSec = maintTargetOn ? Math.max(0, Math.ceil((maintSeenRef.current.deadline - Date.now()) / 1000)) : 0
+  const prepLeftSec = maintTargetOn ? Math.max(0, Math.ceil((maintSeenRef.current.deadline - serverNowMs()) / 1000)) : 0
   const isPrepCountdown = maintTargetOn && prepLeftSec > 0
   const isUpdating = maintTargetOn && prepLeftSec <= 0
   const maintPrepBanner = isPrepCountdown && (

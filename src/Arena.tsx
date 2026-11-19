@@ -873,7 +873,7 @@ export default memo(function Arena({
                       <p>Kapd el a felvillanó ⚡ (+10) és ⭐ (+25) csempéket, de kerüld a 💣 bombát!</p>
                       {!validatePlayerName(name, true).valid && (
                         <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
-                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A) a játék indításához!'}
+                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (9–13 + A, D, CG, P vagy E, pl. 10.A) a játék indításához!'}
                         </p>
                       )}
                       {reflexLocked ? (
@@ -939,7 +939,7 @@ export default memo(function Arena({
                       <p>Mindenki ugyanazt a napi feladatsort kapja! Helyes válasz: <b>+5 mp</b>, hibás válasz: <b>−10 mp</b>.</p>
                       {!validatePlayerName(name, true).valid && (
                         <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
-                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (szám + A, D, CG, P vagy E, pl. 10.A) a kvíz indításához!'}
+                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (9–13 + A, D, CG, P vagy E, pl. 10.A) a kvíz indításához!'}
                         </p>
                       )}
                       {quizLocked ? (

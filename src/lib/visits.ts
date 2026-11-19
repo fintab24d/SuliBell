@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
+import { serverNowMs } from './serverTime'
 
 export interface VisitStatRow {
   day: string
@@ -15,7 +16,7 @@ export interface OnlineCounts {
 }
 
 function budapestDay(): string {
-  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' })
+  return new Date(serverNowMs()).toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' })
 }
 
 function normalizePath(p: string): string {
