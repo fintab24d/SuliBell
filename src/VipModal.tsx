@@ -204,6 +204,11 @@ export function VipModal({
                 <p className="vip-intro">
                   Támogasd a SuliBell működését Ko-fi-n, és a kapott VIP kóddal oldj fel <b>extra színtémákat</b>,{' '}
                   <b>„Utolsó 1 perc” pulzáló fényeffektet</b> és <b>egyedi csengőhangokat</b>!
+                  <br />
+                  <small style={{ display: 'inline-block', marginTop: 6 }}>
+                    💡 A Ko-fi üzenetbe írd bele a <b>Discord nevedet</b> és az <b>osztályodat</b> (pl.{' '}
+                    <code>@nev 11.B</code>), így a SuliBell bot automatikusan elküldi a VIP kódodat Discord privát üzenetben, és felkerülsz a Támogatók falára!
+                  </small>
                 </p>
                 <a
                   href={kofiUrl}

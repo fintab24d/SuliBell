@@ -69,8 +69,128 @@ interface KofiDonorEntry {
   discord?: string
   discord_user_id?: string
   vip_granted?: boolean
+  vip_code_sent?: boolean
   message?: string
   date: string
+}
+
+const VIP_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+function generateVipCode(): string {
+  const bytes = new Uint8Array(8)
+  crypto.getRandomValues(bytes)
+  let raw = ''
+  for (let i = 0; i < 8; i++) {
+    raw += VIP_CODE_ALPHABET[bytes[i] % VIP_CODE_ALPHABET.length]
+  }
+  return `SULI-${raw.slice(0, 4)}-${raw.slice(4, 8)}`
+}
+
+function resolveVipTier(amount: number, currency: string): 'standard' | 'top' {
+  const cur = currency.toUpperCase()
+  if (cur === 'HUF' || cur === 'FT') return amount >= 1500 ? 'top' : 'standard'
+  if (cur === 'EUR' || cur === 'USD' || cur === 'GBP') return amount >= 5 ? 'top' : 'standard'
+  return amount >= 1500 ? 'top' : 'standard'
+}
+
+/** Osztály kinyerése a Ko-fi üzenetből vagy névből (pl. "11.B", "10/A", "9c" -> "11.B"). */
+function extractClassName(message?: string, donorName?: string): string | null {
+  const src = `${message || ''} ${donorName || ''}`
+  const m = src.match(/\b(9|10|11|12|13)\s*[./\- ]?\s*([a-zA-Z])\b/)
+  if (!m) return null
+  return `${m[1]}.${m[2].toUpperCase()}`
+}
+
+async function createVipCodeInSupabase(tier: 'standard' | 'top', maxUses = 2): Promise<string | null> {
+  const sbUrl = Deno.env.get('SUPABASE_URL')
+  const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!sbUrl || !sbKey) return null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const code = generateVipCode()
+    try {
+      const res = await fetch(`${sbUrl}/rest/v1/vip_codes`, {
+        method: 'POST',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ code, max_uses: maxUses, used_count: 0, tier }),
+      })
+      if (res.ok) return code
+    } catch {
+      // retry on transient error
+    }
+  }
+  return null
+}
+
+async function insertSupporterInSupabase(entry: {
+  name: string
+  className: string | null
+  message?: string
+  isTopTier: boolean
+}): Promise<boolean> {
+  const sbUrl = Deno.env.get('SUPABASE_URL')
+  const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!sbUrl || !sbKey) return false
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/supporters`, {
+      method: 'POST',
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        name: entry.name.slice(0, 60),
+        class_name: entry.className,
+        message: entry.message ? entry.message.slice(0, 220) : null,
+        is_top_tier: entry.isTopTier,
+        is_approved: true,
+      }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+async function sendVipCodeDm(
+  userId: string,
+  donorName: string,
+  vipCode: string,
+  tier: 'standard' | 'top'
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const dmCh = await discordApi('/users/@me/channels', 'POST', { recipient_id: userId })
+    if (!dmCh?.id) return { sent: false, error: 'DM csatorna nem hozható létre' }
+    const tierLabel = tier === 'top' ? '⭐ Top Támogató VIP' : '💎 Standard VIP'
+    await discordApi(`/channels/${dmCh.id}/messages`, 'POST', {
+      embeds: [
+        {
+          title: '👑 Megérkezett a SuliBell VIP kódod!',
+          description:
+            `Szia **${donorName}**! Hatalmas köszönet a Ko-fi támogatásodért! 💖\n\n` +
+            `Itt az egyedi weboldali VIP kódod (**${tierLabel}**):\n` +
+            `# \`${vipCode}\`\n\n` +
+            `**Így aktiválhatod 10 másodperc alatt:**\n` +
+            `1. Nyisd meg a SuliBell weboldalt.\n` +
+            `2. Kattints a fejlécben a **🔑** ikonra.\n` +
+            `3. Másold be a fenti kódot, és élvezd az extra témákat, effekteket és csengőhangokat!\n\n` +
+            `*(A kódot legfeljebb **2 eszközön** — pl. telefonon és gépen — tudod beváltani.)*`,
+          color: tier === 'top' ? 0xffd700 : 0x39ff7a,
+          footer: { text: 'SuliBell • Automatikus VIP kód kézbesítés' },
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    })
+    return { sent: true }
+  } catch (e: any) {
+    return { sent: false, error: String(e?.message || e) }
+  }
 }
 
 interface KofiConfigPayload {
@@ -573,6 +693,26 @@ async function handleKofiDonation(
 
   const vipRes = await findAndGrantVipRole(chMap, discordHint, donorName)
 
+  // 1. Egyedi VIP kód generálása a Supabase `vip_codes` táblába + támogató felvétele a `supporters` táblába
+  const vipTier = resolveVipTier(amount, currency)
+  const className = extractClassName(message, donorName)
+  const vipCode = await createVipCodeInSupabase(vipTier, 2)
+  const supporterSaved = await insertSupporterInSupabase({
+    name: donorName,
+    className,
+    message,
+    isTopTier: vipTier === 'top',
+  })
+
+  // 2. Ha megvan a támogató Discord fiókja, automatikusan elküldjük a kódot privát üzenetben (DM)
+  let dmSent = false
+  let dmError: string | undefined
+  if (vipCode && vipRes.userId) {
+    const dmRes = await sendVipCodeDm(vipRes.userId, donorName, vipCode, vipTier)
+    dmSent = dmRes.sent
+    dmError = dmRes.error
+  }
+
   const { rowId, schoolId, config } = await getKofiConfigFromSupabase()
   const existingIdx = config.donors.findIndex(d =>
     (vipRes.userId && d.discord_user_id === vipRes.userId) ||
@@ -590,6 +730,7 @@ async function handleKofiDonation(
       discord: vipRes.username || discordHint || prev.discord,
       discord_user_id: vipRes.userId || prev.discord_user_id,
       vip_granted: vipRes.granted || prev.vip_granted,
+      vip_code_sent: dmSent || prev.vip_code_sent,
       message: message || prev.message,
       date
     }
@@ -602,6 +743,7 @@ async function handleKofiDonation(
       discord: vipRes.username || discordHint || undefined,
       discord_user_id: vipRes.userId,
       vip_granted: vipRes.granted,
+      vip_code_sent: dmSent,
       message,
       date
     })
@@ -652,12 +794,42 @@ async function handleKofiDonation(
       embeds: [embed]
     }).catch(() => {})
   }
+  if (chMap.logs && vipCode) {
+    await discordApi(`/channels/${chMap.logs}/messages`, 'POST', {
+      embeds: [
+        {
+          title: '🔑 Automatikus Ko-fi VIP Kód Generálva',
+          color: dmSent ? 0x39ff7a : 0xfacc15,
+          fields: [
+            { name: 'Támogató', value: className ? `${donorName} (${className})` : donorName, inline: true },
+            { name: 'Összeg / Szint', value: `${amountText} • **${vipTier}**`, inline: true },
+            { name: 'VIP Kód (2 használat)', value: `||\`${vipCode}\`||`, inline: true },
+            {
+              name: 'Discord DM kézbesítés',
+              value: dmSent && vipRes.userId
+                ? `✅ Elküldve privátban: <@${vipRes.userId}>`
+                : vipRes.userId
+                  ? `⚠️ DM sikertelen (<@${vipRes.userId}> — valószínűleg tiltva van nála a DM${dmError ? `: ${dmError.slice(0, 80)}` : ''}). Kézzel továbbítható!`
+                  : `⏳ Nem található Discord fiók (${discordHint || 'nincs megadva'}) — belépéskor automatikusan megkapja, vagy kézzel átadható!`,
+            },
+          ],
+          footer: { text: 'SuliBell • Admin VIP Kód Log (privát csatorna)' },
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    }).catch(() => {})
+  }
 
   return {
     ok: true,
     donor: donorName,
+    className,
     amount,
     currency,
+    vipTier,
+    vipCodeGenerated: Boolean(vipCode),
+    dmSent,
+    supporterSaved,
     vipGranted: vipRes.granted,
     discordUserId: vipRes.userId,
     discordUsername: vipRes.username,
@@ -957,9 +1129,18 @@ async function checkMemberJoinsAndLeaves(chMap: ChannelMap) {
               return d.discord_user_id === uid || (dh && (dh === uName || dh === gName || dh === dName)) || dn === uName || dn === dName
             })
             if (matchIdx >= 0) {
-              discordApi(`/guilds/${guildId}/members/${uid}/roles/${chMap.vipRoleId}`, 'PUT').then(() => {
-                config.donors[matchIdx].discord_user_id = uid
-                config.donors[matchIdx].vip_granted = true
+              discordApi(`/guilds/${guildId}/members/${uid}/roles/${chMap.vipRoleId}`, 'PUT').then(async () => {
+                const dn = config.donors[matchIdx]
+                dn.discord_user_id = uid
+                dn.vip_granted = true
+                if (!dn.vip_code_sent) {
+                  const tier = resolveVipTier(Number(dn.amount) || 0, dn.currency || 'HUF')
+                  const lateCode = await createVipCodeInSupabase(tier, 2)
+                  if (lateCode) {
+                    const dm = await sendVipCodeDm(uid, dn.name, lateCode, tier)
+                    if (dm.sent) dn.vip_code_sent = true
+                  }
+                }
                 saveKofiConfigToSupabase(config, rowId, schoolId).catch(() => {})
               }).catch(() => {})
             }
