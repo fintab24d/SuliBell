@@ -1,5 +1,7 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { audioReady, enableAudio, preload, ring } from './lib/sound'
+import { audioReady, enableAudio, preload, ring, type BellSoundStyle } from './lib/sound'
+import { useSupporters, useVip } from './lib/vip'
+import { SupporterTicker, VipModal, type VipModalTab } from './VipModal'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
@@ -183,12 +185,12 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
-function Ring({ s, my }: { s: BellState; my?: MyLessonEntry }) {
+function Ring({ s, my, lastMin }: { s: BellState; my?: MyLessonEntry; lastMin?: boolean }) {
   const R = 86, C = 2 * Math.PI * R
   const live = s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before'
   const custom = s.phase === 'lesson' ? formatMyLesson(s.current, my) : null
   const title = s.phase === 'lesson' ? (custom?.title || s.current!.label) : (s.reason || TITLE[s.phase])
-  return <div className={`ring ${s.phase}`}>
+  return <div className={`ring ${s.phase}${lastMin ? ' vip-last-min' : ''}`}>
     <svg viewBox="0 0 200 200" aria-hidden="true">
       <defs>
         <linearGradient id="ledg" x1="0" y1="0" x2="1" y2="1">
@@ -433,10 +435,15 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     ? { t: 14, c: sb.simWeatherCode, min: 10, max: 18, p: 90, lat: 0, lon: 0 }
     : rawWx
   const isNight = !!z && (z.secs >= 18 * 3600 || z.secs < 6 * 3600)
+  const vip = useVip()
+  const sup = useSupporters()
+  const [vipModal, setVipModal] = useState<{ open: boolean; tab: VipModalTab }>({ open: false, tab: 'vip' })
+  const bellStyleRef = useRef<BellSoundStyle>('default')
+  bellStyleRef.current = vip.status.active ? vip.prefs.bellSound : 'default'
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
   useEffect(() => {
-    if (prev.current && key !== prev.current && state?.phase !== 'closed' && data?.settings.sound_enabled && !muted) ring(data.settings.bell_sound_url)
+    if (prev.current && key !== prev.current && state?.phase !== 'closed' && data?.settings.sound_enabled && !muted) ring(data.settings.bell_sound_url, bellStyleRef.current)
     prev.current = key
   }, [key])
   // TV-mód méretezése az admin beállítása szerint.
@@ -444,6 +451,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
   if (!data) return <main><div className="panel"><div className="title">{offline ? 'Nincs kapcsolat és nincs mentett adat.' : 'Betöltés…'}</div></div></main>
   const s: BellState = state
+  const lastMinuteGlow = vip.status.active && vip.prefs.lastMinuteEffect && s.phase === 'lesson' && s.remaining > 0 && s.remaining <= 60 && !potato
   const byPos = (x: any[]) => [...x].sort((p: any, q: any) => p.position - q.position)
 
   const pvRaw = s.phase === 'closed' || s.phase === 'after' ? nextSchoolDay(z.date, data.schedules, data.closed, ovMap) : undefined
@@ -512,11 +520,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <div className="tag" style={{ marginBottom: 0 }}>☕ Ko-fi &amp; VIP</div>
           <span className="kofi-vip-pill">💎 VIP</span>
         </div>
-        {kofi.donors.length === 0 ? (
-          <p className="kofi-tv-empty">
-            Támogasd az oldalt &amp; szerezd meg a <b>💎 VIP</b> rangot Discordon!
-          </p>
-        ) : (
+        {kofi.donors.length > 0 ? (
           <ul className="kofi-tv-list">
             {kofi.donors.slice(0, 3).map((d, idx) => (
               <li key={d.id}>
@@ -526,6 +530,20 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               </li>
             ))}
           </ul>
+        ) : sup.supporters.length > 0 ? (
+          <ul className="kofi-tv-list">
+            {sup.supporters.slice(0, 3).map(sp => (
+              <li key={sp.id}>
+                <span>{sp.is_top_tier ? '👑' : '💚'}</span>
+                <b>{sp.name}</b>
+                <small>{sp.class_name || (sp.is_top_tier ? 'Top VIP' : 'VIP')}</small>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="kofi-tv-empty">
+            Támogasd az oldalt &amp; szerezd meg a <b>💎 VIP</b> rangot Discordon!
+          </p>
         )}
       </div>
       <div className="kofi-tv-qr">
@@ -552,17 +570,31 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="kofi-dc-btn" title="Csatlakozz a Discord szerverhez a VIP szobákért!">
           💎 VIP Szobák (Discord)
         </a>
+        <button type="button" className="kofi-sup-btn" onClick={() => setVipModal({ open: true, tab: 'supporters' })}>
+          🏆 Támogatók fala{sup.supporters.length > 0 ? ` (${sup.supporters.length})` : ''}
+        </button>
+        <button type="button" className="kofi-vip-open-btn" onClick={() => setVipModal({ open: true, tab: 'vip' })}>
+          {vip.status.active ? '👑 VIP Extrák' : '🔑 VIP kód beváltása'}
+        </button>
       </div>
+      {sup.topClass && (
+        <button type="button" className="kofi-topclass-bar" onClick={() => setVipModal({ open: true, tab: 'supporters' })}>
+          <span>🏆 Legtámogatóbb osztály: <b>{sup.topClass.className}</b></span>
+          <small>{sup.topClass.count} támogatás ↗</small>
+        </button>
+      )}
       <div className="kofi-board">
         <div className="kofi-board-title">
           <span>🏆 Támogatói Toplista</span>
-          <small>{kofi.donors.length > 0 ? `${kofi.donors.length} támogató` : 'Legyél te az első!'}</small>
+          <small>
+            {kofi.donors.length > 0
+              ? `${kofi.donors.length} támogató`
+              : sup.supporters.length > 0
+                ? `${sup.supporters.length} támogató`
+                : 'Legyél te az első!'}
+          </small>
         </div>
-        {kofi.donors.length === 0 ? (
-          <div className="kofi-empty">
-            🌟 Még senki sem került fel a toplistára — támogasd az oldalt Ko-fi-n, és szerezd meg elsőként a <b>💎 VIP Támogató</b> rangot!
-          </div>
-        ) : (
+        {kofi.donors.length > 0 ? (
           <div className="kofi-list">
             {kofi.donors.slice(0, 10).map((d, idx) => {
               const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`
@@ -580,6 +612,26 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                 </div>
               )
             })}
+          </div>
+        ) : sup.supporters.length > 0 ? (
+          <div className="kofi-list">
+            {sup.supporters.slice(0, 6).map((sp, idx) => (
+              <div key={sp.id} className={`kofi-item ${sp.is_top_tier ? 'kofi-top-1' : idx < 3 ? `kofi-top-${idx + 1}` : ''}`}>
+                <span className="kofi-rank">{sp.is_top_tier ? '👑' : '💚'}</span>
+                <div className="kofi-donor-main">
+                  <div className="kofi-donor-row">
+                    <b className="kofi-donor-name">{sp.name}</b>
+                    {sp.class_name && <span className="sup-class-pill">{sp.class_name}</span>}
+                    <span className="kofi-donor-badge">{sp.is_top_tier ? '⭐ Top' : '💎 VIP'}</span>
+                  </div>
+                  {sp.message && <small className="kofi-donor-msg">„{sp.message}”</small>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="kofi-empty">
+            🌟 Még senki sem került fel a toplistára — támogasd az oldalt Ko-fi-n, és szerezd meg elsőként a <b>💎 VIP Támogató</b> rangot!
           </div>
         )}
       </div>
@@ -760,8 +812,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           </header>
 
           <div className="tv-main">
-            <section className={`panel now ${s.phase}`}>
-              <Ring s={s} />
+            <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
+              <Ring s={s} lastMin={lastMinuteGlow} />
+              <SupporterTicker supporters={sup.withMessages} tv />
               {data.settings.tv_show_next && (
                 pv && first
                   ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
@@ -871,6 +924,15 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             )}
             <button type="button" className={`potato-btn${potato ? ' on' : ''}`} onClick={togglePotato} title={potato ? 'Potato / Ratyi PC mód kikapcsolása' : 'Potato / Ratyi PC mód: minden nehéz effekt, átlátszóság és animáció kikapcsolása a maximális sebességért'}>🥔 {potato ? 'Potato: BE' : 'Potato PC'}</button>
             <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>
+            <button
+              type="button"
+              className={`vip-hdr-btn${vip.status.active ? ' on' : ''}`}
+              onClick={() => setVipModal({ open: true, tab: 'vip' })}
+              title={vip.status.active ? 'VIP Extrák & Támogatók fala' : 'VIP kód feloldása & Támogatók fala'}
+              aria-label={vip.status.active ? 'VIP Extrák megnyitása' : 'VIP feloldás megnyitása'}
+            >
+              {vip.status.active ? '👑' : '🔑'}
+            </button>
           </div>
         </header>
 
@@ -878,12 +940,13 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <div className="dash-grid">
           {/* 1. OSZLOP (BAL): Fő visszaszámláló + Napsáv + Gyors statisztika + Következő csengetések */}
           <div className="dash-col col-hero">
-            <section className={`panel now ${s.phase}`}>
+            <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
               <div className="tag">Most</div>
-              <Ring s={s} my={myCur} />
+              <Ring s={s} my={myCur} lastMin={lastMinuteGlow} />
               {pv && first
                 ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
                 : <Next s={s} secs={z.secs} my={myNext} />}
+              <SupporterTicker supporters={sup.withMessages} onOpenWall={() => setVipModal({ open: true, tab: 'supporters' })} />
               {strip && <div className="hero-strip">{strip}</div>}
               {stats && <div className="hero-stats">{stats}</div>}
               {bells}
@@ -994,6 +1057,22 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <span className="copy">© 2026 Finta Benjámin • SuliBell • Minden jog fenntartva (All Rights Reserved)</span>
         </footer>
         {data.settings.ask_enabled && <Ask />}
+        <VipModal
+          open={vipModal.open}
+          initialTab={vipModal.tab}
+          onClose={() => setVipModal(prev => ({ ...prev, open: false }))}
+          kofiUrl={kofiHref}
+          customBellUrl={data.settings.bell_sound_url}
+          muted={muted}
+          vipStatus={vip.status}
+          vipPrefs={vip.prefs}
+          onUnlock={vip.unlockWithCode}
+          onUpdatePrefs={vip.updatePrefs}
+          onResetVip={vip.resetVip}
+          supporters={sup.supporters}
+          topClass={sup.topClass}
+          supportersLoading={sup.loading}
+        />
         <MyScheduleModal
           open={myModalOpen}
           onClose={() => setMyModalOpen(false)}

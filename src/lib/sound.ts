@@ -20,9 +20,101 @@ async function load(url: string) {
 /** Előre betölti a saját hangot, hogy csengetéskor ne legyen késés. */
 export function preload(url?: string | null) { if (url && ctx && ctx.state === 'running') load(url).catch(() => {}) }
 
-export async function ring(url?: string | null) {
+export type BellSoundStyle = 'default' | 'retro-8bit' | 'soft-chord'
+
+function playRetro8Bit(c: AudioContext) {
+  const t0 = c.currentTime
+  // 8-bites retro chiptune csengő (klasszikus arcade arpeggio + basszus)
+  const melody: Array<{ f: number; delay: number; dur: number }> = [
+    { f: 523.25, delay: 0.0, dur: 0.14 },   // C5
+    { f: 659.25, delay: 0.14, dur: 0.14 },  // E5
+    { f: 783.99, delay: 0.28, dur: 0.14 },  // G5
+    { f: 1046.5, delay: 0.42, dur: 0.28 },  // C6
+    { f: 783.99, delay: 0.74, dur: 0.14 },  // G5
+    { f: 1046.5, delay: 0.88, dur: 0.42 },  // C6
+    { f: 987.77, delay: 1.38, dur: 0.14 },  // B5
+    { f: 1046.5, delay: 1.52, dur: 0.14 },  // C6
+    { f: 1318.5, delay: 1.66, dur: 0.55 },  // E6
+  ]
+  const bass: Array<{ f: number; delay: number; dur: number }> = [
+    { f: 130.81, delay: 0.0, dur: 0.40 },   // C3
+    { f: 196.0, delay: 0.42, dur: 0.40 },   // G3
+    { f: 130.81, delay: 0.88, dur: 0.44 },  // C3
+    { f: 164.81, delay: 1.38, dur: 0.82 },  // E3
+  ]
+
+  melody.forEach(({ f, delay, dur }) => {
+    const at = t0 + delay
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'square'
+    o.frequency.setValueAtTime(f, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.14, at + 0.01)
+    g.gain.setValueAtTime(0.12, at + Math.max(0.02, dur - 0.04))
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + dur + 0.03)
+  })
+
+  bass.forEach(({ f, delay, dur }) => {
+    const at = t0 + delay
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'triangle'
+    o.frequency.setValueAtTime(f, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.16, at + 0.015)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + dur + 0.03)
+  })
+}
+
+function playSoftChord(c: AudioContext) {
+  const t0 = c.currentTime
+  // Lágy, nyugtató Fmaj9 -> Cmaj9 lebegő akkord-jelzés
+  const chords = [
+    { delay: 0.0, dur: 1.7, freqs: [349.23, 440.0, 523.25, 659.25, 783.99] }, // Fmaj9
+    { delay: 1.35, dur: 2.2, freqs: [261.63, 392.0, 493.88, 587.33, 659.25] }, // Cmaj9
+  ]
+  chords.forEach(({ delay, dur, freqs }) => {
+    freqs.forEach((f, idx) => {
+      const at = t0 + delay + idx * 0.045
+      const o = c.createOscillator(), g = c.createGain()
+      o.type = idx % 2 === 0 ? 'sine' : 'triangle'
+      o.frequency.setValueAtTime(f, at)
+      o.detune.setValueAtTime((idx - 2) * 3, at)
+      const peak = idx === 0 ? 0.14 : 0.085
+      g.gain.setValueAtTime(0.0001, at)
+      g.gain.exponentialRampToValueAtTime(peak, at + 0.18)
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+      o.connect(g).connect(c.destination)
+      o.start(at)
+      o.stop(at + dur + 0.06)
+    })
+  })
+}
+
+/** Felhasználói kattintásból hívható tesztelő a VIP csengőhangokhoz. */
+export async function previewBellSound(style: BellSoundStyle, url?: string | null) {
+  const ok = await enableAudio()
+  if (!ok) return false
+  await ring(url, style)
+  return true
+}
+
+export async function ring(url?: string | null, style: BellSoundStyle = 'default') {
   const c = ctx
   if (!c || c.state !== 'running') return          // nincs engedélyezve → csendben kihagyjuk
+  if (style === 'retro-8bit') {
+    playRetro8Bit(c)
+    return
+  }
+  if (style === 'soft-chord') {
+    playSoftChord(c)
+    return
+  }
   if (url) {
     try { const s = c.createBufferSource(); s.buffer = await load(url); s.connect(c.destination); s.start(); return }
     catch { /* a saját hang nem játszható le: jön a beépített csengő */ }
