@@ -2450,17 +2450,23 @@ html.egg-warp #root main {
     0 0 28px -4px rgba(255, 209, 102, 0.38);
 }
 
-/* Mikulás-sapka díszítés a SuliBell logón */
-.logo-wrap {
+/* Mikulás-sapka díszítés a SuliBell két "ll" betűjén */
+.brand-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+.brand-ll {
   position: relative;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
+  line-height: 1;
 }
 .santa-hat-svg {
   position: absolute;
-  top: -11px;
-  left: -8px;
-  transform: rotate(-16deg);
+  width: 1.08em;
+  height: 0.88em;
+  top: -0.56em;
+  left: 50%;
+  transform: translateX(-42%) rotate(8deg);
   pointer-events: none;
   z-index: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.48));

@@ -130,7 +130,7 @@ export const ADVENT_DOORS: ReadonlyArray<AdventDoor> = [
     icon: '🎅',
     category: 'Mikulás • 2. Adventi vasárnap',
     title: 'Mikulás keret feloldva!',
-    body: 'Boldog Mikulást! Meggyulladt a 2. adventi gyertya, és megkaptad az ünnepi piros-arany Mikulás keretet a fő visszaszámláló köré, plusz a logóra kerülő Mikulás-sapkát!',
+    body: 'Boldog Mikulást! Meggyulladt a 2. adventi gyertya, és megkaptad az ünnepi piros-arany Mikulás keretet a fő visszaszámláló köré, plusz a SuliBell feliratra kerülő Mikulás-sapkát!',
     rewardKind: 'frame',
     sundayNumber: 2,
   },

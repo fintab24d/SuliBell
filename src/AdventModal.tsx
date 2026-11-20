@@ -89,7 +89,7 @@ export function AdventWreathIcon({
   )
 }
 
-/** Mini Mikulás-sapka díszítés a SuliBell logóra. */
+/** Mini Mikulás-sapka díszítés a SuliBell két "ll" betűjére. */
 export function SantaHatSvg() {
   return (
     <svg
@@ -602,7 +602,7 @@ export function AdventModal({
                 <div>
                   <h3>{unlocked.hasSantaFrame ? '🎅 Mikulás keret' : '🔒 Mikulás keret (Dec. 6.)'}</h3>
                   <small>
-                    Ünnepi piros-arany keret a visszaszámláló köré és Mikulás-sapka a logóra.
+                    Ünnepi piros-arany keret a visszaszámláló köré és Mikulás-sapka a SuliBell feliratra.
                   </small>
                 </div>
                 <button

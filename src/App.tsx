@@ -824,11 +824,20 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <header className="tv-hdr">
             <div className="tv-hdr-left">
               <span className="brand">
-                <span className="logo-wrap">
-                {showSantaHat && <SantaHatSvg />}
                 <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
-              </span>
-                {APP_NAME}
+                <span className="brand-word">
+                  {APP_NAME.endsWith('ll') ? (
+                    <>
+                      {APP_NAME.slice(0, -2)}
+                      <span className="brand-ll">
+                        {APP_NAME.slice(-2)}
+                        {showSantaHat && <SantaHatSvg />}
+                      </span>
+                    </>
+                  ) : (
+                    APP_NAME
+                  )}
+                </span>
                 {advent.litCandles > 0 && <AdventWreathIcon litCount={advent.litCandles} size="sm" />}
               </span>
               <div className="date">{dateText}</div>
@@ -940,11 +949,20 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <header className="bento-hdr">
           <div className="hdr-brand-col">
             <span className="brand">
-              <span className="logo-wrap">
-                {showSantaHat && <SantaHatSvg />}
-                <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+              <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+              <span className="brand-word">
+                {APP_NAME.endsWith('ll') ? (
+                  <>
+                    {APP_NAME.slice(0, -2)}
+                    <span className="brand-ll">
+                      {APP_NAME.slice(-2)}
+                      {showSantaHat && <SantaHatSvg />}
+                    </span>
+                  </>
+                ) : (
+                  APP_NAME
+                )}
               </span>
-              {APP_NAME}
               {advent.unlocked.hasSurvivorBadge && (
                 <span className="survivor-pill" title="2026. dec. 24. — Exkluzív adventi jelvény">
                   🏅 Téli Túlélő ’26
