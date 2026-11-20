@@ -5,7 +5,7 @@ import { fxSound } from './lib/sound'
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Neon háttér-réteg: részecskék, kattintás-szikrák, fényfolt a paneleken, csengetéskor robbanás. Csak a Neon stílusban él. */
-const Fx = memo(function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: string; bellKey: string; tv: boolean; wx?: number | null; night?: boolean; sound?: boolean }) {
+const Fx = memo(function Fx({ phase, bellKey, tv, wx, night, sound, festiveSnow }: { phase: string; bellKey: string; tv: boolean; wx?: number | null; night?: boolean; sound?: boolean; festiveSnow?: boolean }) {
   const refBg = useRef<HTMLCanvasElement>(null)
   const refFg = useRef<HTMLCanvasElement>(null)
   const eng = useRef<FxEngine | null>(null)
@@ -19,6 +19,7 @@ const Fx = memo(function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: s
     eng.current = e
     e.setPhase(phase)
     e.setNight(!!night)
+    e.setFestiveSnow(!!festiveSnow)
     e.start()
     return () => { e.stop(); eng.current = null }
   }, [off, tv])
@@ -27,6 +28,7 @@ const Fx = memo(function Fx({ phase, bellKey, tv, wx, night, sound }: { phase: s
   useEffect(() => { if (eng.current) eng.current.onSound = sound ? fxSound : undefined }, [sound])
   useEffect(() => { eng.current?.setWeather(wx) }, [wx])      // valódi időjárás: eső, hó, vihar
   useEffect(() => { eng.current?.setNight(!!night) }, [night]) // napszak: nappal Nap, este Hold
+  useEffect(() => { eng.current?.setFestiveSnow(!!festiveSnow) }, [festiveSnow]) // kapcsolható ünnepi hóesés
   useEffect(() => {                                                    // tűzijáték / konfetti a nagy pillanatokra
     const on = (e: Event) => {
       const d = (e as CustomEvent).detail ?? {}

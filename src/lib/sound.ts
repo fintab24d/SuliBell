@@ -20,7 +20,13 @@ async function load(url: string) {
 /** Előre betölti a saját hangot, hogy csengetéskor ne legyen késés. */
 export function preload(url?: string | null) { if (url && ctx && ctx.state === 'running') load(url).catch(() => {}) }
 
-export type BellSoundStyle = 'default' | 'retro-8bit' | 'soft-chord'
+export type BellSoundStyle =
+  | 'default'
+  | 'retro-8bit'
+  | 'soft-chord'
+  | 'jingle-8bit'
+  | 'sleigh-bells'
+  | 'hohoho'
 
 function playRetro8Bit(c: AudioContext) {
   const t0 = c.currentTime
@@ -96,7 +102,187 @@ function playSoftChord(c: AudioContext) {
   })
 }
 
-/** Felhasználói kattintásból hívható tesztelő a VIP csengőhangokhoz. */
+function playJingle8Bit(c: AudioContext) {
+  const t0 = c.currentTime
+  // 8-bites Jingle Bells (klasszikus chiptune refrén: E-E-E, E-E-E, E-G-C-D-E...)
+  const E5 = 659.25, G5 = 783.99, C5 = 523.25, D5 = 587.33, F5 = 698.46
+  const melody: Array<{ f: number; delay: number; dur: number }> = [
+    { f: E5, delay: 0.00, dur: 0.14 },
+    { f: E5, delay: 0.17, dur: 0.14 },
+    { f: E5, delay: 0.34, dur: 0.30 },
+    { f: E5, delay: 0.68, dur: 0.14 },
+    { f: E5, delay: 0.85, dur: 0.14 },
+    { f: E5, delay: 1.02, dur: 0.30 },
+    { f: E5, delay: 1.36, dur: 0.14 },
+    { f: G5, delay: 1.53, dur: 0.14 },
+    { f: C5, delay: 1.70, dur: 0.20 },
+    { f: D5, delay: 1.93, dur: 0.12 },
+    { f: E5, delay: 2.08, dur: 0.48 },
+    { f: F5, delay: 2.62, dur: 0.14 },
+    { f: F5, delay: 2.79, dur: 0.14 },
+    { f: F5, delay: 2.96, dur: 0.18 },
+    { f: E5, delay: 3.17, dur: 0.14 },
+    { f: E5, delay: 3.34, dur: 0.14 },
+    { f: G5, delay: 3.51, dur: 0.14 },
+    { f: G5, delay: 3.68, dur: 0.14 },
+    { f: F5, delay: 3.85, dur: 0.14 },
+    { f: D5, delay: 4.02, dur: 0.14 },
+    { f: C5, delay: 4.19, dur: 0.56 },
+  ]
+  const bass: Array<{ f: number; delay: number; dur: number }> = [
+    { f: 130.81, delay: 0.00, dur: 0.62 }, // C3
+    { f: 130.81, delay: 0.68, dur: 0.62 }, // C3
+    { f: 130.81, delay: 1.36, dur: 0.68 }, // C3
+    { f: 164.81, delay: 2.08, dur: 0.48 }, // E3
+    { f: 174.61, delay: 2.62, dur: 0.52 }, // F3
+    { f: 130.81, delay: 3.17, dur: 0.32 }, // C3
+    { f: 196.00, delay: 3.51, dur: 0.64 }, // G3
+    { f: 130.81, delay: 4.19, dur: 0.58 }, // C3
+  ]
+
+  melody.forEach(({ f, delay, dur }) => {
+    const at = t0 + delay
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'square'
+    o.frequency.setValueAtTime(f, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.13, at + 0.01)
+    g.gain.setValueAtTime(0.11, at + Math.max(0.02, dur - 0.04))
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + dur + 0.03)
+  })
+
+  bass.forEach(({ f, delay, dur }) => {
+    const at = t0 + delay
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'triangle'
+    o.frequency.setValueAtTime(f, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.16, at + 0.015)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + dur + 0.03)
+  })
+}
+
+function playSleighBells(c: AudioContext) {
+  const t0 = c.currentTime
+  // Csilingelő száncsengő: ritmikus fémcsengő-csokor + meleg csillogó akkord
+  const shakes = [0.0, 0.20, 0.40, 0.72, 0.92, 1.12, 1.44, 1.62, 1.80, 2.02]
+  const buf = noiseBuf(c)
+  shakes.forEach((delay, idx) => {
+    const at = t0 + delay
+    const accent = idx % 3 === 0 || idx === shakes.length - 1 ? 1.15 : 0.78
+    const dur = idx === shakes.length - 1 ? 0.42 : 0.16
+
+    // Magas csilingelő szűrt zaj-réteg (száncsengő golyócskák)
+    const src = c.createBufferSource()
+    const bp = c.createBiquadFilter()
+    const g = c.createGain()
+    src.buffer = buf
+    bp.type = 'bandpass'
+    bp.frequency.setValueAtTime(5800 + (idx % 3) * 650, at)
+    bp.Q.setValueAtTime(2.6, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.18 * accent, at + 0.012)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    src.connect(bp).connect(g).connect(c.destination)
+    src.start(at, (idx * 0.07) % 0.4, dur + 0.04)
+
+    // Fényes harangjáték felhangok
+    const freqs = [2637.02, 3520.0, 4186.01] // E7, A7, C8
+    freqs.forEach((f, fi) => {
+      const o = c.createOscillator(), og = c.createGain()
+      o.type = 'sine'
+      o.frequency.setValueAtTime(f * (1 + (fi - 1) * 0.006), at)
+      og.gain.setValueAtTime(0.0001, at)
+      og.gain.linearRampToValueAtTime(0.045 * accent, at + 0.008)
+      og.gain.exponentialRampToValueAtTime(0.0001, at + dur * 1.45)
+      o.connect(og).connect(c.destination)
+      o.start(at)
+      o.stop(at + dur * 1.55)
+    })
+  })
+
+  // Meleg záró karácsonyi csengő-akkord (C6-E6-G6)
+  ;[1046.5, 1318.51, 1567.98].forEach((f, i) => {
+    const at = t0 + 2.02 + i * 0.05
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'triangle'
+    o.frequency.setValueAtTime(f, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.11, at + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 1.1)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + 1.16)
+  })
+}
+
+function playHoHoHo(c: AudioContext) {
+  const t0 = c.currentTime
+  // Játékos szintetizált "Ho-Ho-Ho!" Mikulás-formáns + ünnepi harangjáték
+  const hos = [
+    { delay: 0.05, f0: 196.0, f1: 158.0, dur: 0.34 },
+    { delay: 0.46, f0: 174.6, f1: 140.0, dur: 0.34 },
+    { delay: 0.87, f0: 155.5, f1: 118.0, dur: 0.48 },
+  ]
+  hos.forEach(({ delay, f0, f1, dur }) => {
+    const at = t0 + delay
+    const o = c.createOscillator()
+    const o2 = c.createOscillator()
+    const fLow = c.createBiquadFilter()
+    const fMid = c.createBiquadFilter()
+    const g = c.createGain()
+
+    o.type = 'sawtooth'
+    o2.type = 'triangle'
+    o.frequency.setValueAtTime(f0, at)
+    o.frequency.exponentialRampToValueAtTime(f1, at + dur)
+    o2.frequency.setValueAtTime(f0 * 0.5, at)
+    o2.frequency.exponentialRampToValueAtTime(f1 * 0.5, at + dur)
+
+    // "O" magánhangzó formáns szűrő (~480 Hz + ~880 Hz)
+    fLow.type = 'bandpass'
+    fLow.frequency.setValueAtTime(470, at)
+    fLow.Q.setValueAtTime(3.2, at)
+
+    fMid.type = 'peaking'
+    fMid.frequency.setValueAtTime(860, at)
+    fMid.Q.setValueAtTime(2.5, at)
+    fMid.gain.setValueAtTime(6, at)
+
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.28, at + 0.04)
+    g.gain.setValueAtTime(0.24, at + dur * 0.62)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+
+    o.connect(fLow)
+    o2.connect(fLow)
+    fLow.connect(fMid).connect(g).connect(c.destination)
+    o.start(at); o2.start(at)
+    o.stop(at + dur + 0.04); o2.stop(at + dur + 0.04)
+  })
+
+  // Ünnepi csilingelő finálé a Ho-Ho-Ho után
+  ;[783.99, 987.77, 1174.66, 1567.98].forEach((f, idx) => {
+    const at = t0 + 1.42 + idx * 0.09
+    const o = c.createOscillator(), g = c.createGain()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(f, at)
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.linearRampToValueAtTime(0.14, at + 0.015)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.65)
+    o.connect(g).connect(c.destination)
+    o.start(at)
+    o.stop(at + 0.7)
+  })
+}
+
+/** Felhasználói kattintásból hívható tesztelő a VIP és ünnepi csengőhangokhoz. */
 export async function previewBellSound(style: BellSoundStyle, url?: string | null) {
   const ok = await enableAudio()
   if (!ok) return false
@@ -113,6 +299,18 @@ export async function ring(url?: string | null, style: BellSoundStyle = 'default
   }
   if (style === 'soft-chord') {
     playSoftChord(c)
+    return
+  }
+  if (style === 'jingle-8bit') {
+    playJingle8Bit(c)
+    return
+  }
+  if (style === 'sleigh-bells') {
+    playSleighBells(c)
+    return
+  }
+  if (style === 'hohoho') {
+    playHoHoHo(c)
     return
   }
   if (url) {

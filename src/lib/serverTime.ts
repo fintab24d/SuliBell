@@ -20,6 +20,9 @@ const listeners = new Set<Listener>()
 
 let serverOffsetMs = 0
 let lastSyncSuccessAt = 0
+let syncedInSession = false
+let anchorServerMs = 0
+let anchorPerfMs = 0
 let inFlight: Promise<number> | null = null
 let started = false
 
@@ -54,7 +57,31 @@ serverOffsetMs = loadCachedOffset()
 
 /** Az aktuális pontos (szerverhez igazított) idő ezredmásodpercben. */
 export function serverNowMs(): number {
+  if (syncedInSession && typeof performance !== 'undefined') {
+    return Math.round(anchorServerMs + (performance.now() - anchorPerfMs))
+  }
   return Date.now() + serverOffsetMs
+}
+
+/**
+ * Hitelesített szerveridő (pl. Adventi Kalendáriumhoz):
+ * ha a munkamenetben már történt élő szerverszinkron, a monoton performance.now()
+ * horgony alapján számol, így az eszköz órájának átállításával nem csapható be.
+ */
+export function trustedServerNowMs(): number {
+  return serverNowMs()
+}
+
+/** Igaz, ha a jelenlegi munkamenetben már kaptunk hiteles élő szerveridőt. */
+export function isServerTimeSynced(): boolean {
+  return syncedInSession
+}
+
+/** Biztosítja, hogy legyen hitelesített élő szerveridő (ha még nincs, azonnal szinkronizál). */
+export async function ensureServerTimeSynced(): Promise<boolean> {
+  if (syncedInSession) return true
+  await syncServerTime(true)
+  return syncedInSession
 }
 
 /** A jelenleg alkalmazott időeltolás ezredmásodpercben (szerver - kliens). */
@@ -69,25 +96,42 @@ export function subscribeServerTime(cb: Listener): () => void {
   }
 }
 
-function applyOffset(nextOffset: number) {
+function applyOffset(nextOffset: number, estimatedServerNowMs?: number, perfAt?: number) {
   const prev = serverOffsetMs
+  const wasSynced = syncedInSession
+  const nowPerf = typeof perfAt === 'number' && Number.isFinite(perfAt)
+    ? perfAt
+    : (typeof performance !== 'undefined' ? performance.now() : 0)
+  const srvNow = typeof estimatedServerNowMs === 'number' && Number.isFinite(estimatedServerNowMs)
+    ? estimatedServerNowMs
+    : Date.now() + nextOffset
+
+  syncedInSession = true
+  anchorServerMs = srvNow
+  anchorPerfMs = nowPerf
+
   // Kisebb mint 150 ms jitter esetén tartsuk stabilan a meglévő eltolást (ne ugráljon feleslegesen)
   if (lastSyncSuccessAt > 0 && Math.abs(nextOffset - prev) < 150) {
     lastSyncSuccessAt = Date.now()
     saveCachedOffset(prev)
+    if (!wasSynced) {
+      listeners.forEach(fn => {
+        try { fn(prev) } catch { /* ignore */ }
+      })
+    }
     return
   }
   serverOffsetMs = Math.round(nextOffset)
   lastSyncSuccessAt = Date.now()
   saveCachedOffset(serverOffsetMs)
-  if (Math.abs(serverOffsetMs - prev) >= 150) {
+  if (!wasSynced || Math.abs(serverOffsetMs - prev) >= 150) {
     listeners.forEach(fn => {
       try { fn(serverOffsetMs) } catch { /* ignore */ }
     })
   }
 }
 
-async function probeSupabaseTime(): Promise<{ offset: number; rtt: number } | null> {
+async function probeSupabaseTime(): Promise<{ offset: number; rtt: number; serverNow: number; perfAt: number } | null> {
   const sbUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, '')
   if (!sbUrl) return null
   const ctrl = new AbortController()
@@ -106,7 +150,7 @@ async function probeSupabaseTime(): Promise<{ offset: number; rtt: number } | nu
     if (!Number.isFinite(serverMs)) return null
     const rtt = Math.max(0, t1 - t0)
     const estimatedNow = serverMs + rtt / 2
-    return { offset: estimatedNow - Date.now(), rtt }
+    return { offset: estimatedNow - Date.now(), rtt, serverNow: estimatedNow, perfAt: t1 }
   } catch {
     return null
   } finally {
@@ -114,7 +158,7 @@ async function probeSupabaseTime(): Promise<{ offset: number; rtt: number } | nu
   }
 }
 
-async function probeOriginDateHeader(): Promise<{ offset: number; rtt: number } | null> {
+async function probeOriginDateHeader(): Promise<{ offset: number; rtt: number; serverNow: number; perfAt: number } | null> {
   if (typeof window === 'undefined' || !window.location?.origin?.startsWith('http')) return null
   const ctrl = new AbortController()
   const timer = window.setTimeout(() => ctrl.abort(), 3000)
@@ -133,7 +177,7 @@ async function probeOriginDateHeader(): Promise<{ offset: number; rtt: number } 
     const rtt = Math.max(0, t1 - t0)
     // A HTTP Date egész másodperc pontosságú, ezért +500 ms átlagkorrekció + RTT/2
     const estimatedNow = parsed + 500 + rtt / 2
-    return { offset: estimatedNow - Date.now(), rtt }
+    return { offset: estimatedNow - Date.now(), rtt, serverNow: estimatedNow, perfAt: t1 }
   } catch {
     return null
   } finally {
@@ -145,14 +189,14 @@ async function probeOriginDateHeader(): Promise<{ offset: number; rtt: number } 
  * Két gyors mérésből kiválasztja a legalacsonyabb késleltetésű (legpontosabb) szerveridő-eltolást.
  */
 export async function syncServerTime(force = false): Promise<number> {
-  if (!force && lastSyncSuccessAt > 0 && Date.now() - lastSyncSuccessAt < MIN_RESYNC_GAP_MS) {
+  if (!force && syncedInSession && lastSyncSuccessAt > 0 && Date.now() - lastSyncSuccessAt < MIN_RESYNC_GAP_MS) {
     return serverOffsetMs
   }
   if (inFlight) return inFlight
 
   inFlight = (async () => {
     try {
-      const samples: Array<{ offset: number; rtt: number }> = []
+      const samples: Array<{ offset: number; rtt: number; serverNow: number; perfAt: number }> = []
       const first = await probeSupabaseTime()
       if (first) {
         samples.push(first)
@@ -168,7 +212,7 @@ export async function syncServerTime(force = false): Promise<number> {
 
       if (samples.length > 0) {
         samples.sort((a, b) => a.rtt - b.rtt)
-        applyOffset(samples[0].offset)
+        applyOffset(samples[0].offset, samples[0].serverNow, samples[0].perfAt)
       }
     } finally {
       inFlight = null

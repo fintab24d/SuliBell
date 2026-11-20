@@ -1,7 +1,9 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { audioReady, enableAudio, preload, ring, type BellSoundStyle } from './lib/sound'
-import { useSupporters, useVip } from './lib/vip'
+import { useSupporters, useVip, type VipPrefs } from './lib/vip'
 import { SupporterTicker, VipModal, type VipModalTab } from './VipModal'
+import { useAdvent, WINTER_BREAK_DATE, type HolidayThemeMode } from './lib/advent'
+import { AdventModal, AdventWreathIcon, SantaHatSvg, WinterBreakStrip, type AdventModalTab } from './AdventModal'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
@@ -185,7 +187,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
 }
 
 /** Számlap: 60 osztás, az ív az aktuális óra/szünet előrehaladása, közepén a visszaszámláló. */
-function Ring({ s, my, lastMin }: { s: BellState; my?: MyLessonEntry; lastMin?: boolean }) {
+function Ring({ s, my, lastMin, christmas }: { s: BellState; my?: MyLessonEntry; lastMin?: boolean; christmas?: boolean }) {
   const R = 86, C = 2 * Math.PI * R
   const live = s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before'
   const custom = s.phase === 'lesson' ? formatMyLesson(s.current, my) : null
@@ -198,10 +200,16 @@ function Ring({ s, my, lastMin }: { s: BellState; my?: MyLessonEntry; lastMin?: 
           <stop offset="55%" stopColor="#39ff7a" /><stop offset="80%" stopColor="#2de2ff" />
           <stop offset="100%" stopColor="#8a5cff" />
         </linearGradient>
+        <pattern id="candycane" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(42)">
+          <rect width="7" height="14" fill="#e63946" />
+          <rect x="7" width="7" height="14" fill="#f8fafc" />
+        </pattern>
+        <linearGradient id="ledg_noop" x1="0" y1="0" x2="1" y2="1">
+        </linearGradient>
       </defs>
       <circle className="ticks" cx="100" cy="100" r="96" stroke="url(#ledg)" />
       <circle className="track" cx="100" cy="100" r={R} />
-      {live && <circle className="arc" cx="100" cy="100" r={R} strokeDasharray={C} strokeDashoffset={C * (1 - s.progress)} />}
+      {live && <circle className="arc" cx="100" cy="100" r={R} strokeDasharray={C} strokeDashoffset={C * (1 - s.progress)} style={christmas ? { stroke: 'url(#candycane)' } : undefined} />}
     </svg>
     <span key={`${s.phase}-${s.current?.id ?? s.next?.id}`} className="bell-fx" aria-hidden="true" />
     <div className="inner">
@@ -381,10 +389,36 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     if (!next) setCtxOn(await enableAudio())
   }
   const audioOn = !muted && ctxOn
+  const vip = useVip()
+  const hasCustomVipTheme = vip.status.active && vip.prefs.theme !== 'neon-green'
+  const advent = useAdvent(hasCustomVipTheme)
+  const isXmasSkin = advent.activeTheme === 'christmas'
+  const showSantaHat = isXmasSkin || advent.santaFrameActive
+  const [adventModal, setAdventModal] = useState<{ open: boolean; tab: AdventModalTab }>({ open: false, tab: 'calendar' })
+  const handleUpdateVipPrefs = (patch: Partial<VipPrefs>) => {
+    vip.updatePrefs(patch)
+    if (patch.theme && patch.theme !== 'neon-green') advent.setThemeMode('off')
+    if (patch.bellSound) advent.setHolidayBell(null)
+  }
+  const handleSetHolidayTheme = (mode: HolidayThemeMode) => {
+    advent.setThemeMode(mode)
+    if (mode !== 'off' && vip.status.active && vip.prefs.theme !== 'neon-green') {
+      vip.updatePrefs({ theme: 'neon-green' })
+    }
+  }
+  const handleToggleSnow = (force?: boolean) => {
+    const next = typeof force === 'boolean' ? force : !advent.state.snowEnabled
+    advent.toggleSnow(next)
+    if (next && !fxOn) {
+      try { localStorage.setItem('fx', '1') } catch { /* ignore */ }
+      setFxOn(true)
+    }
+  }
   const { counts: vibeCounts, floats: vibeFloats, sendVibe, cooldown: vibeCooldown } = useVibe(
     data?.id,
     z?.date ?? '',
-    !!data?.settings.sound_enabled && audioOn
+    !!data?.settings.sound_enabled && audioOn,
+    isXmasSkin
   )
   const { songs: jbWishes, finishSong } = useJukebox(data?.id, z?.date ?? '', false)
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
@@ -435,11 +469,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     ? { t: 14, c: sb.simWeatherCode, min: 10, max: 18, p: 90, lat: 0, lon: 0 }
     : rawWx
   const isNight = !!z && (z.secs >= 18 * 3600 || z.secs < 6 * 3600)
-  const vip = useVip()
   const sup = useSupporters()
   const [vipModal, setVipModal] = useState<{ open: boolean; tab: VipModalTab }>({ open: false, tab: 'vip' })
   const bellStyleRef = useRef<BellSoundStyle>('default')
-  bellStyleRef.current = vip.status.active ? vip.prefs.bellSound : 'default'
+  bellStyleRef.current = advent.effectiveBell ?? (vip.status.active ? vip.prefs.bellSound : 'default')
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
   useEffect(() => {
@@ -641,6 +674,19 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
   // ---- Visszaszámláló kártyák ----
   const startDay = s.phase === 'after' || s.phase === 'closed' ? addDays(z.date, 1) : z.date
+  // Téli szünet visszaszámláló (december 18-ig, a napi órarend mellett)
+  const winterBreak = (() => {
+    const isClosedOnTarget = (data.closed as { day: string }[]).some(c => c.day === WINTER_BREAK_DATE)
+    const targetSch = !isClosedOnTarget ? scheduleFor(WINTER_BREAK_DATE, data.schedules, ovMap) : undefined
+    const targetLessons = targetSch?.lessons?.length ? byPos(targetSch.lessons) : []
+    const targetEndSec = targetLessons.length ? toSec(targetLessons[targetLessons.length - 1].end_time) : 0
+    const endMs = instantOf(WINTER_BREAK_DATE, targetEndSec, data.settings.timezone)
+    const started = now.getTime() >= endMs || z.date > WINTER_BREAK_DATE
+    const isLastDay = !started && !isClosedOnTarget && targetLessons.length > 0 && z.date === WINTER_BREAK_DATE
+    const schoolDaysLeft = started ? 0 : schoolDaysBetween(startDay, WINTER_BREAK_DATE, data.schedules, data.closed, ovMap)
+    const hoursLeft = started ? 0 : Math.max(0, Math.ceil((endMs - now.getTime()) / 3600000))
+    return { started, isLastDay, schoolDaysLeft, hoursLeft }
+  })()
   const evCard = (e: any, i: number) => {
     const k = KIND[e.kind] ?? KIND.other
     const d = Math.floor(e.left / 86400), h = Math.floor((e.left % 86400) / 3600), m = Math.floor((e.left % 3600) / 60), sec = e.left % 60
@@ -778,8 +824,12 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <header className="tv-hdr">
             <div className="tv-hdr-left">
               <span className="brand">
+                <span className="logo-wrap">
+                {showSantaHat && <SantaHatSvg />}
                 <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+              </span>
                 {APP_NAME}
+                {advent.litCandles > 0 && <AdventWreathIcon litCount={advent.litCandles} size="sm" />}
               </span>
               <div className="date">{dateText}</div>
               {wx && (
@@ -813,7 +863,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
           <div className="tv-main">
             <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
-              <Ring s={s} lastMin={lastMinuteGlow} />
+              <Ring s={s} lastMin={lastMinuteGlow} christmas={isXmasSkin} />
+              {isXmasSkin && (s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before') && (
+                <div className="xmas-bar" aria-hidden="true"><i style={{ width: `${Math.round(s.progress * 100)}%` }} /></div>
+              )}
               <SupporterTicker supporters={sup.withMessages} tv />
               {data.settings.tv_show_next && (
                 pv && first
@@ -839,7 +892,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   )}
                   <div className="tv-subgrid">
                     {!vid && lunchBox}
-                    <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
+                    <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
                     <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv />
                     <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
                     {kofiTvBox}
@@ -852,7 +905,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   {restBox || (events[0] && evCard(events[0], 0))}
                   <div className="tv-subgrid">
                     {offCard}
-                    <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv />
+                    <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
                     <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv />
                     <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
                     {kofiTvBox}
@@ -872,7 +925,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         {maintPrepBanner}
       {maintOverlay}
         {!potato && <VibeOverlay floats={vibeFloats} />}
-        {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} />}
+        {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
         <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
         {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
         {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
@@ -887,8 +940,16 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <header className="bento-hdr">
           <div className="hdr-brand-col">
             <span className="brand">
-              <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+              <span className="logo-wrap">
+                {showSantaHat && <SantaHatSvg />}
+                <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+              </span>
               {APP_NAME}
+              {advent.unlocked.hasSurvivorBadge && (
+                <span className="survivor-pill" title="2026. dec. 24. — Exkluzív adventi jelvény">
+                  🏅 Téli Túlélő ’26
+                </span>
+              )}
             </span>
             <div className="hdr-meta">
               <div className="date">{dateText}</div>
@@ -923,6 +984,28 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               <button className={fxOn && !potato ? 'on' : ''} onClick={() => { const v = !fxOn; localStorage.setItem('fx', v ? '1' : '0'); setFxOn(v) }} title="Háttéreffektek">✨</button>
             )}
             <button type="button" className={`potato-btn${potato ? ' on' : ''}`} onClick={togglePotato} title={potato ? 'Potato / Ratyi PC mód kikapcsolása' : 'Potato / Ratyi PC mód: minden nehéz effekt, átlátszóság és animáció kikapcsolása a maximális sebességért'}>🥔 {potato ? 'Potato: BE' : 'Potato PC'}</button>
+            <button
+              type="button"
+              className={`adv-hdr-btn${advent.availableCount > 0 ? ' has-new' : ''}${advent.activeTheme !== 'off' ? ' on' : ''}`}
+              onClick={() => setAdventModal({ open: true, tab: 'calendar' })}
+              title={`Adventi Kalendárium (Nov. 29. – Dec. 24.) • ${advent.litCandles}/4 gyertya ég`}
+            >
+              <span aria-hidden="true">🎁</span>
+              <span>Advent</span>
+              <AdventWreathIcon litCount={advent.litCandles} size="sm" />
+              {advent.availableCount > 0 && <b className="adv-dot">{advent.availableCount}</b>}
+            </button>
+            {data.settings.particles !== false && !potato && (
+              <button
+                type="button"
+                className={`snow-hdr-btn${advent.state.snowEnabled ? ' on' : ''}`}
+                onClick={() => handleToggleSnow()}
+                title={advent.state.snowEnabled ? 'Hóesés effekt kikapcsolása' : 'Hóesés háttéreffekt bekapcsolása'}
+                aria-label="Hóesés háttéreffekt kapcsolása"
+              >
+                ❄️
+              </button>
+            )}
             <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>
             <button
               type="button"
@@ -942,7 +1025,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           <div className="dash-col col-hero">
             <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
               <div className="tag">Most</div>
-              <Ring s={s} my={myCur} lastMin={lastMinuteGlow} />
+              <Ring s={s} my={myCur} lastMin={lastMinuteGlow} christmas={isXmasSkin} />
+              {isXmasSkin && (s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before') && (
+                <div className="xmas-bar" aria-hidden="true"><i style={{ width: `${Math.round(s.progress * 100)}%` }} /></div>
+              )}
               {pv && first
                 ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
                 : <Next s={s} secs={z.secs} my={myNext} />}
@@ -959,6 +1045,14 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             {vid}
             {restBox}
 
+            <WinterBreakStrip
+              serverDate={advent.serverDate}
+              schoolDaysLeft={winterBreak.schoolDaysLeft}
+              hoursLeft={winterBreak.hoursLeft}
+              isLastDay={winterBreak.isLastDay}
+              started={winterBreak.started}
+              onOpenAdvent={() => setAdventModal({ open: true, tab: 'calendar' })}
+            />
             {L.length > 0 && (
               <section className="panel board">
                 <div className="board-top">
@@ -1040,9 +1134,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           {/* 3. OSZLOP (JOBB): Ko-fi Támogatás, Élő Hangulatfal, Zenegép, Mini-Aréna, Szavazás */}
           <div className="dash-col col-side">
             {kofiBox}
-            <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} />
+            <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} christmas={isXmasSkin} />
 
-            <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} />
+            <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} christmas={isXmasSkin} />
 
             <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} sound={!!data.settings.sound_enabled && audioOn} />
 
@@ -1067,11 +1161,33 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           vipStatus={vip.status}
           vipPrefs={vip.prefs}
           onUnlock={vip.unlockWithCode}
-          onUpdatePrefs={vip.updatePrefs}
+          onUpdatePrefs={handleUpdateVipPrefs}
           onResetVip={vip.resetVip}
           supporters={sup.supporters}
           topClass={sup.topClass}
           supportersLoading={sup.loading}
+        />
+        <AdventModal
+          open={adventModal.open}
+          initialTab={adventModal.tab}
+          onClose={() => setAdventModal(prev => ({ ...prev, open: false }))}
+          state={advent.state}
+          unlocked={advent.unlocked}
+          activeTheme={advent.activeTheme}
+          santaFrameActive={advent.santaFrameActive}
+          effectiveBell={advent.effectiveBell}
+          serverDate={advent.serverDate}
+          serverSynced={advent.serverSynced}
+          litCandles={advent.litCandles}
+          potato={potato}
+          muted={muted}
+          customBellUrl={data.settings.bell_sound_url}
+          onOpenDoor={advent.openDoor}
+          onSetThemeMode={handleSetHolidayTheme}
+          onToggleSnow={handleToggleSnow}
+          onToggleSantaFrame={advent.toggleSantaFrame}
+          onToggleSnakeSkin={advent.toggleSnakeSkin}
+          onSetHolidayBell={advent.setHolidayBell}
         />
         <MyScheduleModal
           open={myModalOpen}
@@ -1086,7 +1202,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       {maintPrepBanner}
       {maintOverlay}
       {!potato && <VibeOverlay floats={vibeFloats} />}
-      {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} />}
+      {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
       <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}

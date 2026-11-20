@@ -183,6 +183,9 @@ export type CelebrateKind =
   | 'warp'
   | 'hacker'
   | 'weather'
+  | 'christmas'
+
+interface FestiveFlake { x: number; y: number; vy: number; r: number; a: number; ph: number; sway: number }
 
 interface Orb { x: number; y: number; vx: number; vy: number; r: number; a: number; ci: number; cj: number; t: number; ph: number }
 interface Dust { x: number; y: number; vx: number; vy: number; r: number; a: number; ci: number; ph: number; sp: number }
@@ -277,6 +280,8 @@ export class FxEngine {
   private running = false
   private wkind: WeatherKind = 'none'
   private wpow = 0
+  private festiveSnow = false
+  private festiveFlakes: FestiveFlake[] = []
   private drops: Drop[] = []
   private mists: MistBand[] = []
   private bolts: Bolt[] = []
@@ -432,6 +437,34 @@ export class FxEngine {
     this.isNight = night
   }
 
+  /** Finom, teljesítménybarát ünnepi hóesés háttéreffekt (kapcsolható, valódi havazáskor nem dupláz). */
+  setFestiveSnow(on: boolean) {
+    if (this.festiveSnow === on) return
+    this.festiveSnow = on
+    this.fitFestiveFlakes()
+  }
+
+  private fitFestiveFlakes() {
+    if (!this.festiveSnow) {
+      this.festiveFlakes.length = 0
+      return
+    }
+    const area = Math.min(1.25, Math.max(0.55, (this.w * this.h) / (1920 * 1080))) * (this.tv ? 0.65 : 1) * this.perfScale
+    const want = Math.max(18, Math.round(52 * area))
+    while (this.festiveFlakes.length < want) {
+      this.festiveFlakes.push({
+        x: rnd(0, Math.max(1, this.w)),
+        y: rnd(0, Math.max(1, this.h)),
+        vy: rnd(22, 54) * this.sc,
+        r: rnd(2.2, 5.4) * this.sc,
+        a: rnd(0.28, 0.72),
+        ph: rnd(0, TAU),
+        sway: rnd(10, 26),
+      })
+    }
+    this.festiveFlakes.length = Math.min(this.festiveFlakes.length, want)
+  }
+
   /** Valódi időjárás: derült, felhős/borult, ködös, szitálás, eső, hó, vihar (villámlással). */
   setWeather(code: number | null | undefined) {
     const [k, p] = weatherKind(code)
@@ -450,6 +483,7 @@ export class FxEngine {
     }
     this.fitDrops()
     this.fitMists()
+    this.fitFestiveFlakes()
   }
 
   private getStickerSprite(glyph: string, glow?: string): HTMLCanvasElement {
@@ -674,6 +708,32 @@ export class FxEngine {
         glow: 'rgba(120,200,255,0.65)',
       })
       this.waves.push({ x: cx, y: cy, r0: 10, r1: 220 * this.sc, t: 0, max: 0.85, ci: 1 })
+      this.onSound?.('pop', 0)
+      return
+    }
+
+    if (kind === 'christmas') {
+      this.spawnStickerFountain(['❄️', '🎄', '🎁', '⭐', '🔔', '✨'], 34, cx, cy, {
+        spread: this.w * 0.34,
+        upMin: 220,
+        upMax: 480,
+        g: 310,
+        life: 2.8,
+        glow: 'rgba(255, 209, 102, 0.72)',
+      })
+      const xmasCols: RGB[] = [[230, 57, 70], [45, 212, 130], [255, 209, 102], [248, 250, 252]]
+      const n = Math.round(70 * k)
+      for (let i = 0; i < n; i++) {
+        const c = xmasCols[i % xmasCols.length]
+        this.queue.push({
+          t: this.time + rnd(0, 1.1),
+          fn: () => this.papers.push({
+            x: rnd(0, this.w), y: rnd(-36, -6), vx: rnd(-35, 35), vy: rnd(115, 220),
+            rot: rnd(0, TAU), vr: rnd(-5, 5), w: rnd(6, 12) * this.sc, h: rnd(4, 7) * this.sc,
+            colStr: `rgb(${c[0]},${c[1]},${c[2]})`, ph: rnd(0, TAU),
+          }),
+        })
+      }
       this.onSound?.('pop', 0)
       return
     }
@@ -1007,6 +1067,7 @@ export class FxEngine {
     this.scanLedges(true)
     this.fitDrops()
     this.fitMists()
+    this.fitFestiveFlakes()
   }
 
   private newOrb(): Orb {
@@ -1096,6 +1157,20 @@ export class FxEngine {
       m.x += m.vx * dt
       if (m.vx > 0 && m.x > w + 40) m.x = -m.w - 40
       else if (m.vx < 0 && m.x < -m.w - 40) m.x = w + 40
+    }
+
+    // Finom, nem zavaró ünnepi hóesés (ha az időjárás amúgy is havas, nem duplázzuk)
+    if (this.festiveFlakes.length && this.wkind !== 'snow') {
+      for (const fl of this.festiveFlakes) {
+        fl.y += fl.vy * dt
+        fl.x += Math.sin(this.time * 0.75 + fl.ph) * fl.sway * dt
+        if (fl.y > h + 16) {
+          fl.y = rnd(-24, -6)
+          fl.x = rnd(0, w)
+        }
+        if (fl.x < -16) fl.x = w + 16
+        else if (fl.x > w + 16) fl.x = -16
+      }
     }
 
     // Kártya-peremek ellenőrzése (ritkítva + csak látható kártyákra)
@@ -1585,6 +1660,18 @@ export class FxEngine {
     cBg.globalAlpha = 1
 
     this.drawWeatherBg(cBg, isDark)
+
+    // Finom, nem zavaró ünnepi hóesés a háttérrétegen (előre renderelt sprite-tal, nulla shadowBlur)
+    if (this.festiveFlakes.length && this.wkind !== 'snow') {
+      cBg.globalCompositeOperation = 'source-over'
+      const spr = isDark ? this.snowSprite : this.sprites[1]
+      for (const fl of this.festiveFlakes) {
+        cBg.globalAlpha = isDark ? fl.a : fl.a * 0.72
+        const sz = fl.r * 2.8
+        cBg.drawImage(spr, fl.x - sz * 0.5, fl.y - sz * 0.5, sz, sz)
+      }
+      cBg.globalAlpha = 1
+    }
 
     // 2. Kártyákhoz rögzített hósapkák és becsapódások
     this.drawLedges()

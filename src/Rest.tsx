@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as PE } from 'react'
-import { botDir, newGame, step, type G, type P } from './lib/snake'
+import { botDir, drawSnakeBoard, newGame, step, type G, type P, type SnakeSkin } from './lib/snake'
 import { botTarget, H, newCatch, stepCatch, W, type C } from './lib/catch'
 import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
+import { getAdventUnlocked, loadAdventState, saveAdventState } from './lib/advent'
 
 const COLS = 22, ROWS = 14
 const KEYS: Record<string, P> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, w: { x: 0, y: -1 }, s: { x: 0, y: 1 }, a: { x: -1, y: 0 }, d: { x: 1, y: 0 } }
@@ -33,6 +34,35 @@ function Snake({ tv }: { tv: boolean }) {
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(bestGet)
   const [diff, setDiff] = useState<SnakeDiff>(diffGet)
+  const [xmasUnlocked, setXmasUnlocked] = useState(() => getAdventUnlocked(loadAdventState().openedDays).hasSnakeSkin)
+  const [skin, setSkin] = useState<SnakeSkin>(() => {
+    const st = loadAdventState()
+    return getAdventUnlocked(st.openedDays).hasSnakeSkin && st.snakeSkinEnabled ? 'christmas' : 'neon'
+  })
+  const skinRef = useRef<SnakeSkin>(skin)
+  skinRef.current = skin
+
+  useEffect(() => {
+    const syncSkin = () => {
+      const st = loadAdventState()
+      const has = getAdventUnlocked(st.openedDays).hasSnakeSkin
+      setXmasUnlocked(has)
+      setSkin(has && st.snakeSkinEnabled ? 'christmas' : 'neon')
+    }
+    window.addEventListener('sulibell:advent-change', syncSkin)
+    window.addEventListener('storage', syncSkin)
+    return () => {
+      window.removeEventListener('sulibell:advent-change', syncSkin)
+      window.removeEventListener('storage', syncSkin)
+    }
+  }, [])
+
+  const toggleXmasSkin = (next: SnakeSkin) => {
+    if (next === 'christmas' && !xmasUnlocked) return
+    setSkin(next)
+    const st = loadAdventState()
+    saveAdventState({ ...st, snakeSkinEnabled: next === 'christmas' })
+  }
   const wait = useRef(0)
   const [playerName, setPlayerName] = useState(() => {
     try {
@@ -71,24 +101,8 @@ function Snake({ tv }: { tv: boolean }) {
       const c = cv.current; if (!c) return
       const W = c.clientWidth || 440, dpr = Math.min(window.devicePixelRatio || 1, 2)
       if (c.width !== Math.round(W * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round((W * ROWS / COLS) * dpr) }
-      const x = c.getContext('2d')!, k = c.width / COLS, G = g.current
-      x.setTransform(1, 0, 0, 1, 0, 0)
-      x.fillStyle = '#080a1c'; x.fillRect(0, 0, c.width, c.height)
-      x.fillStyle = 'rgba(120,140,255,.14)'
-      for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) { x.beginPath(); x.arc((i + .5) * k, (j + .5) * k, k * .05, 0, 6.3); x.fill() }
-      // étel (pulzál)
-      const t = performance.now() / 260, f = G.food
-      if (f.x >= 0) { x.shadowColor = '#ffb02e'; x.shadowBlur = k * .9; x.fillStyle = '#ffb02e'; x.beginPath(); x.arc((f.x + .5) * k, (f.y + .5) * k, k * (.28 + .05 * Math.sin(t)), 0, 6.3); x.fill() }
-      // kígyó: fejtől a farokig cián → rózsaszín
-      const n = G.snake.length
-      G.snake.forEach((s, i) => {
-        const p = n > 1 ? i / (n - 1) : 0
-        x.shadowColor = G.dead ? '#ff3b5c' : `hsl(${180 + p * 130} 100% 60%)`; x.shadowBlur = k * .6
-        x.fillStyle = G.dead ? '#ff3b5c' : `hsl(${180 + p * 130} 100% ${62 - p * 8}%)`
-        const r = k * (i === 0 ? .44 : .38)
-        const bx = (s.x + .5) * k - r, by = (s.y + .5) * k - r; x.beginPath(); if (x.roundRect) x.roundRect(bx, by, r * 2, r * 2, r * .5); else x.rect(bx, by, r * 2, r * 2); x.fill()
-      })
-      x.shadowBlur = 0
+      const x = c.getContext('2d')!
+      drawSnakeBoard(x, c.width, c.height, g.current, skinRef.current, performance.now())
     }
     const tick = () => {
       if (document.hidden) return
@@ -154,6 +168,16 @@ function Snake({ tv }: { tv: boolean }) {
             {d.label}
           </button>
         ))}
+        {xmasUnlocked && (
+          <button
+            type="button"
+            className={skin === 'christmas' ? 'on' : ''}
+            onClick={() => toggleXmasSkin(skin === 'christmas' ? 'neon' : 'christmas')}
+            title="Adventi Karácsonyi Snake kinézet váltása"
+          >
+            {skin === 'christmas' ? '🎄 Karácsonyi: BE' : '🎄 Karácsonyi skin'}
+          </button>
+        )}
       </div>
     )}
     <div className="snakescreen">

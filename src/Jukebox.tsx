@@ -47,6 +47,17 @@ const QUICK_VIDEOS: { title: string; ytId: string }[] = [
   { title: 'Látványos fizikai kísérletek (Slow Mo)', ytId: 'r8BiI9a2N4U' },
 ]
 
+const XMAS_QUICK_SONGS: { title: string; ytId: string }[] = [
+  { title: 'Wham! – Last Christmas', ytId: 'E8gmARGvPlI' },
+  { title: 'Mariah Carey – All I Want For Christmas Is You', ytId: 'yXQViqx6GMY' },
+  { title: 'Shakin’ Stevens – Merry Christmas Everyone', ytId: 'N-PyWfVkjZc' },
+]
+
+const XMAS_QUICK_VIDEOS: { title: string; ytId: string }[] = [
+  { title: 'Karácsonyi kandalló & meghitt téli hangulat 4K', ytId: 'L_LUpnjgPso' },
+  { title: 'Svájci havas Alpok 4K drónvideó', ytId: 'linlz7-Pnvw' },
+]
+
 const STORAGE_PREFIX = 'csengeto-jukebox-'
 const VOTED_PREFIX = 'csengeto-jukebox-voted-'
 const DELETED_PREFIX = 'csengeto-jukebox-del-'
@@ -781,12 +792,14 @@ export default memo(function Jukebox({
   breakKey,
   tv,
   sound,
+  christmas,
 }: {
   schoolId?: string
   day: string
   breakKey?: string
   tv?: boolean
   sound?: boolean
+  christmas?: boolean
 }) {
   const { songs, voted, mode, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
   const isVideoDay = mode === 'video'
@@ -888,7 +901,9 @@ export default memo(function Jukebox({
     )
   }
 
-  const quickItems = isVideoDay ? QUICK_VIDEOS : QUICK_SONGS
+  const quickItems = isVideoDay
+    ? (christmas ? [...XMAS_QUICK_VIDEOS, ...QUICK_VIDEOS.slice(0, 3)] : QUICK_VIDEOS)
+    : (christmas ? [...XMAS_QUICK_SONGS, ...QUICK_SONGS.slice(0, 4)] : QUICK_SONGS)
   const musicRoom = channels.music || '#🎵-zenekérés-ötletek'
   const videoRoom = channels.videos || '#🎬-videóbeküldés'
 

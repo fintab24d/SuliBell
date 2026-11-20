@@ -18,6 +18,18 @@ export const VIBES: VibeItem[] = [
   { id: 'love', emoji: '❤️', label: 'Szuper', color: '#ff4f6a' },
 ]
 
+/** Karácsonyi / Adventi témához tartozó ünnepi hangulat-megjelenés (ugyanazokkal a DB-kompatibilis azonosítókkal). */
+export const CHRISTMAS_VIBES: VibeItem[] = [
+  { id: 'fire', emoji: '🎄', label: 'Ünnepi', color: '#2ecc71' },
+  { id: 'party', emoji: '🎁', label: 'Szünet!', color: '#e63946' },
+  { id: 'sleep', emoji: '❄️', label: 'Fázom', color: '#7dd3fc' },
+  { id: 'mind', emoji: '🎅', label: 'Mikulás', color: '#ff4d6d' },
+  { id: 'coffee', emoji: '☕', label: 'Forró csoki', color: '#ffd166' },
+  { id: 'love', emoji: '⭐', label: 'Varázs', color: '#fbbf24' },
+]
+
+export const getVibePalette = (christmas?: boolean) => (christmas ? CHRISTMAS_VIBES : VIBES)
+
 interface FloatEmoji {
   uid: number
   emoji: string
@@ -45,7 +57,7 @@ function saveLocalCounts(day: string, c: Record<string, number>) {
 }
 
 /** Élő emoji-eső és iskolai hangulat-szinkronizáció (Supabase Realtime + BroadcastChannel + opcionális DB). */
-export function useVibe(schoolId: string | undefined, day: string, sound?: boolean) {
+export function useVibe(schoolId: string | undefined, day: string, sound?: boolean, christmas?: boolean) {
   const [counts, setCounts] = useState<Record<string, number>>(() => loadLocalCounts(day))
   const [floats, setFloats] = useState<FloatEmoji[]>([])
   const [cooldown, setCooldown] = useState(false)
@@ -55,13 +67,16 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
   const uidRef = useRef(1)
   const soundRef = useRef(sound)
   soundRef.current = sound
+  const xmasRef = useRef(!!christmas)
+  xmasRef.current = !!christmas
 
   useEffect(() => {
     setCounts(loadLocalCounts(day))
   }, [day])
 
   const spawnEmoji = useCallback((vibeId: string, burst = 1) => {
-    const v = VIBES.find(x => x.id === vibeId) ?? VIBES[0]
+    const palette = getVibePalette(xmasRef.current)
+    const v = palette.find(x => x.id === vibeId) ?? palette[0]
     const added: FloatEmoji[] = Array.from({ length: burst }, (_, i) => ({
       uid: uidRef.current++,
       emoji: v.emoji,
@@ -223,15 +238,18 @@ export const VibePanel = memo(function VibePanel({
   onSend,
   cooldown,
   tv,
+  christmas,
 }: {
   counts: Record<string, number>
   onSend: (id: string) => void
   cooldown: boolean
   tv?: boolean
+  christmas?: boolean
 }) {
-  const total = VIBES.reduce((acc, v) => acc + (counts[v.id] ?? 0), 0)
+  const palette = getVibePalette(christmas)
+  const total = palette.reduce((acc, v) => acc + (counts[v.id] ?? 0), 0)
   const topVibe = total > 0
-    ? [...VIBES].sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0))[0]
+    ? [...palette].sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0))[0]
     : null
   const topPct = topVibe && total > 0 ? Math.round(((counts[topVibe.id] ?? 0) / total) * 100) : 0
 
@@ -240,7 +258,7 @@ export const VibePanel = memo(function VibePanel({
     return (
       <section className="panel vibe-tv">
         <div className="vibe-tv-row">
-          <div className="tag" style={{ margin: 0 }}>Élő iskolai hangulat</div>
+          <div className="tag" style={{ margin: 0 }}>{christmas ? '🎄 Ünnepi iskolai hangulat' : 'Élő iskolai hangulat'}</div>
           {topVibe && (
             <span className="vibe-topbadge" style={{ '--vc': topVibe.color } as CSSProperties}>
               {topVibe.emoji} {topVibe.label} ({topPct}%) • {total} reakció ma
@@ -248,7 +266,7 @@ export const VibePanel = memo(function VibePanel({
           )}
         </div>
         <div className="vibe-meter">
-          {VIBES.map(v => {
+          {palette.map(v => {
             const c = counts[v.id] ?? 0
             if (!c) return null
             return (
@@ -265,10 +283,12 @@ export const VibePanel = memo(function VibePanel({
   }
 
   return (
-    <section className="panel full vibe-panel">
+    <section className={`panel full vibe-panel${christmas ? ' vibe-xmas' : ''}`}>
       <div className="vibe-head">
         <div>
-          <div className="tag" style={{ marginBottom: 4 }}>Élő Hangulat- és Reakciófal</div>
+          <div className="tag" style={{ marginBottom: 4 }}>
+            {christmas ? '🎄 Ünnepi Hangulat- és Reakciófal' : 'Élő Hangulat- és Reakciófal'}
+          </div>
           <p className="meta" style={{ margin: 0 }}>
             Küldj egy reakciót – élőben felrepül mindenkinél és a folyosói TV-n is!
           </p>
@@ -282,7 +302,7 @@ export const VibePanel = memo(function VibePanel({
       </div>
 
       <div className="vibe-btns">
-        {VIBES.map(v => {
+        {palette.map(v => {
           const cnt = counts[v.id] ?? 0
           return (
             <button
@@ -303,7 +323,7 @@ export const VibePanel = memo(function VibePanel({
 
       {total > 0 && (
         <div className="vibe-meter" aria-label="Mai hangulat megoszlása">
-          {VIBES.map(v => {
+          {palette.map(v => {
             const c = counts[v.id] ?? 0
             if (!c) return null
             return (

@@ -2273,3 +2273,698 @@ html.egg-warp #root main {
   background: #000000 !important;
   background-color: #000000 !important;
 }
+
+
+/* ==================== 🎄 KARÁCSONYI SKIN & 26 NAPOS ADVENTI KALENDÁRIUM ==================== */
+
+/* 1. Karácsonyi / Adventi téma: mély fenyőzöld, ünnepi piros és arany kiemelések */
+:root[data-holiday-theme="christmas"] {
+  --bg: #05160e;
+  --panel: rgba(8, 30, 20, 0.82);
+  --fg: #f4fbf6;
+  --mut: #a8cdb8;
+  --line: rgba(255, 209, 102, 0.24);
+  --edge: rgba(255, 209, 102, 0.50);
+  --key: #0b291b;
+  --brand: #ffd166;
+  --lesson: #e63946;
+  --break: #2ecc71;
+  --next: #ffd166;
+  --tile: #061b12;
+  --tilefg: #ffd166;
+  --n-pink: #e63946;
+  --n-cyan: #2ecc71;
+  --n-amber: #ffd166;
+  --n-green: #2ecc71;
+  --ledgrad: repeating-linear-gradient(135deg, #e63946 0 12px, #f8fafc 12px 24px);
+  --scrim: rgba(4, 18, 11, 0.68);
+}
+:root[data-theme="light"][data-holiday-theme="christmas"] {
+  --bg: #f3faf5;
+  --panel: rgba(255, 255, 255, 0.86);
+  --fg: #102a1c;
+  --mut: #466b56;
+  --line: rgba(22, 101, 52, 0.24);
+  --edge: rgba(185, 28, 28, 0.42);
+  --key: #ffffff;
+  --brand: #b45309;
+  --lesson: #c81e32;
+  --break: #15803d;
+  --next: #b45309;
+  --tile: #0b2819;
+  --tilefg: #ffd166;
+  --scrim: rgba(240, 252, 244, 0.55);
+}
+
+/* 2. Északi fény (Aurora) mini-téma (Dec. 10.) */
+:root[data-holiday-theme="aurora"] {
+  --bg: #040b18;
+  --panel: rgba(8, 20, 38, 0.80);
+  --fg: #effaff;
+  --mut: #9cc4d8;
+  --line: rgba(46, 230, 166, 0.28);
+  --edge: rgba(56, 232, 255, 0.52);
+  --key: #0b1c34;
+  --brand: #2ee6a6;
+  --lesson: #2ee6a6;
+  --break: #38e8ff;
+  --next: #a855f7;
+  --tile: #061426;
+  --tilefg: #2ee6a6;
+  --n-pink: #a855f7;
+  --n-cyan: #38e8ff;
+  --n-amber: #2ee6a6;
+  --n-green: #2ee6a6;
+  --ledgrad: linear-gradient(90deg, #2ee6a6, #38e8ff, #818cf8, #a855f7, #2ee6a6);
+  --scrim: rgba(3, 12, 26, 0.66);
+}
+:root[data-theme="light"][data-holiday-theme="aurora"] {
+  --bg: #eefcff;
+  --panel: rgba(255, 255, 255, 0.86);
+  --fg: #0b2436;
+  --mut: #4b7085;
+  --line: rgba(13, 148, 136, 0.25);
+  --edge: rgba(124, 58, 237, 0.42);
+  --key: #ffffff;
+  --brand: #0d9488;
+  --lesson: #0d9488;
+  --break: #0284c7;
+  --next: #7c3aed;
+  --tile: #081e30;
+  --tilefg: #2ee6a6;
+  --scrim: rgba(235, 252, 255, 0.5);
+}
+
+/* 3. Mézeskalács mini-téma (Dec. 15.) */
+:root[data-holiday-theme="gingerbread"] {
+  --bg: #170c06;
+  --panel: rgba(36, 20, 11, 0.84);
+  --fg: #fff7ed;
+  --mut: #d8b594;
+  --line: rgba(245, 158, 11, 0.28);
+  --edge: rgba(251, 191, 36, 0.52);
+  --key: #2a170c;
+  --brand: #fbbf24;
+  --lesson: #e11d48;
+  --break: #f59e0b;
+  --next: #fde68a;
+  --tile: #1f1108;
+  --tilefg: #fde68a;
+  --n-pink: #e11d48;
+  --n-cyan: #f59e0b;
+  --n-amber: #fde68a;
+  --n-green: #fbbf24;
+  --ledgrad: linear-gradient(90deg, #b45309, #f59e0b, #fff7ed, #e11d48, #f59e0b);
+  --scrim: rgba(24, 11, 4, 0.68);
+}
+:root[data-theme="light"][data-holiday-theme="gingerbread"] {
+  --bg: #fff8ef;
+  --panel: rgba(255, 252, 245, 0.88);
+  --fg: #3b1d0b;
+  --mut: #85583a;
+  --line: rgba(180, 83, 9, 0.24);
+  --edge: rgba(180, 83, 9, 0.45);
+  --key: #ffffff;
+  --brand: #b45309;
+  --lesson: #be123c;
+  --break: #d97706;
+  --next: #92400e;
+  --tile: #2e180c;
+  --tilefg: #fde68a;
+  --scrim: rgba(255, 246, 232, 0.5);
+}
+
+/* Cukorpálca-csíkos haladási sáv a karácsonyi témában */
+@keyframes candySlide {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+.xmas-bar {
+  width: min(100%, 340px);
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 209, 102, 0.48);
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.xmas-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    135deg,
+    #e63946 0 9px,
+    #f8fafc 9px 18px
+  );
+  background-size: 26px 26px;
+  animation: candySlide 1.6s linear infinite;
+  transition: width 0.8s linear;
+  box-shadow: 0 0 12px rgba(230, 57, 70, 0.55);
+}
+:root[data-holiday-theme="christmas"] .l.now {
+  box-shadow: inset 4px 0 0 #e63946;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(230, 57, 70, 0.24) 0 10px,
+      rgba(255, 255, 255, 0.14) 10px 20px
+    ) 0 0 / var(--p, 0%) 100% no-repeat,
+    rgba(255, 209, 102, 0.08);
+}
+
+/* 4. Mikulás keret (Dec. 6. jutalom) */
+:root[data-santa-frame="1"] .panel.now {
+  border: 2px solid rgba(230, 57, 70, 0.82) !important;
+  box-shadow:
+    0 0 0 2px rgba(255, 209, 102, 0.32),
+    0 0 36px -6px rgba(230, 57, 70, 0.46),
+    inset 0 4px 0 rgba(248, 250, 252, 0.65) !important;
+}
+:root[data-santa-frame="1"] .ring {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2.5px rgba(230, 57, 70, 0.52),
+    0 0 0 5px rgba(255, 209, 102, 0.26),
+    0 0 28px -4px rgba(255, 209, 102, 0.38);
+}
+
+/* Mikulás-sapka díszítés a SuliBell logón */
+.logo-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.santa-hat-svg {
+  position: absolute;
+  top: -11px;
+  left: -8px;
+  transform: rotate(-16deg);
+  pointer-events: none;
+  z-index: 2;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.48));
+}
+
+/* Adventi koszorú SVG gyertyaláng animáció */
+@keyframes candleFlicker {
+  0%, 100% { transform: scaleY(1) rotate(-2deg); opacity: 0.95; }
+  50% { transform: scaleY(1.12) rotate(2.5deg); opacity: 1; }
+}
+.adv-wreath-svg {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.adv-flame {
+  animation: candleFlicker 1.4s ease-in-out infinite;
+}
+
+/* Fejléc Advent gomb, Hóesés gomb és Téli Túlélő jelvény */
+.adv-hdr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-color: rgba(230, 57, 70, 0.55);
+  background: linear-gradient(135deg, rgba(230, 57, 70, 0.16), rgba(16, 185, 129, 0.14), var(--key));
+}
+.adv-hdr-btn.on {
+  border-color: rgba(255, 209, 102, 0.78);
+  box-shadow: 0 3px 0 var(--edge), 0 0 16px -4px rgba(255, 209, 102, 0.52);
+}
+@keyframes advBtnPulse {
+  0%, 100% { box-shadow: 0 3px 0 var(--edge), 0 0 0 0 rgba(230, 57, 70, 0.55); }
+  50% { box-shadow: 0 3px 0 var(--edge), 0 0 0 8px transparent; }
+}
+.adv-hdr-btn.has-new {
+  border-color: #ffd166;
+  animation: advBtnPulse 2.2s ease-in-out infinite;
+}
+.adv-dot {
+  display: inline-grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: #e63946;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.snow-hdr-btn {
+  padding: 8px 11px;
+  min-width: 40px;
+}
+.snow-hdr-btn.on {
+  border-color: #7dd3fc !important;
+  color: #bae6fd !important;
+  background: rgba(56, 189, 248, 0.18) !important;
+}
+.survivor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fde047;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.22), rgba(230, 57, 70, 0.22));
+  border: 1px solid rgba(255, 215, 0, 0.65);
+  box-shadow: 0 0 14px -4px rgba(255, 215, 0, 0.55);
+}
+:root[data-theme="light"] .survivor-pill {
+  color: #92400e;
+}
+
+/* Téli szünet visszaszámláló diszkrét sáv a napi órarend mellett */
+.winter-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 15px;
+  border: 1px solid color-mix(in srgb, #7dd3fc 38%, var(--line));
+  border-left: 4px solid #38bdf8;
+  background: linear-gradient(
+    90deg,
+    rgba(56, 189, 248, 0.14),
+    rgba(230, 57, 70, 0.07) 65%,
+    var(--panel)
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.winter-strip.started {
+  border-left-color: #2ecc71;
+  border-color: rgba(46, 204, 113, 0.45);
+  background: linear-gradient(90deg, rgba(46, 204, 113, 0.18), rgba(255, 209, 102, 0.12), var(--panel));
+}
+.winter-strip-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.winter-ico {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.winter-txt {
+  display: grid;
+  gap: 1px;
+}
+.winter-txt b {
+  font-size: 0.94rem;
+  color: var(--fg);
+}
+.winter-txt small {
+  font-size: 0.8rem;
+  color: var(--mut);
+}
+.winter-adv-btn {
+  padding: 6px 11px;
+  font-size: 0.82rem;
+  border-color: rgba(255, 209, 102, 0.5);
+  white-space: nowrap;
+}
+
+/* Ünnepi VibePanel keret */
+.vibe-panel.vibe-xmas {
+  border-color: rgba(255, 209, 102, 0.36);
+}
+
+/* Adventi Kalendárium modal */
+.adv-backdrop {
+  z-index: 96;
+}
+.adv-modal {
+  width: min(760px, 100%);
+  max-height: calc(100svh - 24px);
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(255, 209, 102, 0.52);
+  background: linear-gradient(160deg, rgba(7, 25, 16, 0.96), rgba(10, 14, 28, 0.97));
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.76), 0 0 42px -12px rgba(230, 57, 70, 0.48);
+}
+:root[data-theme="light"] .adv-modal {
+  background: linear-gradient(160deg, rgba(246, 253, 248, 0.98), rgba(255, 250, 244, 0.98));
+}
+.adv-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.adv-modal-head h2 {
+  margin: 0;
+  font-size: 1.38rem;
+}
+.adv-wreath-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 209, 102, 0.32);
+  background: linear-gradient(120deg, rgba(15, 81, 50, 0.28), rgba(230, 57, 70, 0.10));
+}
+.adv-wreath-meta {
+  flex: 1;
+  min-width: 190px;
+  display: grid;
+  gap: 5px;
+}
+.adv-wreath-meta b {
+  font-size: 0.94rem;
+}
+.adv-sundays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.adv-sun-chip {
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--mut);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  border: 1px solid var(--line);
+}
+.adv-sun-chip.lit {
+  color: #fde047;
+  border-color: rgba(255, 209, 102, 0.62);
+  background: rgba(255, 209, 102, 0.16);
+}
+:root[data-theme="light"] .adv-sun-chip.lit {
+  color: #92400e;
+}
+.adv-time-pill {
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--mut);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.adv-time-pill.ok {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(34, 197, 94, 0.14);
+}
+:root[data-theme="light"] .adv-time-pill.ok {
+  color: #15803d;
+}
+.adv-body {
+  display: grid;
+  gap: 13px;
+}
+.adv-countdown-note {
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 0.87rem;
+  line-height: 1.42;
+  color: var(--fg);
+  border: 1px solid rgba(255, 209, 102, 0.42);
+  background: rgba(255, 209, 102, 0.10);
+}
+
+/* Kinyitott ablak kártya */
+.adv-reveal {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(255, 209, 102, 0.58);
+  background: linear-gradient(135deg, rgba(230, 57, 70, 0.14), rgba(15, 81, 50, 0.24));
+  box-shadow: 0 0 28px -10px rgba(255, 209, 102, 0.45);
+  animation: fadein 0.24s ease-out;
+}
+.adv-reveal.grand {
+  border-color: #ffd700;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.18), rgba(230, 57, 70, 0.18), rgba(15, 81, 50, 0.26));
+}
+.adv-reveal-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.adv-reveal-ico {
+  font-size: 2rem;
+  line-height: 1;
+}
+.adv-reveal-top > div {
+  flex: 1;
+  min-width: 0;
+}
+.adv-reveal-top small {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #ffd166;
+}
+:root[data-theme="light"] .adv-reveal-top small {
+  color: #b45309;
+}
+.adv-reveal-top h3 {
+  margin: 2px 0 0;
+  font-size: 1.16rem;
+}
+.adv-reveal-body {
+  margin: 0;
+  font-size: 0.93rem;
+  line-height: 1.5;
+  color: var(--fg);
+}
+.adv-reveal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.adv-reveal-actions:empty {
+  display: none;
+}
+
+/* Dec. 24. Főnyeremény üdvözlőkártya */
+.adv-greeting-card {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 215, 0, 0.72);
+  background:
+    radial-gradient(circle at 12% 15%, rgba(255, 215, 0, 0.2), transparent 45%),
+    radial-gradient(circle at 88% 85%, rgba(230, 57, 70, 0.22), transparent 45%),
+    rgba(6, 24, 15, 0.88);
+  text-align: center;
+}
+:root[data-theme="light"] .adv-greeting-card {
+  background: linear-gradient(135deg, #fffbeb, #fef2f2);
+}
+.adv-survivor-emblem {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+}
+.adv-survivor-emblem span {
+  font-size: 2.3rem;
+  line-height: 1;
+}
+.adv-survivor-emblem b {
+  font-size: 1.12rem;
+  color: #ffd700;
+}
+:root[data-theme="light"] .adv-survivor-emblem b {
+  color: #b45309;
+}
+.adv-survivor-emblem small {
+  color: var(--mut);
+  font-size: 0.8rem;
+}
+.adv-card-letter h4 {
+  margin: 0 0 6px;
+  font-size: 1.04rem;
+}
+.adv-card-letter p {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--mut);
+}
+.adv-card-sign {
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: #ffd166;
+}
+:root[data-theme="light"] .adv-card-sign {
+  color: #b45309;
+}
+
+/* 26 ablak rácsa */
+.adv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(102px, 1fr));
+  gap: 8px;
+}
+@media (max-width: 520px) {
+  .adv-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+}
+@keyframes advDoorPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.55), inset 0 0 14px -4px rgba(230, 57, 70, 0.45);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 0 20px -2px rgba(255, 209, 102, 0.72), inset 0 0 18px -2px rgba(255, 209, 102, 0.35);
+    transform: translateY(-2px);
+  }
+}
+.adv-door {
+  display: grid;
+  gap: 5px;
+  align-content: space-between;
+  padding: 9px 8px;
+  min-height: 92px;
+  border-radius: 13px;
+  text-align: center;
+  box-shadow: none;
+}
+.adv-door.grand {
+  grid-column: span 2;
+  border-color: rgba(255, 215, 0, 0.65);
+}
+.adv-door.locked {
+  opacity: 0.72;
+  background: color-mix(in srgb, var(--fg) 4%, var(--key));
+  border-style: dashed;
+}
+.adv-door.ready {
+  border: 1.5px solid #ffd166;
+  background: linear-gradient(145deg, rgba(230, 57, 70, 0.28), rgba(15, 81, 50, 0.34));
+  animation: advDoorPulse 2.1s ease-in-out infinite;
+}
+.adv-door.opened {
+  border-color: rgba(46, 204, 113, 0.62);
+  background: linear-gradient(145deg, rgba(46, 204, 113, 0.16), rgba(255, 209, 102, 0.10));
+}
+.adv-door.active {
+  outline: 2px solid #ffd166;
+  outline-offset: 2px;
+}
+.adv-door-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+.adv-door-num {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--fg);
+}
+.adv-door-date {
+  font-size: 0.7rem;
+  color: var(--mut);
+  font-weight: 600;
+}
+.adv-door-mid {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+.adv-door-foot {
+  font-size: 0.69rem;
+  font-weight: 700;
+  color: var(--mut);
+}
+.adv-door.ready .adv-door-foot {
+  color: #fde047;
+}
+.adv-door.opened .adv-door-foot {
+  color: #4ade80;
+}
+:root[data-theme="light"] .adv-door.opened .adv-door-foot {
+  color: #15803d;
+}
+
+/* Skin választó kártyák a 2. fülön */
+.adv-theme-opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.adv-opt-btn {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.adv-opt-btn span {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.adv-opt-btn small {
+  font-size: 0.74rem;
+  color: var(--mut);
+}
+.adv-opt-btn.on {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, var(--key));
+}
+.adv-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.adv-badge-ico {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.adv-badge-row b {
+  display: block;
+  font-size: 0.95rem;
+}
+.adv-badge-row small {
+  color: var(--mut);
+  font-size: 0.8rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adv-flame,
+  .adv-door.ready,
+  .adv-hdr-btn.has-new,
+  .xmas-bar i {
+    animation: none !important;
+  }
+}
+
+/* Potato PC mód kompatibilitás az Adventi modalhoz és Téli sávhoz */
+:root[data-potato="1"] .adv-modal,
+:root[data-potato="1"] .winter-strip {
+  background: #101426 !important;
+  border-color: rgba(160, 175, 255, 0.32) !important;
+}
+:root[data-potato="1"][data-theme="light"] .adv-modal,
+:root[data-potato="1"][data-theme="light"] .winter-strip {
+  background: #ffffff !important;
+  border-color: rgba(80, 70, 160, 0.32) !important;
+}
