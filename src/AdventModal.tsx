@@ -120,7 +120,7 @@ interface WinterBreakStripProps {
   onOpenAdvent?: () => void
 }
 
-/** Diszkrét Téli szünet visszaszámláló sáv a napi órarend mellé (december 18-ig). */
+/** Diszkrét Téli szünet visszaszámláló sáv a napi órarend mellé (az utolsó tanítási nap dec. 18., a szünet dec. 19-én kezdődik). */
 export function WinterBreakStrip({
   serverDate,
   schoolDaysLeft,
@@ -148,17 +148,17 @@ export function WinterBreakStrip({
             <b>Utolsó tanítási nap a téli szünet előtt!</b>
             <small>
               {hoursLeft > 0
-                ? `Már csak kb. ${hoursLeft} óra van hátra december 18. végéig!`
+                ? `Már csak kb. ${hoursLeft} óra az utolsó csengőig — holnap (dec. 19.) indul a szünet!`
                 : 'Mindjárt kicsengetnek a téli szünetre!'}
             </small>
           </div>
         ) : (
           <div className="winter-txt">
             <b>
-              Téli szünetig (dec. 18.): még {schoolDaysLeft} tanítási nap
+              Téli szünetig (dec. 19.): még {schoolDaysLeft} tanítási nap
             </b>
             <small>
-              {hoursLeft > 0 ? `≈ ${hoursLeft} óra a szünet kezdetéig` : 'Már nincs sok hátra!'}
+              {hoursLeft > 0 ? `≈ ${hoursLeft} óra az utolsó tanítási nap végéig (dec. 18.)` : 'Már nincs sok hátra!'}
             </small>
           </div>
         )}
