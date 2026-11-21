@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { audioReady, enableAudio, preload, ring, type BellSoundStyle } from './lib/sound'
 import { useSupporters, useVip, type VipPrefs } from './lib/vip'
 import { SupporterTicker, VipModal, type VipModalTab } from './VipModal'
@@ -9,13 +9,39 @@ import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
 import { PollCard, usePoll } from './Poll'
 import BreakVideo, { useVideos } from './BreakVideo'
-import RestMode from './Rest'
-import Ask from './Ask'
+const RestMode = lazy(() => import('./Rest'))
+const Ask = lazy(() => import('./Ask'))
 import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } from './MySchedule'
 import { VibeOverlay, VibePanel, useVibe } from './Vibe'
-import Arena from './Arena'
-import Jukebox, { mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
+const Arena = lazy(() => import('./Arena'))
+import Jukebox, { useJukebox, type SongWish } from './Jukebox'
 import Daily from './Daily'
+const GamesPage = lazy(() => import('./pages/GamesPage'))
+const MediaPage = lazy(() => import('./pages/MediaPage'))
+
+type AppTab = 'home' | 'schedule' | 'games' | 'media'
+type LayoutMode = 'classic' | 'tabbed'
+const LAYOUT_KEY = 'sulibell_layout_v1'
+const TAB_PATH: Record<AppTab, string> = {
+  home: '/',
+  schedule: '/orarend',
+  games: '/jatek',
+  media: '/zene',
+}
+function tabFromPath(pathname: string): AppTab {
+  if (pathname.startsWith('/orarend')) return 'schedule'
+  if (pathname.startsWith('/jatek')) return 'games'
+  if (pathname.startsWith('/zene')) return 'media'
+  return 'home'
+}
+function loadLayoutMode(pathname: string): LayoutMode {
+  if (tabFromPath(pathname) !== 'home') return 'tabbed'
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === 'tabbed' ? 'tabbed' : 'classic'
+  } catch {
+    return 'classic'
+  }
+}
 import { isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/partners'
 import { isKofiAnnouncement, parseKofiFromAnnouncements, formatDonationAmount } from './lib/kofi'
@@ -297,51 +323,56 @@ function DayStrip({ L, secs, phase, cancelledIds }: { L: any[]; secs: number; ph
   </div>
 }
 
-const ScrollCue = memo(function ScrollCue({ isVideoDay }: { isVideoDay: boolean }) {
-  const [show, setShow] = useState(false)
 
-  useEffect(() => {
-    const check = () => {
-      const target = document.querySelector('.jukebox, .arena') as HTMLElement | null
-      if (!target) { setShow(false); return }
-      const rect = target.getBoundingClientRect()
-      setShow(rect.top > window.innerHeight - 90)
-    }
-    check()
-    const t = setTimeout(check, 250)
-    window.addEventListener('scroll', check, { passive: true })
-    window.addEventListener('resize', check, { passive: true })
-    return () => {
-      clearTimeout(t)
-      window.removeEventListener('scroll', check)
-      window.removeEventListener('resize', check)
-    }
-  }, [isVideoDay])
-
-  if (!show) return null
-  const goDown = () => {
-    const target = document.querySelector('.jukebox, .arena') as HTMLElement | null
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  return (
-    <button
-      type="button"
-      className="scroll-cue"
-      onClick={goDown}
-      title="Ugrás a zene-/videóküldéshez és a szüneti játékhoz"
-    >
-      <span className="scroll-cue-txt">
-        Görgess lejjebb a {isVideoDay ? 'videó beküldésért' : 'zene beküldésért'} és a szüneti játékhoz
-      </span>
-      <span className="scroll-cue-arr" aria-hidden="true">↓</span>
-    </button>
-  )
-})
 
 export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const sb = useSandbox(!!sandbox)
   const tv = sandbox ? sb.simTv : location.pathname.startsWith('/display')
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => loadLayoutMode(location.pathname))
+  const [activeTab, setActiveTab] = useState<AppTab>(() => tabFromPath(location.pathname))
+  useEffect(() => {
+    if (tv || sandbox) return
+    const onPop = () => {
+      const t = tabFromPath(location.pathname)
+      setActiveTab(t)
+      if (t !== 'home') setLayoutMode('tabbed')
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LAYOUT_KEY) {
+        setLayoutMode(e.newValue === 'tabbed' ? 'tabbed' : 'classic')
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [tv, sandbox])
+  const toggleLayoutMode = useCallback(() => {
+    setLayoutMode(prev => {
+      const next: LayoutMode = prev === 'tabbed' ? 'classic' : 'tabbed'
+      try { localStorage.setItem(LAYOUT_KEY, next) } catch { /* ignore */ }
+      if (next === 'classic' && !tv && !sandbox && location.pathname !== '/') {
+        try { window.history.pushState(null, '', '/') } catch { /* ignore */ }
+      }
+      if (next === 'tabbed') setActiveTab('home')
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+      return next
+    })
+  }, [tv, sandbox])
+  const navigateTab = useCallback((next: AppTab) => {
+    setActiveTab(next)
+    if (!tv && !sandbox) {
+      const targetPath = TAB_PATH[next]
+      if (location.pathname !== targetPath) {
+        try { window.history.pushState(null, '', targetPath) } catch { /* ignore */ }
+      }
+    }
+    window.scrollTo({ top: 0, behavior: 'auto' })
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+  }, [tv, sandbox])
   const { map: myMap, update: updateMyMap, getEntry, hasAny: hasMySchedule } = useMySchedule()
   const [potato, setPotato] = useState(() => { try { return localStorage.getItem('potato') === '1' } catch { return false } })
   useEffect(() => { if (potato) document.documentElement.dataset.potato = '1'; else delete document.documentElement.dataset.potato }, [potato])
@@ -362,8 +393,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   }, [tv])
   const [fxOn, setFxOn] = useState(() => localStorage.getItem('fx') !== '0')
   const fx = !potato && fxOn && data?.settings.particles !== false && style === 'neon'
-  const { poll, counts } = usePoll(data?.id)
-  const videos = useVideos(data?.id)
+  const isTvWeekend = tv && !!z && (z.weekday === 6 || z.weekday === 7) && state?.phase === 'closed'
+  const tvActive = tv && !isTvWeekend
+  const needAll = tvActive || (!tv && layoutMode === 'classic')
+  const { poll, counts } = usePoll(needAll ? data?.id : undefined)
+  const videos = useVideos(needAll ? data?.id : undefined)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
   const [myModalOpen, setMyModalOpen] = useState(false)
   useOnlinePresence(sandbox ? undefined : data?.id, tv ? 'tv' : 'web')
@@ -415,12 +449,12 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     }
   }
   const { counts: vibeCounts, floats: vibeFloats, sendVibe, cooldown: vibeCooldown } = useVibe(
-    data?.id,
+    needAll || (!tv && activeTab === 'home') ? data?.id : undefined,
     z?.date ?? '',
     !!data?.settings.sound_enabled && audioOn,
     isXmasSkin
   )
-  const { songs: jbWishes, finishSong } = useJukebox(data?.id, z?.date ?? '', false)
+  const { songs: jbWishes, finishSong } = useJukebox(needAll ? data?.id : undefined, z?.date ?? '', false)
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
   const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
@@ -808,16 +842,75 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
   )
   const e0 = events[0]
-  const restBox = s.phase === 'closed' && data.settings.rest_mode !== false && <RestMode tv={tv} reason={s.reason} day={z.date}
-    ev={pv && first && until > 0
-      ? { icon: /ősz/i.test(s.reason ?? '') ? '🍂' : /tél/i.test(s.reason ?? '') ? '❄️' : /nyár/i.test(s.reason ?? '') ? '☀️' : /tavasz/i.test(s.reason ?? '') ? '🌷' : '😴',
-          days: Math.floor(until / 86400), hours: Math.floor((until % 86400) / 3600), mins: Math.floor((until % 3600) / 60),
-          note: `Ennyi van még hátra a pihenésből! Tanítás újra: ${dayName(pv.date, { weekday: 'long' })}, ${fmtHM(first.start_time)}` }
-      : e0 ? { icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined} />
+  const restEv = pv && first && until > 0
+    ? { icon: /ősz/i.test(s.reason ?? '') ? '🍂' : /tél/i.test(s.reason ?? '') ? '❄️' : /nyár/i.test(s.reason ?? '') ? '☀️' : /tavasz/i.test(s.reason ?? '') ? '🌷' : '😴',
+        days: Math.floor(until / 86400), hours: Math.floor((until % 86400) / 3600), mins: Math.floor((until % 3600) / 60),
+        note: `Ennyi van még hátra a pihenésből! Tanítás újra: ${dayName(pv.date, { weekday: 'long' })}, ${fmtHM(first.start_time)}` }
+    : e0 ? { icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined
+  const restBox = (tv || layoutMode === 'classic') && s.phase === 'closed' && data.settings.rest_mode !== false && <Suspense fallback={null}><RestMode tv={tv} reason={s.reason} day={z.date} ev={restEv} /></Suspense>
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
 
   // ==================== TV / DISPLAY NÉZET (FIX 100SVH, GÖRGETÉS NÉLKÜL) ====================
   if (tv) {
+    if (isTvWeekend) {
+      return (
+        <>
+          <main className={`tv tv-weekend-mode${isUpdating ? ' is-updating' : ''}`}>
+            <header className="tv-hdr">
+              <div className="tv-hdr-left">
+                <span className="brand">
+                  <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  <span className="brand-word">
+                    {APP_NAME.endsWith('ll') ? (
+                      <>
+                        {APP_NAME.slice(0, -2)}
+                        <span className="brand-ll">
+                          {APP_NAME.slice(-2)}
+                          {showSantaHat && <SantaHatSvg />}
+                        </span>
+                      </>
+                    ) : (
+                      APP_NAME
+                    )}
+                  </span>
+                  {advent.litCandles > 0 && <AdventWreathIcon litCount={advent.litCandles} size="sm" />}
+                </span>
+                <div className="date">{dateText}</div>
+                {wx && (
+                  <div className="wx">
+                    <span>{WX(wx.c, isNight)[0]}</span>
+                    <b>{wx.t}°C, {WX(wx.c, isNight)[1]}</b>
+                    <small>{data.settings.weather_city} ({wx.min}–{wx.max}°C, 💧{wx.p}%)</small>
+                  </div>
+                )}
+              </div>
+
+              <div className="timebox">
+                <Digits text={!data.settings.tv_show_seconds ? hms(z.secs).slice(0, 5) : hms(z.secs)} />
+              </div>
+
+              <div className="tv-hdr-right">
+                <div className="tools">
+                  {offline && <span className="pill">Offline mód</span>}
+                </div>
+              </div>
+            </header>
+
+            <section className="tv-weekend">
+              <div className="panel tv-weekend-card">
+                <h1>Hétvége van</h1>
+              </div>
+            </section>
+
+            {overlay}
+          </main>
+          {maintPrepBanner}
+          {maintOverlay}
+          {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={false} festiveSnow={advent.state.snowEnabled && !potato} />}
+        </>
+      )
+    }
+
     return (
       <>
         <main className={`tv${isUpdating ? ' is-updating' : ''}`}>
@@ -902,7 +995,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <div className="tv-subgrid">
                     {!vid && lunchBox}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
-                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv />
+                    <Suspense fallback={null}><Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv /></Suspense>
                     <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
                     {kofiTvBox}
                   </div>
@@ -915,7 +1008,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <div className="tv-subgrid">
                     {offCard}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
-                    <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv />
+                    <Suspense fallback={null}><Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv /></Suspense>
                     <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
                     {kofiTvBox}
                   </div>
@@ -1024,6 +1117,18 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                 ❄️
               </button>
             )}
+            <button
+              type="button"
+              className={`layout-btn${layoutMode === 'tabbed' ? ' on' : ''}`}
+              onClick={toggleLayoutMode}
+              title={
+                layoutMode === 'tabbed'
+                  ? 'Visszaváltás a klasszikus, egyoldalas nézetre (elmentve a böngészőben)'
+                  : 'Váltás a gyorsabb, többmenüs nézetre (elmentve a böngészőben)'
+              }
+            >
+              {layoutMode === 'tabbed' ? '🧩 Sima nézet' : '📑 Menüs nézet'}
+            </button>
             <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>
             <button
               type="button"
@@ -1037,32 +1142,304 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           </div>
         </header>
 
-        {/* 3 oszlopos Bento Műszerfal */}
-        <div className="dash-grid">
-          {/* 1. OSZLOP (BAL): Fő visszaszámláló + Napsáv + Gyors statisztika + Következő csengetések */}
-          <div className="dash-col col-hero">
-            <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
-              <div className="tag">Most</div>
-              <Ring s={s} my={myCur} lastMin={lastMinuteGlow} christmas={isXmasSkin} />
-              {isXmasSkin && (s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before') && (
-                <div className="xmas-bar" aria-hidden="true"><i style={{ width: `${Math.round(s.progress * 100)}%` }} /></div>
+        {layoutMode === 'classic' ? (
+          /* KLASSZIKUS (SIMA) 3 OSZLOPOS BENTO MŰSZERFAL — MENÜK NÉLKÜL */
+          <div className="dash-grid">
+            {/* 1. OSZLOP (BAL): Fő visszaszámláló + Napsáv + Gyors statisztika + Következő csengetések */}
+            <div className="dash-col col-hero">
+              <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
+                <div className="tag">Most</div>
+                <Ring s={s} my={myCur} lastMin={lastMinuteGlow} christmas={isXmasSkin} />
+                {isXmasSkin && (s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before') && (
+                  <div className="xmas-bar" aria-hidden="true"><i style={{ width: `${Math.round(s.progress * 100)}%` }} /></div>
+                )}
+                {pv && first
+                  ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
+                  : <Next s={s} secs={z.secs} my={myNext} />}
+                <SupporterTicker supporters={sup.withMessages} onOpenWall={() => setVipModal({ open: true, tab: 'supporters' })} />
+                {strip && <div className="hero-strip">{strip}</div>}
+                {stats && <div className="hero-stats">{stats}</div>}
+                {bells}
+              </section>
+            </div>
+
+            {/* 2. OSZLOP (KÖZÉP): Mai napirend, változások, szünet-videó / pihenő mód, heti áttekintés */}
+            <div className="dash-col col-schedule">
+              {changesBox}
+              {vid}
+              {restBox}
+
+              <WinterBreakStrip
+                serverDate={advent.serverDate}
+                schoolDaysLeft={winterBreak.schoolDaysLeft}
+                hoursLeft={winterBreak.hoursLeft}
+                isLastDay={winterBreak.isLastDay}
+                started={winterBreak.started}
+                onOpenAdvent={() => setAdventModal({ open: true, tab: 'calendar' })}
+              />
+
+              {L.length > 0 && (
+                <section className="panel board">
+                  <div className="board-top">
+                    <div>
+                      <div className="tag" style={{ marginBottom: 4 }}>{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
+                      <h2>{tl.name}</h2>
+                    </div>
+                    <button type="button" className="my-btn" onClick={() => setMyModalOpen(true)}>
+                      ✏️ {hasMySchedule ? 'Óráim szerkesztése' : 'Saját órák megadása'}
+                    </button>
+                  </div>
+                  <p className="meta">
+                    {s.phase === 'closed' && pv ? `${dayName(pv.date, { weekday: 'long', month: 'long', day: 'numeric' })}, ` : ''}
+                    {L.length} óra ({fmtHM(L[0].start_time)} – {fmtHM(L[L.length - 1].end_time)})
+                  </p>
+                  <ol>
+                    {L.map((l: any, i: number) => {
+                      const nx = L[i + 1]
+                      const isCanc = s.phase !== 'closed' && cancelledIds.has(l.id)
+                      const cls = isCanc ? 'cancelled' : s.current?.id === l.id ? 'now' : s.next?.id === l.id ? 'upnext' : s.phase !== 'closed' && z.secs >= toSec(l.end_time) ? 'past' : ''
+                      const gap = nx ? Math.round((toSec(nx.start_time) - toSec(l.end_time)) / 60) : 0
+                      const inBreak = s.phase === 'break' && s.next?.id === nx?.id
+                      const custom = formatMyLesson(l, getEntry(boardWeekday, l.position))
+                      return (
+                        <Fragment key={l.id}>
+                          <li className={`l ${cls} ${custom.isFree || isCanc ? 'free' : ''}`} style={p(cls === 'now')}>
+                            <div className="l-main">
+                              <b>{custom.title}</b>
+                              {custom.sub && <small className="l-orig">{custom.sub}</small>}
+                              {custom.room && <span className="room-pill">📍 {fmtRoom(custom.room)}</span>}
+                            </div>
+                            <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
+                            <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'elmarad' : '')}</span>
+                          </li>
+                          {gap > 0 && <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)}>{gap} perc szünet</li>}
+                        </Fragment>
+                      )
+                    })}
+                  </ol>
+                </section>
               )}
-              {pv && first
-                ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
-                : <Next s={s} secs={z.secs} my={myNext} />}
-              <SupporterTicker supporters={sup.withMessages} onOpenWall={() => setVipModal({ open: true, tab: 'supporters' })} />
-              {strip && <div className="hero-strip">{strip}</div>}
-              {stats && <div className="hero-stats">{stats}</div>}
-              {bells}
-            </section>
+
+              <section className="panel week-panel">
+                <div className="tag">E heti naptár</div>
+                <div className="week">
+                  {week.map(w => (
+                    <div key={w.date} className={`wd ${w.date === z.date ? 'today' : ''} ${w.dim ? 'off' : ''}`}>
+                      <b>{dayName(w.date, { weekday: 'long' })}</b>
+                      <small>{dayName(w.date, { month: 'long', day: 'numeric' })}</small>
+                      {w.info && <span>{w.info}</span>}
+                    </div>
+                  ))}
+                </div>
+                {yearBox}
+              </section>
+
+              {lunchBox}
+
+              {notes.length > 0 && (
+                <section className="panel">
+                  <div className="tag">Közlemények</div>
+                  {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}
+                </section>
+              )}
+
+              <Daily day={z.date} />
+
+              {(events.length > 0 || offCard) && (
+                <section className="events-side">
+                  <div className="tag wide">Közelgő szünetek és ünnepek</div>
+                  <div className="events">
+                    {events.map(evCard)}
+                    {offCard}
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* 3. OSZLOP (JOBB): Ko-fi Támogatás, Élő Hangulatfal, Zenegép, Mini-Aréna, Szavazás */}
+            <div className="dash-col col-side">
+              {kofiBox}
+              <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} christmas={isXmasSkin} />
+
+              <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} christmas={isXmasSkin} />
+
+              <Suspense fallback={null}>
+                <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} sound={!!data.settings.sound_enabled && audioOn} />
+              </Suspense>
+
+              {pollCard}
+              {partnersBox}
+            </div>
           </div>
+        ) : (
+          <>
+        {/* Felső menüsáv: külön oldalakra bontva a gyorsabb, lagg-mentes működésért */}
+        <nav className="app-nav" aria-label="Oldal menü">
+          <button
+            type="button"
+            className={`nav-tab${activeTab === 'home' ? ' on' : ''}`}
+            aria-current={activeTab === 'home' ? 'page' : undefined}
+            onClick={() => navigateTab('home')}
+          >
+            <span className="nav-ico" aria-hidden="true">⏱️</span>
+            <span>Főoldal</span>
+          </button>
+          <button
+            type="button"
+            className={`nav-tab${activeTab === 'schedule' ? ' on' : ''}`}
+            aria-current={activeTab === 'schedule' ? 'page' : undefined}
+            onClick={() => navigateTab('schedule')}
+          >
+            <span className="nav-ico" aria-hidden="true">📅</span>
+            <span>Órarend</span>
+            {chgs.length > 0 && <b className="nav-badge warn">{chgs.length}</b>}
+          </button>
+          <button
+            type="button"
+            className={`nav-tab${activeTab === 'games' ? ' on' : ''}`}
+            aria-current={activeTab === 'games' ? 'page' : undefined}
+            onClick={() => navigateTab('games')}
+          >
+            <span className="nav-ico" aria-hidden="true">🎮</span>
+            <span>Játékok</span>
+            {(s.phase === 'break' || s.phase === 'closed') && (
+              <b className="nav-badge live">{s.phase === 'closed' ? 'Pihi' : 'Szünet'}</b>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`nav-tab${activeTab === 'media' ? ' on' : ''}`}
+            aria-current={activeTab === 'media' ? 'page' : undefined}
+            onClick={() => navigateTab('media')}
+          >
+            <span className="nav-ico" aria-hidden="true">🎵</span>
+            <span>Zene &amp; Videó</span>
+            {s.phase === 'break' && <b className="nav-badge live">ÉLŐ</b>}
+          </button>
+        </nav>
 
-          {/* 2. OSZLOP (KÖZÉP): Mai napirend, változások, szünet-videó / pihenő mód, heti áttekintés */}
-          <div className="dash-col col-schedule">
-            {changesBox}
-            {vid}
-            {restBox}
+        {/* Kompakt élő visszaszámláló sáv az aloldalakon, hogy minden menüben látszódjon a csengő */}
+        {activeTab !== 'home' && (() => {
+          const curCustom = s.phase === 'lesson' ? formatMyLesson(s.current, myCur) : null
+          const miniTitle = s.phase === 'lesson' ? (curCustom?.title || s.current!.label) : (s.reason || TITLE[s.phase])
+          const isLive = s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before'
+          return (
+            <div className={`mini-bell-bar ${s.phase}`}>
+              <div className="mini-bell-left">
+                <i className="mini-dot" aria-hidden="true" />
+                <b>{miniTitle}</b>
+                {isLive && (
+                  <span className="mini-count">
+                    {fmtCount(s.remaining)} <small>{s.phase === 'before' ? 'az 1. óráig' : 'a csengetésig'}</small>
+                  </span>
+                )}
+              </div>
+              <button type="button" className="mini-home-btn" onClick={() => navigateTab('home')}>
+                ← Nagy óra
+              </button>
+            </div>
+          )
+        })()}
 
+        {/* 1. MENÜ: FŐOLDAL (Ultragyors: Visszaszámláló + Téli szünet + Változások/Ebéd/Közlemény + Ko-fi) */}
+        {activeTab === 'home' && (
+          <div className="home-grid">
+            <div className="dash-col col-hero">
+              <section className={`panel now ${s.phase}${lastMinuteGlow ? ' vip-last-min' : ''}`}>
+                <div className="tag">Most</div>
+                <Ring s={s} my={myCur} lastMin={lastMinuteGlow} christmas={isXmasSkin} />
+                {isXmasSkin && (s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before') && (
+                  <div className="xmas-bar" aria-hidden="true"><i style={{ width: `${Math.round(s.progress * 100)}%` }} /></div>
+                )}
+                {pv && first
+                  ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
+                  : <Next s={s} secs={z.secs} my={myNext} />}
+                <SupporterTicker supporters={sup.withMessages} onOpenWall={() => setVipModal({ open: true, tab: 'supporters' })} />
+                {strip && <div className="hero-strip">{strip}</div>}
+                {stats && <div className="hero-stats">{stats}</div>}
+                {bells}
+              </section>
+            </div>
+
+            <div className="dash-col col-home-side">
+              <WinterBreakStrip
+                serverDate={advent.serverDate}
+                schoolDaysLeft={winterBreak.schoolDaysLeft}
+                hoursLeft={winterBreak.hoursLeft}
+                isLastDay={winterBreak.isLastDay}
+                started={winterBreak.started}
+                onOpenAdvent={() => setAdventModal({ open: true, tab: 'calendar' })}
+              />
+
+              {changesBox}
+              {lunchBox}
+
+              {notes.length > 0 && (
+                <section className="panel">
+                  <div className="tag">Közlemények</div>
+                  {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}
+                </section>
+              )}
+
+              {/* Ko-fi marad a főoldalon, hogy rögtön felkeltse a figyelmet */}
+              {kofiBox}
+
+              {/* Élő Hangulat- és Reakciófal a főoldalon */}
+              <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} christmas={isXmasSkin} />
+
+              {/* A nap gondolata / érdekesség a főoldalon */}
+              <Daily day={z.date} />
+
+              {/* Közelgő szünetek és ünnepek a főoldalon */}
+              {(events.length > 0 || offCard) && (
+                <section className="events-side">
+                  <div className="tag wide">Közelgő szünetek és ünnepek</div>
+                  <div className="events">
+                    {events.map(evCard)}
+                    {offCard}
+                  </div>
+                </section>
+              )}
+
+              {/* Társoldalak és hasznos linkek a főoldalon */}
+              {partnersBox}
+
+              <section className="panel quick-nav-card">
+                <div className="tag" style={{ marginBottom: 8 }}>🚀 Gyors ugrás más menükre</div>
+                <div className="quick-nav-btns">
+                  <button type="button" onClick={() => navigateTab('schedule')}>
+                    <span>📅</span>
+                    <div>
+                      <b>Órarend &amp; Naptár</b>
+                      <small>{L.length > 0 ? `${L.length} óra • vízszintes órarend & heti rend` : 'Vízszintes heti naptár'}</small>
+                    </div>
+                    <i>→</i>
+                  </button>
+                  <button type="button" onClick={() => navigateTab('games')}>
+                    <span>🎮</span>
+                    <div>
+                      <b>Játékok &amp; Szavazás</b>
+                      <small>{s.phase === 'closed' ? 'Snake / ünnepi játék + Mini-Aréna' : 'Szüneti Mini-Aréna & Szavazás'}</small>
+                    </div>
+                    <i>→</i>
+                  </button>
+                  <button type="button" onClick={() => navigateTab('media')}>
+                    <span>🎵</span>
+                    <div>
+                      <b>Szüneti Zene &amp; Videó</b>
+                      <small>{s.phase === 'break' ? 'Szünet van — nyisd meg a lejátszót!' : 'Kívánságlista & szavazás'}</small>
+                    </div>
+                    <i>→</i>
+                  </button>
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* 2. MENÜ: VÍZSZINTES ÓRAREND & NAPTÁR */}
+        {activeTab === 'schedule' && (
+          <div className="page-schedule-h">
             <WinterBreakStrip
               serverDate={advent.serverDate}
               schoolDaysLeft={winterBreak.schoolDaysLeft}
@@ -1071,8 +1448,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               started={winterBreak.started}
               onOpenAdvent={() => setAdventModal({ open: true, tab: 'calendar' })}
             />
+
+            {changesBox}
+
             {L.length > 0 && (
-              <section className="panel board">
+              <section className="panel board board-horiz">
                 <div className="board-top">
                   <div>
                     <div className="tag" style={{ marginBottom: 4 }}>{s.phase === 'closed' ? 'Következő tanítási nap' : 'Mai napirend'}</div>
@@ -1086,7 +1466,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   {s.phase === 'closed' && pv ? `${dayName(pv.date, { weekday: 'long', month: 'long', day: 'numeric' })}, ` : ''}
                   {L.length} óra ({fmtHM(L[0].start_time)} – {fmtHM(L[L.length - 1].end_time)})
                 </p>
-                <ol>
+                <ol className="horiz-lessons">
                   {L.map((l: any, i: number) => {
                     const nx = L[i + 1]
                     const isCanc = s.phase !== 'closed' && cancelledIds.has(l.id)
@@ -1097,15 +1477,21 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     return (
                       <Fragment key={l.id}>
                         <li className={`l ${cls} ${custom.isFree || isCanc ? 'free' : ''}`} style={p(cls === 'now')}>
+                          <div className="lh-top">
+                            <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
+                            <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'elmarad' : '')}</span>
+                          </div>
                           <div className="l-main">
                             <b>{custom.title}</b>
                             {custom.sub && <small className="l-orig">{custom.sub}</small>}
                             {custom.room && <span className="room-pill">📍 {fmtRoom(custom.room)}</span>}
                           </div>
-                          <span className="t">{fmtHM(l.start_time)} – {fmtHM(l.end_time)}</span>
-                          <span className="chip">{CHIP[cls] ?? (custom.isFree ? 'elmarad' : '')}</span>
                         </li>
-                        {gap > 0 && <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)}>{gap} perc szünet</li>}
+                        {gap > 0 && (
+                          <li className={`g ${inBreak ? 'nowb' : ''}`} style={p(inBreak)} title={`${gap} perc szünet`}>
+                            <span>{gap}p</span>
+                          </li>
+                        )}
                       </Fragment>
                     )
                   })}
@@ -1113,7 +1499,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               </section>
             )}
 
-            <section className="panel week-panel">
+            <section className="panel week-panel week-horiz">
               <div className="tag">E heti naptár</div>
               <div className="week">
                 {week.map(w => (
@@ -1128,47 +1514,56 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             </section>
 
             {lunchBox}
-
-            {notes.length > 0 && (
-              <section className="panel">
-                <div className="tag">Közlemények</div>
-                {notes.slice(0, 4).map(n => <p className="notice" key={n.id}>{n.text}</p>)}
-              </section>
-            )}
-
-            <Daily day={z.date} />
-
-            {(events.length > 0 || offCard) && (
-              <section className="events-side">
-                <div className="tag wide">Közelgő szünetek és ünnepek</div>
-                <div className="events">
-                  {events.map(evCard)}
-                  {offCard}
-                </div>
-              </section>
-            )}
           </div>
+        )}
 
-          {/* 3. OSZLOP (JOBB): Ko-fi Támogatás, Élő Hangulatfal, Zenegép, Mini-Aréna, Szavazás */}
-          <div className="dash-col col-side">
-            {kofiBox}
-            <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} christmas={isXmasSkin} />
+        {/* 3. MENÜ: JÁTÉKOK (Lazy-loaded, csak itt fut az Aréna, Snake és Szavazás) */}
+        {activeTab === 'games' && (
+          <Suspense fallback={<section className="panel page-loading">🎮 Játékok betöltése…</section>}>
+            <GamesPage
+              schoolId={data.id}
+              day={z.date}
+              phase={s.phase}
+              reason={s.reason}
+              breakKey={curBreakKey}
+              breakTotalSec={breakTotalSec}
+              sound={!!data.settings.sound_enabled && audioOn}
+              restEnabled={data.settings.rest_mode !== false}
+              restEv={restEv}
+            />
+          </Suspense>
+        )}
 
-            <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} christmas={isXmasSkin} />
-
-            <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} sound={!!data.settings.sound_enabled && audioOn} />
-
-            {pollCard}
-            {partnersBox}
-          </div>
-        </div>
+        {/* 4. MENÜ: ZENE & VIDEÓ (Lazy-loaded, csak itt fut a Jukebox és a BreakVideo) */}
+        {activeTab === 'media' && (
+          <Suspense fallback={<section className="panel page-loading">🎵 Zene &amp; Videó betöltése…</section>}>
+            <MediaPage
+              schoolId={data.id}
+              day={z.date}
+              phase={s.phase}
+              breakKey={curJukeboxBreakKey}
+              videoBreakKey={s.next?.id ?? key}
+              breakVideosEnabled={data.settings.break_videos !== false}
+              sound={!!data.settings.sound_enabled && audioOn}
+              userMuted={muted}
+              christmas={isXmasSkin}
+              sandboxDemo={sandbox ? { forceBreakMedia: sb.forceBreakMedia, breakMediaKind: sb.breakMediaKind } : undefined}
+            />
+          </Suspense>
+        )}
+          </>
+        )}
 
         <footer className="foot">
           {data.settings.site_version && <span className="ver">Verzió {data.settings.site_version}</span>}
           {data.settings.version_note && <span>{data.settings.version_note}</span>}
           <span className="copy">© 2026 Finta Benjámin • SuliBell • Minden jog fenntartva (All Rights Reserved)</span>
         </footer>
-        {data.settings.ask_enabled && <Ask />}
+        {data.settings.ask_enabled && (
+          <Suspense fallback={null}>
+            <Ask />
+          </Suspense>
+        )}
         <VipModal
           open={vipModal.open}
           initialTab={vipModal.tab}
@@ -1219,12 +1614,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       </main>
       {maintPrepBanner}
       {maintOverlay}
-      {!potato && <VibeOverlay floats={vibeFloats} />}
+      {!potato && (layoutMode === 'classic' || activeTab === 'home') && <VibeOverlay floats={vibeFloats} />}
       {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
       <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
-      {!isUpdating && !overlay && <ScrollCue isVideoDay={mediaModeForDay(z.date) === 'video'} />}
     </>
   )
 }

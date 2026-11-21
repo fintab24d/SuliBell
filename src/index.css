@@ -2974,3 +2974,354 @@ html.egg-warp #root main {
   background: #ffffff !important;
   border-color: rgba(80, 70, 160, 0.32) !important;
 }
+
+
+/* ==================== 🧭 TÖBBOLDALAS MENÜSÁV & ALOLDAL ELRENDEZÉS ==================== */
+.app-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+@media (max-width: 680px) {
+  .app-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    padding: 7px;
+  }
+}
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  color: var(--mut);
+  font: 700 0.94rem var(--f);
+  box-shadow: none;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+}
+.nav-tab:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--edge);
+  background: color-mix(in srgb, var(--fg) 8%, var(--key));
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+.nav-tab.on {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 72%, var(--edge));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand) 18%, var(--key)),
+    color-mix(in srgb, var(--lesson) 8%, var(--key))
+  );
+  box-shadow: 0 0 20px -8px var(--brand);
+}
+.nav-ico {
+  font-size: 1.08rem;
+  line-height: 1;
+}
+.nav-badge {
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0.03em;
+}
+.nav-badge.live {
+  background: color-mix(in srgb, var(--break) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--break) 60%, transparent);
+  color: var(--break);
+}
+.nav-badge.warn {
+  background: color-mix(in srgb, var(--next) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--next) 60%, transparent);
+  color: var(--next);
+}
+
+/* Kompakt élő mini-visszaszámláló sáv az aloldalakon */
+.mini-bell-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--mut);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.mini-bell-bar.lesson {
+  border-left-color: var(--lesson);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--lesson) 14%, transparent), var(--panel) 55%);
+}
+.mini-bell-bar.break {
+  border-left-color: var(--break);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--break) 14%, transparent), var(--panel) 55%);
+}
+.mini-bell-bar.before {
+  border-left-color: var(--next);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--next) 14%, transparent), var(--panel) 55%);
+}
+.mini-bell-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.mini-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mut);
+  flex-shrink: 0;
+}
+.mini-bell-bar.lesson .mini-dot { background: var(--lesson); box-shadow: 0 0 8px var(--lesson); }
+.mini-bell-bar.break .mini-dot { background: var(--break); box-shadow: 0 0 8px var(--break); }
+.mini-bell-bar.before .mini-dot { background: var(--next); box-shadow: 0 0 8px var(--next); }
+.mini-bell-left b {
+  font-size: 0.96rem;
+  color: var(--fg);
+}
+.mini-count {
+  font: 700 0.98rem var(--f);
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+.mini-count small {
+  font-weight: 500;
+  font-size: 0.82rem;
+  color: var(--mut);
+}
+.mini-home-btn {
+  padding: 5px 11px;
+  font-size: 0.82rem;
+  box-shadow: none;
+}
+
+/* Főoldal (2 oszlopos, gyors elrendezés) és aloldal rácsok */
+.home-grid,
+.page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (min-width: 920px) {
+  .home-grid {
+    grid-template-columns: minmax(340px, 5fr) minmax(340px, 5.6fr);
+  }
+  .home-grid .col-hero {
+    position: sticky;
+    top: 18px;
+  }
+  .page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .page-grid.page-media {
+    grid-template-columns: minmax(320px, 4.6fr) minmax(360px, 5.4fr);
+  }
+}
+
+/* Gyors ugró kártya a Főoldalon */
+.quick-nav-card {
+  display: grid;
+  gap: 6px;
+}
+.quick-nav-btns {
+  display: grid;
+  gap: 8px;
+}
+.quick-nav-btns button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  text-align: left;
+  border-radius: 13px;
+  box-shadow: none;
+}
+.quick-nav-btns button > span {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.quick-nav-btns button > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.quick-nav-btns button b {
+  font-size: 0.94rem;
+  color: var(--fg);
+}
+.quick-nav-btns button small {
+  font-size: 0.78rem;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quick-nav-btns button > i {
+  font-style: normal;
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.page-loading {
+  text-align: center;
+  padding: 28px 18px;
+  color: var(--mut);
+  font-weight: 600;
+}
+.page-hint-card p {
+  line-height: 1.48;
+}
+
+/* Potato PC kompatibilitás a menüsávhoz és mini órához */
+:root[data-potato="1"] .app-nav,
+:root[data-potato="1"] .mini-bell-bar {
+  background: #101426 !important;
+  border-color: rgba(160, 175, 255, 0.28) !important;
+}
+:root[data-potato="1"][data-theme="light"] .app-nav,
+:root[data-potato="1"][data-theme="light"] .mini-bell-bar {
+  background: #ffffff !important;
+  border-color: rgba(80, 70, 160, 0.28) !important;
+}
+
+/* TV /display hétvégi letisztult nézet (csak a felső időkártya + "Hétvége van") */
+.tv.tv-weekend-mode {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.tv-weekend {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+.tv-weekend-card {
+  padding: 5vh 7vw;
+  text-align: center;
+  border-radius: 26px;
+}
+.tv-weekend-card h1 {
+  margin: 0;
+  font: 700 clamp(3rem, 8.5vh, 6.5rem)/1.1 var(--f);
+  letter-spacing: 0.02em;
+  color: var(--brand);
+  text-shadow: 0 0 28px color-mix(in srgb, var(--brand) 42%, transparent);
+}
+
+/* A Játékok menüben a Snake teljes oszlopszélességen jelenjen meg a Mini-Aréna mellett */
+.page-games .restgrid {
+  grid-template-columns: 1fr;
+}
+
+/* Nézetváltó gomb (Sima / Menüs nézet) */
+.layout-btn.on {
+  border-color: var(--brand) !important;
+  color: var(--brand) !important;
+  background: color-mix(in srgb, var(--brand) 14%, var(--key)) !important;
+}
+
+/* Vízszintes Órarend (Menüs nézet -> Órarend fül) */
+.page-schedule-h {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+.board-horiz .horiz-lessons {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scrollbar-width: thin;
+}
+.board-horiz .horiz-lessons > .l {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 0 156px;
+  min-width: 156px;
+  min-height: 112px;
+  padding: 12px 13px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.board-horiz .horiz-lessons > .l.now {
+  border-color: color-mix(in srgb, var(--lesson) 68%, var(--line));
+  box-shadow: inset 0 -4px 0 var(--lesson), 0 0 22px -10px var(--lesson);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--lesson) 26%, transparent) var(--p),
+    color-mix(in srgb, var(--lesson) 8%, transparent) var(--p)
+  );
+}
+.board-horiz .horiz-lessons > .l.upnext {
+  border-color: color-mix(in srgb, var(--next) 55%, var(--line));
+}
+.board-horiz .lh-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.board-horiz .lh-top .t {
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.board-horiz .horiz-lessons > .l .l-main {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.board-horiz .horiz-lessons > .l b {
+  font-size: 1.12rem;
+  line-height: 1.2;
+}
+.board-horiz .horiz-lessons > .g {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 6px 7px;
+  min-width: 36px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--mut);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+.board-horiz .horiz-lessons > .g.nowb {
+  color: var(--break);
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--break) 68%, var(--line));
+  box-shadow: 0 0 14px -4px var(--break);
+  background: color-mix(in srgb, var(--break) 18%, transparent);
+}
+.week-horiz .week {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 10px;
+}

@@ -13,7 +13,7 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
-      "source": "/(index.html|display|telepites|szavazas|admin|teszt)",
+      "source": "/(index.html|display|orarend|jatek|zene|telepites|szavazas|admin|teszt)",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     }
   ],
