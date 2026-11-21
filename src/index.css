@@ -3541,8 +3541,20 @@ iframe {
 .adv-theme-opts {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
 }
+.rest {
+  container-type: inline-size;
+}
+.restinfo,
+.snake {
+  min-width: 0;
+}
 .restgrid {
-  grid-template-columns: minmax(0, 1fr) minmax(min(100%, 240px), 420px);
+  grid-template-columns: minmax(min(100%, 220px), 1fr) minmax(min(100%, 260px), 420px);
+}
+@container (max-width: 600px) {
+  .restgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 760px) {
   .restgrid {
