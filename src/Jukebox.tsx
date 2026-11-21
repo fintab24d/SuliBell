@@ -4,9 +4,15 @@ import { fxSound } from './lib/sound'
 import { parseVideo } from './lib/video'
 import { voterId } from './Poll'
 import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
+import { weekdayOf } from './lib/engine'
 import { validateMediaSubmission } from './lib/moderation'
 
 export type MediaKind = 'music' | 'video'
+
+/** Igaz, ha a megadott nap (YYYY-MM-DD) hétvége (szombat vagy vasárnap). */
+export function isJukeboxWeekend(day: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && weekdayOf(day) >= 6
+}
 
 /**
  * Naponta váltakozik: egyik nap szüneti videók ('video'),
@@ -539,6 +545,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   }, [])
 
   const addSong = useCallback((rawTitle: string, rawBy: string, rawUrl?: string, explicitYtId?: string): { ok: boolean; reason?: 'invalid' | 'voted' | 'break_limit' } => {
+    if (isJukeboxWeekend(day)) return { ok: false, reason: 'invalid' }
     const cleanTitle = rawTitle.trim().slice(0, 60)
     if (!cleanTitle) return { ok: false, reason: 'invalid' }
     const cleanBy = rawBy.trim().slice(0, 24)
@@ -663,6 +670,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   }, [schoolId, day, mode, breakKey, songs, voted, submitted, broadcastSong])
 
   const voteSong = useCallback((songId: string) => {
+    if (isJukeboxWeekend(day)) return
     if (voted.has(songId) || loadVotedSet(day).has(songId)) return
     const found = songs.find(s => s.id === songId)
     if (!found) return
@@ -802,6 +810,7 @@ export default memo(function Jukebox({
   christmas?: boolean
 }) {
   const { songs, voted, mode, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
+  const weekend = isJukeboxWeekend(day)
   const isVideoDay = mode === 'video'
   const [title, setTitle] = useState('')
   const [by, setBy] = useState(() => {
@@ -874,9 +883,9 @@ export default memo(function Jukebox({
     }
   }
 
-  // TV nézet: kompakt Top 3 Kívánságlista kártya
+  // TV nézet: kompakt Top 3 Kívánságlista kártya (hétvégén elrejtve)
   if (tv) {
-    if (songs.length === 0) return null
+    if (weekend || songs.length === 0) return null
     const top3 = songs.slice(0, 3)
     return (
       <section className="panel jukebox-tv">
@@ -906,6 +915,26 @@ export default memo(function Jukebox({
     : (christmas ? [...XMAS_QUICK_SONGS, ...QUICK_SONGS.slice(0, 4)] : QUICK_SONGS)
   const musicRoom = channels.music || '#🎵-zenekérés-ötletek'
   const videoRoom = channels.videos || '#🎬-videóbeküldés'
+
+  if (weekend) {
+    return (
+      <section className="panel jukebox">
+        <div className="jb-head">
+          <div>
+            <div className="tag" style={{ marginBottom: 4 }}>
+              🎧 Szüneti Zene &amp; Videó
+            </div>
+            <p className="meta" style={{ margin: 0 }}>
+              Hétvégén a zene- és videóbeküldés, valamint a lejátszás szünetel — hétfőn az első szünettel újra indul!
+            </p>
+          </div>
+        </div>
+        <div className="jb-empty">
+          <span>🛌 Pihenj egyet hétvégén! Tanítási napokon újra vár a kívánságlista.</span>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="panel jukebox">

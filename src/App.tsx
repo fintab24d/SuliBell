@@ -838,7 +838,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
   const curJukeboxBreakKey = `${z.date}-${s.phase}-${s.current?.id ?? s.next?.id ?? '0'}`
   const breakTotalSec = s.phase === 'break' ? s.total : undefined
-  const vid = s.phase === 'break' && data.settings.break_videos !== false && (hasAnyWish || videos.length > 0) && (
+  const isWeekendDay = z.weekday === 6 || z.weekday === 7
+  const vid = !isWeekendDay && s.phase === 'break' && data.settings.break_videos !== false && (hasAnyWish || videos.length > 0) && (
     <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
   )
   const e0 = events[0]

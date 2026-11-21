@@ -3325,3 +3325,681 @@ html.egg-warp #root main {
   grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
   gap: 10px;
 }
+
+/* ==================== 📱 TELJES RESZPONZIVITÁS, OVERFLOW-VÉDELEM & OLVASHATÓSÁG ==================== */
+
+/* 1. Globális túlcsordulás-védelem (overflow-x: clip nem töri meg a sticky oszlopokat) */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+}
+.panel,
+.ev,
+.bento-hdr,
+.hdr-brand-col,
+.timebox,
+.tools,
+.brand,
+.app-nav,
+.mini-bell-bar,
+.winter-strip,
+.winter-txt,
+.dash-col,
+.dash-grid,
+.home-grid,
+.page-grid,
+.page-schedule-h,
+.board-horiz,
+.col-side,
+.col-hero,
+.col-main {
+  min-width: 0;
+  max-width: 100%;
+}
+.bento-hdr {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+.panel,
+.ev,
+.notice,
+.daily-quote p,
+.daily-fact p,
+.lunch p,
+.chg li,
+.pbar,
+.offl li,
+.sup-card,
+.vip-intro,
+.adv-reveal-body {
+  overflow-wrap: break-word;
+}
+.board-horiz,
+.week-horiz {
+  container-type: inline-size;
+  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+}
+.board-horiz .horiz-lessons {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: clamp(3px, 0.45cqw, 7px);
+  max-width: 100%;
+  overflow: visible;
+  padding: 0;
+}
+.board-horiz .horiz-lessons > .l {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: clamp(82px, 8cqw, 112px);
+  padding: clamp(6px, 0.85cqw, 12px) clamp(5px, 0.8cqw, 11px);
+  gap: clamp(4px, 0.6cqw, 10px);
+}
+.board-horiz .lh-top {
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+.board-horiz .lh-top .t {
+  font-size: clamp(0.6rem, 0.82cqw, 0.84rem);
+  white-space: nowrap;
+}
+.board-horiz .horiz-lessons > .l b {
+  font-size: clamp(0.72rem, 1.08cqw, 1.1rem);
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.board-horiz .horiz-lessons > .l .l-orig {
+  font-size: clamp(0.6rem, 0.78cqw, 0.82rem);
+}
+.board-horiz .horiz-lessons > .l .room-pill {
+  font-size: clamp(0.56rem, 0.72cqw, 0.76rem);
+  padding: 1px clamp(4px, 0.5cqw, 8px);
+}
+.board-horiz .horiz-lessons > .l .chip {
+  font-size: clamp(0.52rem, 0.62cqw, 0.68rem);
+  padding: 1px clamp(4px, 0.45cqw, 7px);
+  letter-spacing: 0.05em;
+}
+.board-horiz .horiz-lessons > .g {
+  flex: 0 1 auto;
+  min-width: 0;
+  align-self: center;
+  padding: clamp(3px, 0.4cqw, 6px) clamp(2px, 0.42cqw, 6px);
+  font-size: clamp(0.55rem, 0.7cqw, 0.75rem);
+  white-space: nowrap;
+}
+
+/* Heti naptár vízszintes sorban desktopon és tableten */
+.week-horiz .week {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: clamp(4px, 0.6cqw, 10px);
+}
+.week-horiz .wd {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: clamp(7px, 0.85cqw, 11px) clamp(6px, 0.8cqw, 11px);
+}
+.week-horiz .wd b {
+  font-size: clamp(0.72rem, 1cqw, 1.04rem);
+  overflow-wrap: break-word;
+}
+.week-horiz .wd small,
+.week-horiz .wd span {
+  font-size: clamp(0.62rem, 0.82cqw, 0.84rem);
+  overflow-wrap: break-word;
+}
+
+/* Eseménykártyák és fejléc / navigáció / statisztika fluid skálázása kártyamérethez igazodva */
+.ev {
+  container-type: inline-size;
+}
+.ev .units {
+  gap: clamp(4px, 1.4cqw, 8px);
+}
+.ev .units div {
+  padding: clamp(6px, 1.8cqw, 10px) clamp(2px, 0.8cqw, 4px);
+}
+.ev .units .digits {
+  font-size: clamp(0.9rem, 7.2cqw, 2.4rem);
+}
+.ev .units div > span:last-child {
+  font-size: clamp(0.62rem, 3.2cqw, 0.85rem);
+}
+.ev .days b {
+  font-size: clamp(1.6rem, 9cqw, 2.5rem);
+}
+.bento-hdr .timebox .digits {
+  font-size: clamp(1.65rem, 5.2vw, 4.6rem);
+}
+.tools button {
+  font-size: clamp(0.76rem, 0.88vw, 0.9rem);
+  padding: clamp(5px, 0.55vw, 8px) clamp(8px, 0.9vw, 13px);
+}
+.app-nav .nav-tab {
+  font-size: clamp(0.76rem, 1.1vw, 0.94rem);
+  padding: clamp(7px, 0.85vw, 10px) clamp(6px, 0.95vw, 12px);
+}
+
+/* 1b. Belső görgetősávok megszüntetése kártyákban és modálokban (csak az oldal görögjön) */
+.kofi-list,
+.myslots,
+.sup-wall-list {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+.mymodal-bg {
+  overflow-y: auto;
+  align-items: start;
+}
+.mymodal,
+.vip-modal,
+.adv-modal {
+  max-height: none;
+  overflow: visible;
+  margin: auto;
+}
+
+/* 2. Biztonságos rácsok (keskeny kijelzőn se nyúljanak túl a kártyán) */
+.events {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+}
+.week {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr));
+}
+.partners-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+.stats {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+}
+.hero-stats .stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.units {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.units div {
+  min-width: 0;
+  overflow: hidden;
+}
+.testlab-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+.adv-theme-opts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+}
+.restgrid {
+  grid-template-columns: minmax(0, 1fr) minmax(min(100%, 240px), 420px);
+}
+@media (max-width: 760px) {
+  .restgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (min-width: 920px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 5.6fr);
+  }
+  .page-grid.page-media {
+    grid-template-columns: minmax(0, 4.6fr) minmax(0, 5.4fr);
+  }
+}
+@media (min-width: 1240px) {
+  .dash-grid {
+    grid-template-columns: minmax(0, 3.6fr) minmax(0, 4.5fr) minmax(0, 3.9fr);
+  }
+}
+
+/* 3. Kártyán belüli elemek tördelése és olvashatósága */
+.stat {
+  min-width: 0;
+}
+.stat b {
+  font-size: clamp(1.05rem, 2.2vw, 1.45rem);
+  overflow-wrap: anywhere;
+}
+.stat span {
+  font-size: clamp(0.72rem, 0.9vw, 0.82rem);
+}
+.bells li {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  font-size: clamp(0.8rem, 0.95vw, 0.92rem);
+}
+.bells li > * {
+  min-width: 0;
+}
+.bells b {
+  font-size: clamp(0.95rem, 1.15vw, 1.15rem);
+}
+.l b {
+  overflow-wrap: anywhere;
+}
+.l.past,
+.seg.past {
+  opacity: 0.62;
+}
+.pbar {
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.pbar > span {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.kofi-cta,
+.kofi-dc-btn {
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+}
+.kofi-item {
+  min-width: 0;
+}
+.kofi-donor-msg {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vibe-btn {
+  min-width: 0;
+  max-width: 100%;
+}
+.vibe-lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(0.76rem, 0.95vw, 0.9rem);
+}
+.jb-item,
+.jb-main,
+.jb-info {
+  min-width: 0;
+}
+.jb-row2 input {
+  min-width: 0;
+  flex: 1 1 140px;
+}
+.jb-info b {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.arena-name {
+  min-width: 0;
+  flex: 1 1 150px;
+  max-width: 100%;
+}
+.arena-hud {
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.arena-lb li {
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto auto;
+}
+.arena-lb li > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.my-ai-inp {
+  min-width: 0;
+  flex: 1 1 180px;
+  width: 100%;
+}
+.nav-tab {
+  min-width: 0;
+  max-width: 100%;
+}
+.viz-vol {
+  max-width: 100%;
+}
+
+/* 4. Tablet & kisebb desktop fejléc-igazítás */
+@media (max-width: 859px) {
+  .bento-hdr .tools {
+    justify-content: center;
+  }
+  .hdr-brand-col {
+    justify-content: center;
+    text-align: center;
+  }
+  .hdr-meta {
+    justify-content: center;
+  }
+}
+
+/* 4b. Keskeny kijelző (< 720px): csak itt tördeljen a vízszintes órarend és heti naptár, hogy telefonon se váljon olvashatatlanná */
+@media (max-width: 719px) {
+  .board-horiz .horiz-lessons {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .board-horiz .horiz-lessons > .l {
+    flex: 1 1 135px;
+    min-width: min(100%, 130px);
+    min-height: 92px;
+    padding: 9px 10px;
+  }
+  .board-horiz .lh-top .t {
+    font-size: 0.78rem;
+  }
+  .board-horiz .horiz-lessons > .l b {
+    font-size: 0.96rem;
+  }
+  .board-horiz .horiz-lessons > .l .l-orig {
+    font-size: 0.76rem;
+  }
+  .board-horiz .horiz-lessons > .l .room-pill {
+    font-size: 0.72rem;
+    padding: 2px 7px;
+  }
+  .board-horiz .horiz-lessons > .l .chip {
+    font-size: 0.65rem;
+    padding: 2px 7px;
+  }
+  .board-horiz .horiz-lessons > .g {
+    font-size: 0.72rem;
+    padding: 4px 7px;
+  }
+  .week-horiz .week {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 115px), 1fr));
+    gap: 8px;
+  }
+  .week-horiz .wd {
+    padding: 9px 10px;
+  }
+  .week-horiz .wd b {
+    font-size: 0.94rem;
+  }
+  .week-horiz .wd small,
+  .week-horiz .wd span {
+    font-size: 0.78rem;
+  }
+}
+
+/* 5. Mobil nézet (<= 640px) */
+@media (max-width: 640px) {
+  main {
+    padding: 10px;
+    gap: 12px;
+  }
+  .dash-grid,
+  .dash-col,
+  .home-grid,
+  .page-grid,
+  .page-schedule-h {
+    gap: 12px;
+  }
+  .panel {
+    padding: 14px;
+    border-radius: 15px;
+  }
+  .ev {
+    padding: 13px;
+    border-radius: 15px;
+  }
+  .kofi-panel {
+    padding: 15px 14px;
+  }
+  .winter-strip {
+    padding: 11px 12px;
+  }
+  .winter-adv-btn {
+    white-space: normal;
+    text-align: center;
+  }
+  .bento-hdr {
+    padding: 12px;
+    border-radius: 15px;
+    gap: 10px;
+  }
+  .bento-hdr .timebox .digits {
+    font-size: clamp(1.7rem, 8.2vw, 2.9rem);
+  }
+  .timebox .digits.neon {
+    padding: 0.1em 0.24em 0.12em;
+    max-width: 100%;
+  }
+  .tools {
+    gap: 6px;
+  }
+  .tools button {
+    padding: 6px 10px;
+    font-size: 0.83rem;
+  }
+  .brand {
+    font-size: 1.25rem;
+  }
+  .logo {
+    height: 2rem;
+  }
+  .l {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+    padding: 9px 10px;
+  }
+  .l .chip {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .l b {
+    font-size: 1.02rem;
+  }
+  .l .t {
+    font-size: 0.9rem;
+  }
+  .next {
+    padding: 9px 11px;
+    font-size: 0.92rem;
+  }
+  .next b {
+    font-size: 1.15rem;
+  }
+  .viz-top {
+    gap: 10px;
+  }
+  .viz-disc-wrap {
+    width: 60px;
+    height: 60px;
+  }
+  .viz-vol input[type="range"] {
+    width: 62px;
+  }
+  .foot {
+    font-size: 0.8rem;
+    text-align: center;
+    gap: 6px 10px;
+    padding: 4px 4px 16px;
+  }
+  .admin input:not([type="checkbox"], [type="radio"]),
+  .admin select {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+  .admin table {
+    width: 100%;
+    table-layout: fixed;
+    overflow-wrap: anywhere;
+  }
+  .admin th,
+  .admin td {
+    padding: 4px;
+    font-size: 0.78rem;
+  }
+}
+
+/* 6. Kis telefonok (<= 480px) */
+@media (max-width: 480px) {
+  .board-horiz .horiz-lessons > .l {
+    flex: 1 1 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+  .board-horiz .horiz-lessons > .g {
+    flex: 1 1 100%;
+    padding: 4px 10px;
+  }
+  .units {
+    gap: 5px;
+  }
+  .units div {
+    padding: 8px 2px;
+    border-radius: 10px;
+  }
+  .units .digits {
+    font-size: clamp(1.05rem, 4.6vw, 1.55rem);
+  }
+  .units div > span:last-child {
+    font-size: 0.72rem;
+  }
+  .days b {
+    font-size: 2rem;
+  }
+  .bells li {
+    gap: 6px;
+    padding: 6px 9px;
+    font-size: 0.84rem;
+  }
+  .bells b {
+    font-size: 1rem;
+  }
+  .nav-tab {
+    padding: 9px 8px;
+    font-size: 0.85rem;
+    gap: 5px;
+  }
+  .kofi-actions {
+    flex-direction: column;
+  }
+  .kofi-cta,
+  .kofi-dc-btn {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .quick-nav-btns button small {
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+  .pollqr {
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+  }
+  .restcount {
+    gap: 4px 8px;
+  }
+  .restcount .ico {
+    font-size: 1.7rem;
+  }
+  .reflex-grid {
+    gap: 5px;
+    padding: 7px;
+    min-height: 170px;
+  }
+  .rcell {
+    font-size: 1.3rem;
+  }
+  .mymodal-bg {
+    padding: 8px;
+  }
+  .mymodal,
+  .vip-modal,
+  .adv-modal {
+    padding: 14px;
+    border-radius: 16px;
+  }
+  .myslot {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+  .myslot-lbl {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .myslot-del {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .myslot input {
+    grid-column: 1 / -1;
+  }
+  .vip-sound-row {
+    flex-wrap: wrap;
+  }
+  .adv-wreath-banner {
+    flex-wrap: wrap;
+  }
+  .alertbox,
+  .maint-card {
+    padding: 20px 16px;
+  }
+  .askfab {
+    right: 10px;
+    bottom: 10px;
+    padding: 10px 14px;
+    font-size: 0.86rem;
+  }
+  .askbox {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: 60px;
+    height: min(520px, calc(100svh - 76px));
+  }
+}
+
+/* 7. Extra keskeny mobilok (<= 370px) */
+@media (max-width: 370px) {
+  .vibe-btns {
+    grid-template-columns: 1fr;
+  }
+  .adv-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hero-stats .stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 8. TV (/display) overflow-védelem */
+.tv-hdr,
+.tv-hdr-left,
+.tv-hdr-right,
+.tv-main,
+.tv-main > *,
+.tvside,
+.tvside > *,
+.tv-subgrid > *,
+.tv-vid-row > *,
+.tv-bottom,
+.ticker {
+  min-width: 0;
+  min-height: 0;
+}
+.tv-subgrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}

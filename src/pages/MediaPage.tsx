@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import BreakVideo, { useVideos } from '../BreakVideo'
-import Jukebox, { mediaModeForDay, useJukebox, type SongWish } from '../Jukebox'
+import Jukebox, { isJukeboxWeekend, mediaModeForDay, useJukebox, type SongWish } from '../Jukebox'
 import type { Phase } from '../lib/engine'
 
 export interface MediaPageProps {
@@ -50,8 +50,9 @@ const MediaPage = memo(function MediaPage({
         ]
       : jbWishes
 
+  const weekend = isJukeboxWeekend(day)
   const hasAnyWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
-  const showPlayer = phase === 'break' && breakVideosEnabled && (hasAnyWish || videos.length > 0)
+  const showPlayer = !weekend && phase === 'break' && breakVideosEnabled && (hasAnyWish || videos.length > 0)
   const isVideoDay = mediaModeForDay(day) === 'video'
 
   return (
@@ -70,12 +71,14 @@ const MediaPage = memo(function MediaPage({
         ) : (
           <section className="panel page-hint-card">
             <div className="tag" style={{ marginBottom: 6 }}>
-              {isVideoDay ? '🎬 Szüneti Videólejátszó' : '🎧 Szüneti Zenelejátszó'}
+              {weekend ? '🛌 Hétvégi szünet' : isVideoDay ? '🎬 Szüneti Videólejátszó' : '🎧 Szüneti Zenelejátszó'}
             </div>
             <p className="meta" style={{ margin: 0 }}>
-              {phase === 'break'
-                ? 'Még nincs elegendő szavazattal rendelkező mai beküldés — küldj be egyet jobbra (vagy lent), és már indul is!'
-                : 'A szüneti lejátszó automatikusan elindul, amint kicsengetnek szünetre. Addig is küldd be a kedvencedet vagy szavazz a listán!'}
+              {weekend
+                ? 'Hétvégén a szüneti zene- és videólejátszás, illetve a beküldés szünetel. Hétfőn újra indul!'
+                : phase === 'break'
+                  ? 'Még nincs elegendő szavazattal rendelkező mai beküldés — küldj be egyet jobbra (vagy lent), és már indul is!'
+                  : 'A szüneti lejátszó automatikusan elindul, amint kicsengetnek szünetre. Addig is küldd be a kedvencedet vagy szavazz a listán!'}
             </p>
           </section>
         )}
