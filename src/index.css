@@ -235,7 +235,6 @@ main.tv{
 .tv .stat span{font-size:1.45vh}
 .tv-vid-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:1.2vw;align-items:center;min-height:0}
 .tv .vid{padding-bottom:0}
-.tv .vframe{max-height:26vh;margin-top:.4vh}
 .tv-subgrid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
@@ -398,10 +397,8 @@ label.btn:hover{border-color:var(--brand)}
 .install .pollopts{width:100%}.install .poll h2{text-align:center}
 @media(prefers-reduced-motion:reduce){.final::before,.final b,.final i{animation:none}.bellbanner{animation:none}.bellbanner::after{animation:none}.pbar i{transition:none}}
 
-/* Szünet-videó */
+/* Szüneti zenelejátszó */
 .vid{padding-bottom:16px}
-.vframe{position:relative;aspect-ratio:16/9;margin-top:10px;border-radius:14px;overflow:hidden;background:#000;border:1px solid var(--line);box-shadow:0 0 34px -10px var(--break)}
-.vframe iframe,.vframe video{position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover}
 .tv .vid .tag{font-size:1.5vh;margin-bottom:.4vh}
 
 /* Pihenő mód + Snake */
@@ -761,7 +758,6 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
 .tv-jb li{font-size:2.2vh;padding:.6vh 1vw}.tv-jb .jb-info small{font-size:1.8vh}.tv-jb .jb-votes{font-size:2.4vh}
 .tv .poll h2{font-size:3.2vh}.tv .popt,.tv .pbar{font-size:2.4vh}.tv .pbar b{font-size:2.9vh}.tv .pollqr img{width:9vh;height:9vh}.tv .pollqr{font-size:2vh}
 .tv .rest h2{font-size:3.4vh}.tv .restcount b{font-size:7vh}.tv .restcount span{font-size:2.6vh}.tv .restcount small{font-size:2vh}.tv .restcount em{font-size:2.1vh}
-.tv .vframe{max-height:32vh}
 .tv .strip .bar{height:4.4vh}
 .tv .seg{font-size:2.5vh}
 .tv .ends{font-size:2vh}
@@ -1156,7 +1152,7 @@ main.tv{padding:1vh 1.4vw;gap:1vh}
   .kofi-panel::before,.kofi-panel::after,.scroll-cue-arr{animation:none}
 }
 
-/* Alsó lebegő görgetésjelző nyíl (zene/videó + szüneti játék) */
+/* Alsó lebegő görgetésjelző nyíl (zene + szüneti játék) */
 @keyframes cueArrowBounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(3px); }

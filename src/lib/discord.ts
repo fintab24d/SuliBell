@@ -24,7 +24,6 @@ export interface DiscordSyncData {
   announcements: DiscordAnnouncementItem[]
   channels?: {
     music?: string
-    videos?: string
   }
 }
 
@@ -34,13 +33,12 @@ let cachedSync: DiscordSyncData = {
   announcements: [],
   channels: {
     music: '#🎵-zenekérés-ötletek',
-    videos: '#🎬-videóbeküldés',
   },
 }
 let pendingSync: Promise<DiscordSyncData> | null = null
 
 /**
- * Lekéri a Discord szerverről a #🎵-zenekérés-ötletek, #🎬-videóbeküldés és #📢-közlemények szobák legfrissebb üzeneteit.
+ * Lekéri a Discord szerverről a #🎵-zenekérés-ötletek és #📢-közlemények szobák legfrissebb üzeneteit.
  */
 export async function fetchDiscordSync(force = false): Promise<DiscordSyncData> {
   const now = Date.now()
@@ -60,7 +58,6 @@ export async function fetchDiscordSync(force = false): Promise<DiscordSyncData> 
           announcements: Array.isArray(data.announcements) ? data.announcements : [],
           channels: {
             music: typeof data.channels?.music === 'string' && data.channels.music ? data.channels.music : cachedSync.channels?.music,
-            videos: typeof data.channels?.videos === 'string' && data.channels.videos ? data.channels.videos : cachedSync.channels?.videos,
           },
         }
         lastSyncAt = Date.now()

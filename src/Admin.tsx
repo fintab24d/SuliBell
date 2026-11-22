@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, SCHOOL_SLUG } from './lib/supabase'
 import { enableAudio, ring } from './lib/sound'
 import { addDays, fmtHM, toSec, type Schedule } from './lib/engine'
-import { loadAllLocalSongs, mediaModeForDay, useJukebox, type SongWish } from './Jukebox'
+import { loadAllLocalSongs, useJukebox, type SongWish } from './Jukebox'
 import { useArenaLeaderboard } from './Arena'
 import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/maintenance'
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
@@ -32,7 +32,7 @@ const DEFAULT_LESSONS: [number, string, string][] = [
   [5, '11:40', '12:25'], [6, '12:35', '13:20'], [7, '13:30', '14:15'], [8, '14:25', '15:10'],
 ]
 
-const TABLE: Record<string, string> = { schools: 'Iskola', settings: 'Beállítások', schedules: 'Csengetési rend', lessons: 'Óra', closed_days: 'Tanítás nélküli nap', countdowns: 'Visszaszámláló', announcements: 'Közlemény', school_members: 'Admin jogosultság', schedule_dates: 'Különleges nap', changes: 'Változás', menus: 'Étlap', polls: 'Szavazás', break_videos: 'Szünet-videó' }
+const TABLE: Record<string, string> = { schools: 'Iskola', settings: 'Beállítások', schedules: 'Csengetési rend', lessons: 'Óra', closed_days: 'Tanítás nélküli nap', countdowns: 'Visszaszámláló', announcements: 'Közlemény', school_members: 'Admin jogosultság', schedule_dates: 'Különleges nap', changes: 'Változás', menus: 'Étlap', polls: 'Szavazás', jukebox_songs: 'Zenegép' }
 const ACT: Record<string, string> = { INSERT: 'létrehozott', UPDATE: 'módosított', DELETE: 'törölt' }
 const FIELD: Record<string, string> = { name: 'név', label: 'megnevezés', start_time: 'kezdés', end_time: 'vége', title: 'cím', text: 'szöveg', day: 'nap', reason: 'indok', target_date: 'dátum', target_time: 'időpont', weekdays: 'napok', is_default: 'alapértelmezett', timezone: 'időzóna', theme: 'téma', sound_enabled: 'hang', logo_url: 'logó', tv_show_seconds: 'TV másodperc', tv_show_next: 'TV következő', tv_scale: 'TV méret', site_version: 'verzió', version_note: 'verzió megjegyzés', kind: 'fajta', active_until: 'eddig', position: 'sorrend', bell_sound_url: 'csengőhang' }
 const show = (v: unknown) => (v === null || v === undefined || v === '' ? '(üres)' : typeof v === 'boolean' ? (v ? 'be' : 'ki') : String(v).slice(0, 40))
@@ -93,9 +93,8 @@ function Panel() {
   const [chgNotify, setChgNotify] = useState(true)
   const [subs, setSubs] = useState<number | null>(null)
   const [perms, setPerms] = useState<string[] | null | undefined>(undefined)   // null = teljes jogú; undefined = még töltődik
-  const [vids, setVids] = useState<any[] | null>(null)   // null: az update12.sql még nem futott le
   const [dbWishes, setDbWishes] = useState<SongWish[]>([])
-  const { songs: jbSongs, mode: todayMode, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
+  const { songs: jbSongs, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
   const { board: arenaBoard, removeLeaderEntry, clearLeaderboard } = useArenaLeaderboard(d?.id, todayStr)
   const [previewWishId, setPreviewWishId] = useState<string | null>(null)
   const [newBannedWord, setNewBannedWord] = useState('')
@@ -136,26 +135,24 @@ function Panel() {
       .then(({ count, error }) => setSubs(error ? null : count ?? 0))
   }, [d])
   const [deletedWishIds, setDeletedWishIds] = useState<Set<string>>(() => new Set())
-  useEffect(() => {   // szünet-videók és beküldött zenék/videók
+  useEffect(() => {   // beküldött szüneti zenék
     if (!d) return
-    supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at').then(({ data, error }) => setVids(error ? null : data ?? []))
     supabase.from('jukebox_songs').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(100).then(({ data, error }: any) => {
       if (error || !Array.isArray(data)) return
       const delIds = new Set<string>()
       const active: any[] = []
       for (const r of data) {
         if (r.deleted) delIds.add(String(r.song_id))
-        else active.push(r)
+        else if (r.kind !== 'video') active.push(r)
       }
       setDeletedWishIds(delIds)
       setDbWishes(active.map((r: any) => ({
         id: String(r.song_id),
         day: String(r.day),
-        kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mediaModeForDay(String(r.day)),
+        kind: 'music' as const,
         title: String(r.title),
         by: String(r.requester ?? ''),
         ytId: r.yt_id ? String(r.yt_id) : undefined,
-        mp4Url: r.media_url ? String(r.media_url) : undefined,
         votes: Number(r.votes) || 1,
         at: Date.parse(r.created_at) || Date.now(),
       })))
@@ -456,7 +453,7 @@ function Panel() {
           }} />
         Megjegyzés <input style={{ minWidth: '18rem' }} placeholder="pl. Új közlemények" defaultValue={d.settings.version_note ?? ''} key={'n' + d.settings.version_note}
           onBlur={e => e.target.value !== (d.settings.version_note ?? '') && setS({ version_note: e.target.value })} />
-        <button type="button" onClick={() => setS({ version_note: '5 szavazatos szüneti zene/videó, 1 játék szünetenként, kötelező név és okos szószűrő' })}>✨ Legújabb újítások beírása</button>
+        <button type="button" onClick={() => setS({ version_note: '5 szavazatos szüneti zene, 1 játék szünetenként, kötelező név és okos szószűrő' })}>✨ Legújabb újítások beírása</button>
         <button type="button" title="Közvetlen közzététel a Discord #🆕-frissítések szobában" onClick={async () => {
           const ver = d.settings.site_version || '1.0.0'
           const note = d.settings.version_note || ''
@@ -960,12 +957,12 @@ function Panel() {
       return (
         <section>
           <div className="row" style={{ justifyContent: 'space-between' }}>
-            <h2>Szüneti Videók és Zenék moderálása ({todayMode === 'video' ? '🎬 Ma: Videó-nap' : '🎵 Ma: Zene-nap'})</h2>
-            {(mergedWishes.length > 0 || (vids && vids.length > 0)) && (
+            <h2>🎵 Szüneti Zenegép moderálása</h2>
+            {mergedWishes.length > 0 && (
               <button
                 type="button"
                 onClick={async () => {
-                  if (!confirm('Biztosan törlöd az összes beküldött szüneti videót és zenét?')) return
+                  if (!confirm('Biztosan törlöd az összes beküldött szüneti zenét?')) return
                   const res = await clearAllSongs(todayStr)
                   if (res?.error) {
                     setMsg(`Törlési hiba: ${res.error}`)
@@ -977,17 +974,11 @@ function Panel() {
                     return next
                   })
                   setDbWishes([])
-                  if (vids && vids.length > 0) {
-                    await run(supabase.from('break_videos').delete().eq('school_id', d.id))
-                    const { data, error } = await supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at')
-                    if (!error && Array.isArray(data)) setVids(data)
-                  } else {
-                    setMsg('Összes kívánság törölve.')
-                  }
+                  setMsg('Összes zene-kívánság törölve.')
                   notifyAllClients()
                 }}
               >
-                ↺ Összes videó és zene törlése
+                ↺ Összes zene törlése
               </button>
             )}
           </div>
@@ -998,28 +989,28 @@ function Panel() {
                 checked={d.settings.break_videos !== false}
                 onChange={e => setS({ break_videos: e.target.checked })}
               />{' '}
-              Szüneti videók / zenék lejátszása a szünetekben (naponta váltakozva: egyik nap videó, másik nap zene)
+              Szüneti zenelejátszás engedélyezése a szünetekben
             </label>
           </div>
           <p style={{ color: 'var(--mut)', fontSize: '0.9rem' }}>
-            🔒 <b>Előnézet védelem</b>: A főoldalon a diákok számára az előnézet le van tiltva. A beküldött számokba és videókba kizárólag az admin tud belehallgatni és megnézni az alábbi listában az ellenőrzéshez.
+            🔒 <b>Előnézet védelem</b>: A főoldalon a diákok számára a belehallgatás le van tiltva. A beküldött számokba kizárólag az admin tud belehallgatni az alábbi listában az ellenőrzéshez.
           </p>
           <p>
-            A videókat és zenéket a diákok küldik be és szavazzák meg a főoldalon (minimum 5 szavazat kell a lejátszáshoz). Ha valaki iskolába nem illő videót vagy zenét küldött be, itt előnézetben ellenőrizheted és egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
+            A zenéket a diákok küldik be és szavazzák meg a főoldalon (minimum 5 szavazat kell a lejátszáshoz). Ha valaki iskolába nem illő számot küldött be, itt belehallgatással ellenőrizheted és egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
           </p>
 
-          {mergedWishes.length === 0 && (!vids || vids.length === 0) ? (
-            <p><i>Jelenleg nincs beküldött szüneti videó vagy zene.</i></p>
+          {mergedWishes.length === 0 ? (
+            <p><i>Jelenleg nincs beküldött szüneti zene.</i></p>
           ) : (
             <>
               {mergedWishes.map(w => {
-                const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : w.mp4Url
+                const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : undefined
                 const isPreviewing = previewWishId === w.id
                 return (
                   <div key={w.id} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8, marginBottom: 8 }}>
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <b>{w.kind === 'video' ? '🎬 Videó:' : '🎵 Zene:'} {w.title}</b>
+                        <b>🎵 Zene: {w.title}</b>
                         {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
                         {' '}• <span>🔥 {w.votes} szavazat</span>
                         {' '}• <small>{w.day}</small>
@@ -1030,13 +1021,13 @@ function Panel() {
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        {(w.ytId || w.mp4Url) && (
+                        {w.ytId && (
                           <button
                             type="button"
                             className={isPreviewing ? 'on' : ''}
                             onClick={() => setPreviewWishId(isPreviewing ? null : w.id)}
                           >
-                            {isPreviewing ? '⏹ Előnézet bezárása' : w.kind === 'video' ? '▶ Videó előnézet' : '🎧 Zene belehallgatás'}
+                            {isPreviewing ? '⏹ Előnézet bezárása' : '🎧 Zene belehallgatás'}
                           </button>
                         )}
                         <button
@@ -1058,52 +1049,27 @@ function Panel() {
                         </button>
                       </div>
                     </div>
-                    {isPreviewing && (
+                    {isPreviewing && w.ytId && (
                       <div style={{ marginTop: 8, padding: 10, background: 'var(--card)', borderRadius: 10, border: '1px solid var(--line)', maxWidth: 500 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <b>{w.kind === 'video' ? '🎬 Admin Videó előnézet:' : '🎵 Admin Zene előnézet:'} {w.title}</b>
+                          <b>🎵 Admin Zene előnézet: {w.title}</b>
                           <button type="button" onClick={() => setPreviewWishId(null)}>✕ Bezárás</button>
                         </div>
-                        {w.ytId ? (
-                          <iframe
-                            width="100%"
-                            height="240"
-                            src={`https://www.youtube-nocookie.com/embed/${w.ytId}?autoplay=1&controls=1&rel=0`}
-                            title={w.title}
-                            allow="autoplay; encrypted-media; picture-in-picture"
-                            sandbox="allow-scripts allow-same-origin allow-presentation"
-                            referrerPolicy="strict-origin-when-cross-origin"
-                            style={{ borderRadius: 8, border: 0 }}
-                          />
-                        ) : w.mp4Url ? (
-                          <video src={w.mp4Url} controls autoPlay style={{ width: '100%', maxHeight: 240, borderRadius: 8 }} />
-                        ) : null}
+                        <iframe
+                          width="100%"
+                          height="240"
+                          src={`https://www.youtube-nocookie.com/embed/${w.ytId}?autoplay=1&controls=1&rel=0`}
+                          title={w.title}
+                          allow="autoplay; encrypted-media; picture-in-picture"
+                          sandbox="allow-scripts allow-same-origin allow-presentation"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          style={{ borderRadius: 8, border: 0 }}
+                        />
                       </div>
                     )}
                   </div>
                 )
               })}
-
-              {(vids ?? []).map(v => (
-                <div className="row" key={v.id} style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
-                  <div>
-                    <b>🎬 Korábbi szünet-videó: {v.title || v.url}</b>
-                    {v.title ? ` (${v.url})` : ''}
-                    {' '}• <a href={v.url} target="_blank" rel="noopener noreferrer">🔗 Link megnyitása</a>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await run(supabase.from('break_videos').delete().eq('id', v.id))
-                      const { data, error } = await supabase.from('break_videos').select('*').eq('school_id', d.id).order('created_at')
-                      if (!error && Array.isArray(data)) setVids(data)
-                      notifyAllClients()
-                    }}
-                  >
-                    🗑️ Törlés
-                  </button>
-                </div>
-              ))}
             </>
           )}
         </section>
@@ -1199,7 +1165,7 @@ function Panel() {
             )}
           </div>
           <p>
-            Pont úgy működik, mint a Discord AutoMod: az ide beírt szavakat, neveket vagy kifejezéseket a rendszer <b>azonnal letiltja az egész oldalon</b> (Zenegép zene- és videócímekben, beküldő nevekben, Mini-Aréna és Pihenő mód játékosnevekben, valamint a toplistán). A szűrő automatikusan felismeri az ékezet nélküli és számokkal trükköző (leetspeak, pl. <code>4=a, 3=e, 1=i, 0=o</code>) változatokat is. Használhatsz <code>*szó*</code> csillagos helyettesítést is!
+            Pont úgy működik, mint a Discord AutoMod: az ide beírt szavakat, neveket vagy kifejezéseket a rendszer <b>azonnal letiltja az egész oldalon</b> (Zenegép számcímekben, beküldő nevekben, Mini-Aréna és Pihenő mód játékosnevekben, valamint a toplistán). A szűrő automatikusan felismeri az ékezet nélküli és számokkal trükköző (leetspeak, pl. <code>4=a, 3=e, 1=i, 0=o</code>) változatokat is. Használhatsz <code>*szó*</code> csillagos helyettesítést is!
           </p>
 
           <div className="row" style={{ marginBottom: 10 }}>

@@ -8,7 +8,7 @@ import QRCode from 'qrcode'
 import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
 import { PollCard, usePoll } from './Poll'
-import BreakVideo, { useVideos } from './BreakVideo'
+import BreakVideo from './BreakVideo'
 const RestMode = lazy(() => import('./Rest'))
 const Ask = lazy(() => import('./Ask'))
 import { MyScheduleModal, formatMyLesson, useMySchedule, type MyLessonEntry } from './MySchedule'
@@ -397,7 +397,6 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const tvActive = tv && !isTvWeekend
   const needAll = tvActive || (!tv && layoutMode === 'classic')
   const { poll, counts } = usePoll(needAll ? data?.id : undefined)
-  const videos = useVideos(needAll ? data?.id : undefined)
   const pollQr = useQr(location.origin + '/szavazas', tv && !!poll)
   const [myModalOpen, setMyModalOpen] = useState(false)
   useOnlinePresence(sandbox ? undefined : data?.id, tv ? 'tv' : 'web')
@@ -833,14 +832,14 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     </div>
   )
 
-  const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: sb.breakMediaKind, title: sb.breakMediaKind === 'music' ? 'Cartoon – On & On (Szüneti Zene Mix)' : 'Teszt szüneti videó (4K természetfilm)', by: 'Admin Tesztlabor', ytId: sb.breakMediaKind === 'music' ? 'K4DyBUG242c' : 'LXb3EKWsInQ', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
-  const hasAnyWish = effectiveWishes.some(w => w.ytId || w.mp4Url)
+  const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: 'music', title: 'Cartoon – On & On (Szüneti Zene Mix)', by: 'Admin Tesztlabor', ytId: 'K4DyBUG242c', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
+  const hasAnyWish = effectiveWishes.some(w => !!w.ytId)
   const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
   const curJukeboxBreakKey = `${z.date}-${s.phase}-${s.current?.id ?? s.next?.id ?? '0'}`
   const breakTotalSec = s.phase === 'break' ? s.total : undefined
   const isWeekendDay = z.weekday === 6 || z.weekday === 7
-  const vid = !isWeekendDay && s.phase === 'break' && data.settings.break_videos !== false && (hasAnyWish || videos.length > 0) && (
-    <BreakVideo list={videos} wishes={effectiveWishes} day={z.date} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
+  const vid = !isWeekendDay && s.phase === 'break' && data.settings.break_videos !== false && hasAnyWish && (
+    <BreakVideo wishes={effectiveWishes} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
   )
   const e0 = events[0]
   const restEv = pv && first && until > 0
@@ -1164,7 +1163,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               </section>
             </div>
 
-            {/* 2. OSZLOP (KÖZÉP): Mai napirend, változások, szünet-videó / pihenő mód, heti áttekintés */}
+            {/* 2. OSZLOP (KÖZÉP): Mai napirend, változások, szüneti zene / pihenő mód, heti áttekintés */}
             <div className="dash-col col-schedule">
               {changesBox}
               {vid}
@@ -1314,7 +1313,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             onClick={() => navigateTab('media')}
           >
             <span className="nav-ico" aria-hidden="true">🎵</span>
-            <span>Zene &amp; Videó</span>
+            <span>Zenegép</span>
             {s.phase === 'break' && <b className="nav-badge live">ÉLŐ</b>}
           </button>
         </nav>
@@ -1427,7 +1426,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                   <button type="button" onClick={() => navigateTab('media')}>
                     <span>🎵</span>
                     <div>
-                      <b>Szüneti Zene &amp; Videó</b>
+                      <b>Szüneti Zenegép</b>
                       <small>{s.phase === 'break' ? 'Szünet van — nyisd meg a lejátszót!' : 'Kívánságlista & szavazás'}</small>
                     </div>
                     <i>→</i>
@@ -1535,20 +1534,20 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           </Suspense>
         )}
 
-        {/* 4. MENÜ: ZENE & VIDEÓ (Lazy-loaded, csak itt fut a Jukebox és a BreakVideo) */}
+        {/* 4. MENÜ: ZENEGÉP (Lazy-loaded, csak itt fut a Jukebox és a BreakVideo zenelejátszó) */}
         {activeTab === 'media' && (
-          <Suspense fallback={<section className="panel page-loading">🎵 Zene &amp; Videó betöltése…</section>}>
+          <Suspense fallback={<section className="panel page-loading">🎵 Zenegép betöltése…</section>}>
             <MediaPage
               schoolId={data.id}
               day={z.date}
               phase={s.phase}
               breakKey={curJukeboxBreakKey}
               videoBreakKey={s.next?.id ?? key}
-              breakVideosEnabled={data.settings.break_videos !== false}
+              breakMusicEnabled={data.settings.break_videos !== false}
               sound={!!data.settings.sound_enabled && audioOn}
               userMuted={muted}
               christmas={isXmasSkin}
-              sandboxDemo={sandbox ? { forceBreakMedia: sb.forceBreakMedia, breakMediaKind: sb.breakMediaKind } : undefined}
+              sandboxDemo={sandbox ? { forceBreakMedia: sb.forceBreakMedia } : undefined}
             />
           </Suspense>
         )}

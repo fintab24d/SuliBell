@@ -21,10 +21,8 @@ export interface SandboxConfig {
   testMenu: string
   /** Teszt közlemény */
   testAnnouncement: string
-  /** Szüneti videó/zene kényszerített tesztelése */
+  /** Szüneti zene kényszerített tesztelése */
   forceBreakMedia: boolean
-  /** Szüneti média típusa a tesztlaborban ('music' = Visualizer, 'video' = Videó) */
-  breakMediaKind: 'music' | 'video'
   /** Teszt időjárási kód (pl. 61 = eső, 71 = hó, 95 = vihar, null = valós időjárás) */
   simWeatherCode: number | null
 }
@@ -42,7 +40,6 @@ export const DEFAULT_SANDBOX: SandboxConfig = {
   testMenu: '',
   testAnnouncement: '',
   forceBreakMedia: true,
-  breakMediaKind: 'music',
   simWeatherCode: null,
 }
 

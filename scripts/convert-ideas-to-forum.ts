@@ -57,7 +57,7 @@ async function run() {
     topic: 'Oszd meg az ötleteidet a Számláló oldalhoz! Nyiss egy új bejegyzést a megfelelő címkével, szavazzatok és vitassátok meg!',
     available_tags: [
       { name: '✨ Új funkció', emoji_name: '✨' },
-      { name: '🎵 Zenegép & Videó', emoji_name: '🎵' },
+      { name: '🎵 Zenegép', emoji_name: '🎵' },
       { name: '🎮 Játék & Ranglista', emoji_name: '🎮' },
       { name: '🎨 Kinézet & Design', emoji_name: '🎨' },
       { name: '📱 Mobil & PWA', emoji_name: '📱' },
@@ -83,7 +83,7 @@ Ez a csatorna egy **Fórum**, ahol minden ötlet külön bejegyzésként jelenik
 ### 💡 Hogyan küldhetsz be új ötletet?
 1. Kattints az **Új bejegyzés** gombra a tetején.
 2. Adj egy rövid, kifejező **címet** az ötletednek (pl. *„Sötét/Világos téma kapcsoló”* vagy *„Új kvízkérdések”*).
-3. Válaszd ki a megfelelő **címkét** (✨ *Új funkció*, 🎵 *Zenegép & Videó*, 🎮 *Játék*, 🎨 *Design*, 📱 *Mobil*).
+3. Válaszd ki a megfelelő **címkét** (✨ *Új funkció*, 🎵 *Zenegép*, 🎮 *Játék*, 🎨 *Design*, 📱 *Mobil*).
 4. Fejtsd ki részletesen az elképzelésedet!
 
 ### 👍 Szavazás és támogatás:

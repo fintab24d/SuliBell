@@ -266,7 +266,7 @@ const ytSafeCache = new Map<string, { ok: boolean; title?: string; error?: strin
 const mediaCheckCache = new Map<string, { valid: boolean; error?: string }>()
 
 /**
- * YouTube videó ellenőrzése (korhatár, 18+, privát, nem beágyazható)
+ * YouTube-link ellenőrzése (korhatár, 18+, privát, nem beágyazható)
  */
 export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; title?: string; error?: string }> {
   const cached = ytSafeCache.get(ytId)
@@ -280,7 +280,7 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
     if (res.status === 401 || res.status === 403) {
       const r = {
         ok: false,
-        error: 'Ez a videó korhatáros (18+) vagy a tulajdonosa letiltotta a beágyazását. Kérjük, válassz másik videót!'
+        error: 'Ez a YouTube-tartalom korhatáros (18+) vagy a tulajdonosa letiltotta a beágyazását. Kérjük, válassz másik számot!'
       }
       ytSafeCache.set(ytId, r)
       return r
@@ -288,7 +288,7 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
     if (!res.ok) {
       return {
         ok: false,
-        error: 'A megadott videó nem található, privát vagy nem elérhető.'
+        error: 'A megadott YouTube-link nem található, privát vagy nem elérhető.'
       }
     }
 
@@ -302,7 +302,7 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
       const r = {
         ok: false,
         title,
-        error: `A videó címe („${title.slice(0, 40)}”) nem felel meg az iskolai szabályzatnak (nem megengedett vagy explicit jelölés: ${titleCheck.matchedWord}).`
+        error: `A zene címe („${title.slice(0, 40)}”) nem felel meg az iskolai szabályzatnak (nem megengedett vagy explicit jelölés: ${titleCheck.matchedWord}).`
       }
       ytSafeCache.set(ytId, r)
       return r
@@ -313,7 +313,7 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
       const r = {
         ok: false,
         title,
-        error: `A videó készítője/csatornája („${author.slice(0, 32)}”) nem megengedett vagy explicit tartalmú.`
+        error: `Az előadó/csatorna („${author.slice(0, 32)}”) nem megengedett vagy explicit tartalmú.`
       }
       ytSafeCache.set(ytId, r)
       return r
@@ -443,7 +443,7 @@ export function validatePlayerName(name: string, requireClass = false): { valid:
  * Teljes körű beküldés-ellenőrzés:
  * 1. Név kötelező (névtelen beküldés tiltott)
  * 2. Cím, link és név káromkodás/NSFW/Explicit szűrése
- * 3. YouTube videó korhatár és cím ellenőrzése
+ * 3. YouTube korhatár és cím ellenőrzése
  * 4. Szerveroldali YouTube Music / Deezer / iTunes / YouTube explicit metaadat-ellenőrzés
  */
 export async function validateMediaSubmission(params: {
@@ -468,7 +468,7 @@ export async function validateMediaSubmission(params: {
   if (!cleanTitle) {
     return {
       valid: false,
-      error: 'Add meg a zene vagy videó címét!'
+      error: 'Add meg a zene címét!'
     }
   }
 
@@ -500,7 +500,7 @@ export async function validateMediaSubmission(params: {
       : { valid: false, error: cachedServer.error }
   }
 
-  // 3. YouTube videó ellenőrzése és 4. Szerveroldali metaadat-ellenőrzés PÁRHUZAMOSAN (max 1.8 mp)
+  // 3. YouTube ellenőrzése és 4. Szerveroldali metaadat-ellenőrzés PÁRHUZAMOSAN (max 1.8 mp)
   const ytPromise = params.ytId ? verifyYouTubeSafe(params.ytId) : Promise.resolve({ ok: true } as { ok: boolean; error?: string })
   const serverPromise = supabase
     ? Promise.race([
@@ -519,7 +519,7 @@ export async function validateMediaSubmission(params: {
   const [ytCheck, res] = await Promise.all([ytPromise, serverPromise])
 
   if (!ytCheck.ok) {
-    const errRes = { valid: false, error: ytCheck.error || 'A videó nem felel meg az iskolai szabályzatnak.' }
+    const errRes = { valid: false, error: ytCheck.error || 'A megadott zene nem felel meg az iskolai szabályzatnak.' }
     mediaCheckCache.set(cacheKey, errRes)
     return errRes
   }
@@ -527,7 +527,7 @@ export async function validateMediaSubmission(params: {
   if (res && !(res as any).error && (res as any).data && (res as any).data.ok === false) {
     const errRes = {
       valid: false,
-      error: (res as any).data.error || 'Explicit-ként (18+ / szókimondó) jelölt zene vagy videó nem küldhető be!',
+      error: (res as any).data.error || 'Explicit-ként (18+ / szókimondó) jelölt zene nem küldhető be!',
     }
     mediaCheckCache.set(cacheKey, errRes)
     return errRes

@@ -1,27 +1,17 @@
 import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
-import { parseVideo } from './lib/video'
+import { parseYouTubeId } from './lib/video'
 import { voterId } from './Poll'
 import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
 import { weekdayOf } from './lib/engine'
 import { validateMediaSubmission } from './lib/moderation'
 
-export type MediaKind = 'music' | 'video'
+export type MediaKind = 'music'
 
 /** Igaz, ha a megadott nap (YYYY-MM-DD) hétvége (szombat vagy vasárnap). */
 export function isJukeboxWeekend(day: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) && weekdayOf(day) >= 6
-}
-
-/**
- * Naponta váltakozik: egyik nap szüneti videók ('video'),
- * másik nap szüneti zenék ('music') mennek a szünetekben.
- */
-export function mediaModeForDay(day: string): MediaKind {
-  const ms = Date.parse(day + 'T00:00:00Z')
-  const epochDay = Math.floor((Number.isNaN(ms) ? Date.now() : ms) / 86400000)
-  return epochDay % 2 === 0 ? 'video' : 'music'
 }
 
 export interface SongWish {
@@ -31,7 +21,6 @@ export interface SongWish {
   title: string
   by: string
   ytId?: string
-  mp4Url?: string
   votes: number
   at: number
 }
@@ -45,23 +34,10 @@ const QUICK_SONGS: { title: string; ytId: string }[] = [
   { title: 'DESH – Kukásautó', ytId: 'k7N-rC7c8H0' },
 ]
 
-const QUICK_VIDEOS: { title: string; ytId: string }[] = [
-  { title: 'Gyönyörű természet és tájak 4K', ytId: 'LXb3EKWsInQ' },
-  { title: 'A Föld az űrből – NASA 4K felvételek', ytId: 'H999s0P1Er0' },
-  { title: 'Megnyugtató óceán és korallzátony', ytId: '1ZYbU82GVz4' },
-  { title: 'Svájci Alpok – látványos drónvideó', ytId: 'linlz7-Pnvw' },
-  { title: 'Látványos fizikai kísérletek (Slow Mo)', ytId: 'r8BiI9a2N4U' },
-]
-
 const XMAS_QUICK_SONGS: { title: string; ytId: string }[] = [
   { title: 'Wham! – Last Christmas', ytId: 'E8gmARGvPlI' },
   { title: 'Mariah Carey – All I Want For Christmas Is You', ytId: 'yXQViqx6GMY' },
   { title: 'Shakin’ Stevens – Merry Christmas Everyone', ytId: 'N-PyWfVkjZc' },
-]
-
-const XMAS_QUICK_VIDEOS: { title: string; ytId: string }[] = [
-  { title: 'Karácsonyi kandalló & meghitt téli hangulat 4K', ytId: 'L_LUpnjgPso' },
-  { title: 'Svájci havas Alpok 4K drónvideó', ytId: 'linlz7-Pnvw' },
 ]
 
 const STORAGE_PREFIX = 'csengeto-jukebox-'
@@ -113,14 +89,18 @@ export function loadLocalSongs(day: string): SongWish[] {
   try {
     pruneOldJukeboxDays(day)
     const del = loadDeletedSet(day)
-    const raw: SongWish[] = JSON.parse(localStorage.getItem(STORAGE_PREFIX + day) ?? '[]') || []
-    const fallbackKind = mediaModeForDay(day)
+    const raw: any[] = JSON.parse(localStorage.getItem(STORAGE_PREFIX + day) ?? '[]') || []
     return raw
-      .filter(s => s && s.id && (s.day === day || !s.day) && !del.has(s.id))
+      .filter(s => s && s.id && (s.day === day || !s.day) && !del.has(s.id) && s.kind !== 'video')
       .map(s => ({
-        ...s,
+        id: String(s.id),
         day: s.day || day,
-        kind: s.kind || fallbackKind,
+        kind: 'music' as const,
+        title: String(s.title || ''),
+        by: String(s.by || ''),
+        ytId: s.ytId ? String(s.ytId) : undefined,
+        votes: Number(s.votes) || 1,
+        at: Number(s.at) || Date.now(),
       }))
   } catch {
     return []
@@ -199,9 +179,8 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
       ...cur,
       votes: Math.max(cur.votes, incoming.votes),
       ytId: cur.ytId || incoming.ytId,
-      mp4Url: cur.mp4Url || incoming.mp4Url,
       by: cur.by || incoming.by,
-      kind: cur.kind || incoming.kind,
+      kind: 'music',
       day: cur.day || incoming.day,
     }
     const next = [...list]
@@ -212,13 +191,11 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
 }
 
 export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean, breakKey?: string) {
-  const mode = mediaModeForDay(day)
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
   const [voted, setVoted] = useState<Set<string>>(() => loadVotedSet(day))
   const [submitted, setSubmitted] = useState<Set<string>>(() => loadSubmittedSet(day))
-  const [discordChannels, setDiscordChannels] = useState<{ music: string; videos: string }>({
+  const [discordChannels, setDiscordChannels] = useState<{ music: string }>({
     music: '#🎵-zenekérés-ötletek',
-    videos: '#🎬-videóbeküldés',
   })
   const chanRef = useRef<any>(null)
   const bcRef = useRef<BroadcastChannel | null>(null)
@@ -278,17 +255,17 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         setSongs(prev => {
           let next: SongWish[] = []
           for (const r of fallback.data) {
+            if (r.kind === 'video') continue
             const sid = String(r.song_id)
             if (del.has(sid)) continue
             dbIds.add(sid)
             next = mergeSong(next, {
               id: sid,
               day,
-              kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mode,
+              kind: 'music',
               title: String(r.title),
               by: String(r.requester ?? ''),
               ytId: r.yt_id ? String(r.yt_id) : undefined,
-              mp4Url: r.media_url ? String(r.media_url) : undefined,
               votes: Number(r.votes) || 1,
               at: Date.parse(r.created_at) || Date.now(),
             }, del)
@@ -312,6 +289,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       const dbIds = new Set<string>()
 
       for (const r of data) {
+        if (r.kind === 'video') continue
         const sid = String(r.song_id)
         dbIds.add(sid)
         if (r.deleted) {
@@ -322,11 +300,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         dbActive.push({
           id: sid,
           day,
-          kind: (r.kind === 'video' || r.kind === 'music') ? r.kind : mode,
+          kind: 'music',
           title: String(r.title),
           by: String(r.requester ?? ''),
           ytId: r.yt_id ? String(r.yt_id) : undefined,
-          mp4Url: r.media_url ? String(r.media_url) : undefined,
           votes: Number(r.votes) || 1,
           at: Date.parse(r.created_at) || Date.now(),
         })
@@ -351,15 +328,14 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       })
     }
 
-    // Discord #🎵-zenekérés-ötletek és #🎬-videóbeküldés szinkronizáció
+    // Discord #🎵-zenekérés-ötletek szinkronizáció
     const syncFromDiscord = async () => {
       const res = await fetchDiscordSync()
       if (!alive) return
       if (res.channels) {
         setDiscordChannels(prev => {
           const music = res.channels?.music || prev.music
-          const videos = res.channels?.videos || prev.videos
-          return prev.music === music && prev.videos === videos ? prev : { music, videos }
+          return prev.music === music ? prev : { music }
         })
       }
       if (!res.songs.length) return
@@ -373,7 +349,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           next = mergeSong(next, {
             id: ds.id,
             day,
-            kind: mode,
+            kind: 'music',
             title: ds.title,
             by: ds.by,
             ytId: ds.ytId,
@@ -533,7 +509,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       try { bc?.close() } catch { /* ignore */ }
       bcRef.current = null
     }
-  }, [schoolId, day, mode, applyDeleteLocal])
+  }, [schoolId, day, applyDeleteLocal])
 
   const broadcastSong = useCallback((song: SongWish) => {
     chanRef.current?.send({
@@ -550,14 +526,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     if (!cleanTitle) return { ok: false, reason: 'invalid' }
     const cleanBy = rawBy.trim().slice(0, 24)
     if (!cleanBy) return { ok: false, reason: 'invalid' }
-    const parsed = rawUrl?.trim() ? parseVideo(rawUrl.trim()) : parseVideo(rawTitle.trim())
-    const ytId = explicitYtId || (parsed?.kind === 'yt' ? parsed.id : undefined)
-    const mp4Url = parsed?.kind === 'file' ? parsed.src : undefined
-
-    // Videó-napon kötelező vagy ajánlott az érvényes videólink / gyors tipp
-    if (mode === 'video' && !ytId && !mp4Url && rawUrl?.trim()) {
-      return { ok: false, reason: 'invalid' }
-    }
+    const ytId = explicitYtId || (rawUrl?.trim() ? parseYouTubeId(rawUrl.trim()) : parseYouTubeId(rawTitle.trim())) || undefined
 
     if (breakKey) {
       const latestSub = loadSubmittedSet(day)
@@ -583,17 +552,15 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           ...existing,
           votes: existing.votes + 1,
           ytId: existing.ytId || ytId,
-          mp4Url: existing.mp4Url || mp4Url,
           by: existing.by || cleanBy,
         }
       : {
           id: 'jb-' + Math.random().toString(36).slice(2, 10),
           day,
-          kind: mode,
+          kind: 'music',
           title: cleanTitle,
           by: cleanBy,
           ytId,
-          mp4Url,
           votes: 1,
           at: Date.now(),
         }
@@ -634,7 +601,6 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         title: created.title,
         by: created.by,
         ytId: created.ytId,
-        mediaKind: created.kind,
       })
     }
 
@@ -648,8 +614,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           p_title: created.title,
           p_by: created.by,
           p_yt: created.ytId ?? null,
-          p_media: created.mp4Url ?? null,
-          p_kind: created.kind,
+          p_media: null,
+          p_kind: 'music',
           p_base_votes: existing.votes,
         }).then(() => {})
       } else {
@@ -660,14 +626,14 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           p_title: created.title,
           p_by: created.by,
           p_yt: created.ytId ?? null,
-          p_media: created.mp4Url ?? null,
-          p_kind: created.kind,
+          p_media: null,
+          p_kind: 'music',
           p_voter: voterId(),
         }).then(() => {})
       }
     }
     return { ok: true }
-  }, [schoolId, day, mode, breakKey, songs, voted, submitted, broadcastSong])
+  }, [schoolId, day, breakKey, songs, voted, submitted, broadcastSong])
 
   const voteSong = useCallback((songId: string) => {
     if (isJukeboxWeekend(day)) return
@@ -702,8 +668,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         p_title: found.title,
         p_by: found.by,
         p_yt: found.ytId ?? null,
-        p_media: found.mp4Url ?? null,
-        p_kind: found.kind,
+        p_media: null,
+        p_kind: 'music',
         p_base_votes: found.votes,
       }).then(() => {})
     }
@@ -733,9 +699,6 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           const { error: hardDelErr } = await supabase.from('jukebox_songs').delete().eq('school_id', schoolId).eq('song_id', songId)
           if (hardDelErr) return { error: hardDelErr.message }
         }
-      }
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(songId)) {
-        await supabase.from('break_videos').delete().eq('id', songId)
       }
     }
     return {}
@@ -791,7 +754,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, voted, mode, channels: discordChannels, hasSubmittedInBreak, addSong, voteSong, removeSong, finishSong, clearAllSongs }
+  return { songs, voted, channels: discordChannels, hasSubmittedInBreak, addSong, voteSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default memo(function Jukebox({
@@ -809,9 +772,8 @@ export default memo(function Jukebox({
   sound?: boolean
   christmas?: boolean
 }) {
-  const { songs, voted, mode, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
+  const { songs, voted, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
   const weekend = isJukeboxWeekend(day)
-  const isVideoDay = mode === 'video'
   const [title, setTitle] = useState('')
   const [by, setBy] = useState(() => {
     try { return localStorage.getItem('csengeto-arena-name') ?? '' } catch { return '' }
@@ -828,20 +790,16 @@ export default memo(function Jukebox({
     if (submitting) return
     setErr('')
     if (hasSubmittedInBreak(by)) {
-      setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
+      setErr('Ebben a szünetben már küldtél be zenét! Egy ember egy szünetben csak 1 kívánságot küldhet be.')
       return
     }
     if (!title.trim()) return
 
-    const parsed = ytUrl.trim() ? parseVideo(ytUrl.trim()) : parseVideo(title.trim())
-    const explicitOrParsedYt = pickedYtId || (parsed?.kind === 'yt' ? parsed.id : undefined)
+    const parsedYtId = ytUrl.trim() ? parseYouTubeId(ytUrl.trim()) : parseYouTubeId(title.trim())
+    const explicitOrParsedYt = pickedYtId || parsedYtId || undefined
 
-    if (isVideoDay && !pickedYtId && !ytUrl.trim() && !parsed) {
-      setErr('Videó-napon adj meg egy YouTube / videó linket, vagy válassz a gyors tippek közül!')
-      return
-    }
-    if (ytUrl.trim() && !parsed) {
-      setErr('Érvényes YouTube-linket (watch, youtu.be, shorts) vagy .mp4 linket adj meg!')
+    if (ytUrl.trim() && !parsedYtId) {
+      setErr('Érvényes YouTube-linket (watch, youtu.be, shorts) adj meg!')
       return
     }
 
@@ -866,9 +824,9 @@ export default memo(function Jukebox({
       const res = addSong(check.cleanTitle || title, cleanBy, ytUrl, pickedYtId)
       if (!res.ok) {
         if (res.reason === 'break_limit') {
-          setErr(`Ebben a szünetben már küldtél be ${isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.`)
+          setErr('Ebben a szünetben már küldtél be zenét! Egy ember egy szünetben csak 1 kívánságot küldhet be.')
         } else if (res.reason === 'voted') {
-          setErr('Erre a számra vagy videóra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
+          setErr('Erre a számra már szavaztál korábban! Egy ember csak egyszer szavazhat.')
         } else {
           setErr('Érvénytelen beküldés — ellenőrizd a megadott adatokat!')
         }
@@ -890,7 +848,7 @@ export default memo(function Jukebox({
     return (
       <section className="panel jukebox-tv">
         <div className="tag" style={{ marginBottom: 4 }}>
-          {isVideoDay ? '🎬 Mai Szüneti Videók — Top 3' : '🎵 Mai Szüneti Zenegép — Top 3'}
+          🎵 Mai Szüneti Zenegép — Top 3
         </div>
         <ol className="jb-list tv-jb">
           {top3.map((s, i) => (
@@ -910,11 +868,8 @@ export default memo(function Jukebox({
     )
   }
 
-  const quickItems = isVideoDay
-    ? (christmas ? [...XMAS_QUICK_VIDEOS, ...QUICK_VIDEOS.slice(0, 3)] : QUICK_VIDEOS)
-    : (christmas ? [...XMAS_QUICK_SONGS, ...QUICK_SONGS.slice(0, 4)] : QUICK_SONGS)
+  const quickItems = christmas ? [...XMAS_QUICK_SONGS, ...QUICK_SONGS.slice(0, 4)] : QUICK_SONGS
   const musicRoom = channels.music || '#🎵-zenekérés-ötletek'
-  const videoRoom = channels.videos || '#🎬-videóbeküldés'
 
   if (weekend) {
     return (
@@ -922,10 +877,10 @@ export default memo(function Jukebox({
         <div className="jb-head">
           <div>
             <div className="tag" style={{ marginBottom: 4 }}>
-              🎧 Szüneti Zene &amp; Videó
+              🎵 Szüneti Zenegép
             </div>
             <p className="meta" style={{ margin: 0 }}>
-              Hétvégén a zene- és videóbeküldés, valamint a lejátszás szünetel — hétfőn az első szünettel újra indul!
+              Hétvégén a zenebeküldés és a szüneti lejátszás szünetel — hétfőn az első szünettel újra indul!
             </p>
           </div>
         </div>
@@ -941,14 +896,10 @@ export default memo(function Jukebox({
       <div className="jb-head">
         <div>
           <div className="tag" style={{ marginBottom: 4 }}>
-            {isVideoDay
-              ? '🎬 Szüneti Videók & Kívánságlista (Ma: Videó-nap • Holnap: Zene-nap)'
-              : '🎵 Szüneti Zenegép & Kívánságlista (Ma: Zene-nap • Holnap: Videó-nap)'}
+            🎵 Szüneti Zenegép &amp; Kívánságlista
           </div>
           <p className="meta" style={{ margin: 0 }}>
-            {isVideoDay
-              ? `Ma a szünetekben videók mennek! Küldj be videót itt vagy a Discord ${videoRoom} szobában — automatikusan megjelenik az oldalon!`
-              : `Ma a szünetekben zenék szólnak! Küldd be a kedvenc számodat itt vagy a Discord ${musicRoom} szobában — automatikusan szinkronizálódik!`}
+            {`A szünetekben a legtöbb szavazatot kapott zenék szólnak! Küldd be a kedvenc számodat itt vagy a Discord ${musicRoom} szobában — automatikusan szinkronizálódik!`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -958,11 +909,7 @@ export default memo(function Jukebox({
             rel="noopener noreferrer"
             className="btn"
             style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: '1px solid var(--line)', background: 'rgba(88,101,242,.18)' }}
-            title={
-              isVideoDay
-                ? `Videóbeküldés a hivatalos SuliBell Discord szerveren (${videoRoom})`
-                : `Zenekérés a hivatalos SuliBell Discord szerveren (${musicRoom})`
-            }
+            title={`Zenekérés a hivatalos SuliBell Discord szerveren (${musicRoom})`}
           >
             💬 Discord
           </a>
@@ -971,7 +918,7 @@ export default memo(function Jukebox({
             className={showForm ? 'on' : 'cta'}
             onClick={() => { setShowForm(v => !v); setErr('') }}
           >
-            {showForm ? '✕ Bezárás' : isVideoDay ? '➕ Videó beküldése' : '➕ Zene beküldése'}
+            {showForm ? '✕ Bezárás' : '➕ Zene beküldése'}
           </button>
         </div>
       </div>
@@ -979,7 +926,7 @@ export default memo(function Jukebox({
       {showForm && (
         <form className="jb-form" onSubmit={submit}>
           <div className="jb-quick">
-            <small>{isVideoDay ? 'Gyors videó tippek (1 kattintás):' : 'Gyors zene tippek (1 kattintás):'}</small>
+            <small>Gyors zene tippek (1 kattintás):</small>
             <div className="jb-chips">
               {quickItems.map(q => (
                 <button
@@ -993,7 +940,7 @@ export default memo(function Jukebox({
                     setErr('')
                   }}
                 >
-                  {isVideoDay ? '🎬' : '🎵'} {q.title}
+                  🎵 {q.title}
                 </button>
               ))}
             </div>
@@ -1002,11 +949,7 @@ export default memo(function Jukebox({
           <div className="jb-inputs">
             <input
               type="text"
-              placeholder={
-                isVideoDay
-                  ? 'Videó címe (pl. Látványos természet 4K / Vicces összeállítás) *'
-                  : 'Előadó – Szám címe (pl. Azahriah – 3korty) *'
-              }
+              placeholder="Előadó – Szám címe (pl. Azahriah – 3korty) *"
               maxLength={60}
               required
               value={title}
@@ -1023,9 +966,8 @@ export default memo(function Jukebox({
               />
               <input
                 type="url"
-                placeholder={isVideoDay ? 'YouTube vagy .mp4 link (https://...) *' : 'YouTube link a szüneti lejátszáshoz (ajánlott)'}
+                placeholder="YouTube link a szüneti lejátszáshoz (ajánlott)"
                 value={ytUrl}
-                required={isVideoDay && !pickedYtId}
                 onChange={e => {
                   setYtUrl(e.target.value)
                   setPickedYtId(undefined)
@@ -1038,12 +980,12 @@ export default memo(function Jukebox({
             </div>
             {alreadySubmittedBreak && (
               <small style={{ color: '#facc15', fontWeight: 600 }}>
-                ⏸️ Ebben a szünetben már küldtél be {isVideoDay ? 'videót' : 'zenét'}! Egy ember egy szünetben csak 1 kívánságot küldhet be.
+                ⏸️ Ebben a szünetben már küldtél be zenét! Egy ember egy szünetben csak 1 kívánságot küldhet be.
               </small>
             )}
             {err && <small style={{ color: 'var(--warn)', fontWeight: 600 }}>{err}</small>}
             <small style={{ color: 'var(--mut)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-              🛡️ Szabályok: A név megadása kötelező (névtelenül nem küldhető be). Egy ember egy szünetben csak 1 {isVideoDay ? 'videót' : 'zenét'} küldhet be. A szüneti lejátszáshoz legalább {MIN_VOTES_TO_PLAY} szavazat szükséges, és egy elemre csak egyszer lehet szavazni. Lejátszás után automatikusan törlődik a listából, napváltáskor pedig az összes megmaradt kívánság törlődik.
+              🛡️ Szabályok: A név megadása kötelező (névtelenül nem küldhető be). Egy ember egy szünetben csak 1 zenét küldhet be. A szüneti lejátszáshoz legalább {MIN_VOTES_TO_PLAY} szavazat szükséges, és egy számra csak egyszer lehet szavazni. Lejátszás után automatikusan törlődik a listából, napváltáskor pedig az összes megmaradt kívánság törlődik.
             </small>
           </div>
         </form>
@@ -1052,9 +994,7 @@ export default memo(function Jukebox({
       {songs.length === 0 ? (
         <div className="jb-empty">
           <span>
-            {isVideoDay
-              ? '🎬 Még nincs mai szüneti videó. Küldj be egyet, és a szünetben ez fog menni!'
-              : '🎧 Még nincs mai zene-kívánság. Legyél te az első, aki bedob egy számot a szünetre!'}
+            🎧 Még nincs mai zene-kívánság. Legyél te az első, aki bedob egy számot a szünetre!
           </span>
         </div>
       ) : (

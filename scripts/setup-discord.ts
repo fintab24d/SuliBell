@@ -268,7 +268,7 @@ async function main() {
     topic: 'Oszd meg az ötleteidet a Számláló oldalhoz! Nyiss egy új bejegyzést a megfelelő címkével, szavazzatok és vitassátok meg!',
     available_tags: [
       { name: '✨ Új funkció', emoji_name: '✨' },
-      { name: '🎵 Zenegép & Videó', emoji_name: '🎵' },
+      { name: '🎵 Zenegép', emoji_name: '🎵' },
       { name: '🎮 Játék & Ranglista', emoji_name: '🎮' },
       { name: '🎨 Kinézet & Design', emoji_name: '🎨' },
       { name: '📱 Mobil & PWA', emoji_name: '📱' },
@@ -354,7 +354,7 @@ async function main() {
     name: '👑-vip-zenekérés',
     type: 0,
     parent_id: vipCat.id,
-    topic: '👑 VIP Zenekérés — az ide beküldött zenék és videók 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
+    topic: '👑 VIP Zenekérés — az ide beküldött zenék 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
     permission_overwrites: vipPrivateOverwrites,
   })
 

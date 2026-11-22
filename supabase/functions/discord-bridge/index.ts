@@ -27,8 +27,6 @@ interface ChannelMap {
   updates?: string
   music?: string
   musicName?: string
-  videos?: string
-  videosName?: string
   ideas?: string
   bugs?: string
   logs?: string
@@ -467,7 +465,7 @@ async function runVipSetup(map: ChannelMap) {
       name: '👑-vip-zenekérés',
       type: 0,
       parent_id: map.vipCat,
-      topic: '👑 VIP Zenekérés — az ide beküldött zenék és videók 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
+      topic: '👑 VIP Zenekérés — az ide beküldött zenék 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
       permission_overwrites: vipPrivateOverwrites
     }).catch(() => null)
     if (ch?.id) {
@@ -904,7 +902,7 @@ async function runWelcomeAndJoinSetup(map: ChannelMap) {
         {
           name: '⏱️ Mi az a SuliBell?',
           value:
-            'Másodperc-pontos csengetési visszaszámláló, saját órarend-szűrő, szüneti zene- és videólejátszó, közhangulat-mérő és AI-asszisztens a sulidhoz.',
+            'Másodperc-pontos csengetési visszaszámláló, saját órarend-szűrő, szüneti zenelejátszó, közhangulat-mérő és AI-asszisztens a sulidhoz.',
         },
         {
           name: '🎵 Élő Zenekérés a Szünetekre',
@@ -1040,10 +1038,6 @@ async function ensureIntentAndChannels(forceRefresh = false): Promise<ChannelMap
     else if (!n.includes('parancs') && !n.includes('tulajdonos') && !n.includes('moderátor') && !n.includes('moderator') && !n.includes('dev') && !n.includes('tanár') && !n.includes('tanar') && (n.includes('zenekérés') || n.includes('zenekeres') || n.includes('zene'))) {
       map.music = c.id
       map.musicName = `#${c.name}`
-    }
-    else if (n.includes('videó') || n.includes('video')) {
-      map.videos = c.id
-      map.videosName = `#${c.name}`
     }
     else if (n.includes('ötlet') || n.includes('otlet')) map.ideas = c.id
     else if (n.includes('hiba')) map.bugs = c.id
@@ -1346,7 +1340,7 @@ async function fetchYtDetails(ytId: string): Promise<{ blocked?: string; title?:
   try {
     const oeRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${ytId}&format=json`)
     if (oeRes.status === 401 || oeRes.status === 403) {
-      return { blocked: 'Ez a videó korhatáros (18+) vagy beágyazása letiltott. Kérjük, válassz másik videót!' }
+      return { blocked: 'Ez a YouTube-tartalom korhatáros (18+) vagy beágyazása letiltott. Kérjük, válassz másik számot!' }
     }
     if (oeRes.ok) {
       const oe = await oeRes.json()
@@ -1354,7 +1348,7 @@ async function fetchYtDetails(ytId: string): Promise<{ blocked?: string; title?:
       oembedAuthor = String(oe?.author_name || '').trim()
       if (oembedTitle) ytTitleCache.set(ytId, oembedTitle.slice(0, 60))
       if (hasExplicitTextMarker(oembedTitle) || hasExplicitTextMarker(oembedAuthor)) {
-        return { blocked: `A YouTube videó explicit vagy korhatáros jelölésű („${oembedTitle.slice(0, 42)}”).` }
+        return { blocked: `A YouTube-tartalom explicit vagy korhatáros jelölésű („${oembedTitle.slice(0, 42)}”).` }
       }
     }
   } catch {
@@ -1378,15 +1372,15 @@ async function fetchYtDetails(ytId: string): Promise<{ blocked?: string; title?:
       const status = pj?.playabilityStatus?.status
       const reason = String(pj?.playabilityStatus?.reason || '')
       if (status === 'LOGIN_REQUIRED' || /age|confirm your age/i.test(reason)) {
-        return { blocked: 'Ez a YouTube videó 18+ korhatáros, ezért nem küldhető be!' }
+        return { blocked: 'Ez a YouTube-tartalom 18+ korhatáros, ezért nem küldhető be!' }
       }
       if (pj?.microformat?.playerMicroformatRenderer?.isFamilySafe === false) {
-        return { blocked: 'Ez a YouTube videó korhatáros / nem családbarát besorolású.' }
+        return { blocked: 'Ez a YouTube-tartalom korhatáros / nem családbarát besorolású.' }
       }
       const vdTitle = String(pj?.videoDetails?.title || oembedTitle || '').trim()
       const vdAuthor = String(pj?.videoDetails?.author || oembedAuthor || '').trim()
       if (hasExplicitTextMarker(vdTitle) || hasExplicitTextMarker(vdAuthor)) {
-        return { blocked: `A YouTube videó explicit jelölésű („${vdTitle.slice(0, 42)}”).` }
+        return { blocked: `A YouTube-tartalom explicit jelölésű („${vdTitle.slice(0, 42)}”).` }
       }
       return { title: vdTitle || oembedTitle, author: vdAuthor || oembedAuthor }
     }
@@ -1559,7 +1553,7 @@ async function checkMediaExplicit(params: {
   const ytId = params.ytId ? String(params.ytId).trim() : undefined
 
   if (hasExplicitTextMarker(rawTitle)) {
-    return { ok: false, error: 'Explicit vagy 18+ jelölésű zene/videó nem küldhető be az iskolai szabályzat miatt!' }
+    return { ok: false, error: 'Explicit vagy 18+ jelölésű zene nem küldhető be az iskolai szabályzat miatt!' }
   }
   if (rawUrl) {
     const cleanUrlWords = rawUrl.replace(/[_-]+/g, ' ')
@@ -2446,67 +2440,6 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      if (chMap.videos) {
-        const msgs: any[] = await discordApi(`/channels/${chMap.videos}/messages?limit=25`).catch(() => [])
-        for (const m of msgs) {
-          if (m.author?.bot) continue
-          const rawContent = String(m.content || '').trim()
-          if (!rawContent && (!m.embeds || !m.embeds.length)) continue
-          if (rawContent.length < 2) continue
-
-          let ytId = extractYtId(rawContent)
-          let cleanTitle = rawContent.replace(/https?:\/\/\S+/g, '').replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim()
-
-          if (ytId && !cleanTitle) {
-            cleanTitle = (await fetchYtTitle(ytId)) || `YouTube (${ytId})`
-          } else if (!ytId && cleanTitle.length >= 3) {
-            const found = await searchYoutube(cleanTitle)
-            if (found) {
-              ytId = found.ytId
-              if (cleanTitle.length < 5) cleanTitle = found.title
-            }
-          }
-
-          if (!cleanTitle || hasExplicitTextMarker(cleanTitle)) continue
-          const senderName = (m.member?.nick || m.author?.global_name || m.author?.username || 'Diák').slice(0, 20)
-          if (isProfane(senderName)) continue
-          const expCheck = await checkMediaExplicit({ ytId, title: cleanTitle, url: rawContent })
-          if (!expCheck.ok) continue
-
-          let extraVotes = 0
-          let botReacted = false
-          if (Array.isArray(m.reactions)) {
-            for (const rc of m.reactions) {
-              const cnt = Number(rc.count) || 0
-              if (rc.me) {
-                botReacted = true
-                extraVotes += Math.max(0, cnt - 1)
-              } else {
-                extraVotes += cnt
-              }
-            }
-          }
-
-          if (!botReacted) {
-            discordApi(`/channels/${chMap.videos}/messages/${m.id}/reactions/${encodeURIComponent('🎬')}/@me`, 'PUT').catch(() => {})
-          }
-
-          const createdMs = Date.parse(m.timestamp) || Date.now()
-          const msgDay = new Date(createdMs).toLocaleDateString('sv-SE', { timeZone: 'Europe/Budapest' })
-
-          songs.push({
-            id: `dc-vid-${m.id}`,
-            day: msgDay,
-            kind: 'video',
-            title: cleanTitle.slice(0, 60),
-            by: `${senderName} 💬`,
-            ytId,
-            votes: 1 + extraVotes,
-            at: createdMs,
-          })
-        }
-      }
-
       if (chMap.announcements) {
         const msgs: any[] = await discordApi(`/channels/${chMap.announcements}/messages?limit=10`).catch(() => [])
         for (const m of msgs) {
@@ -2530,7 +2463,6 @@ Deno.serve(async (req: Request) => {
         invite: 'https://discord.gg/uHhbhFB5rC',
         channels: {
           music: chMap.musicName,
-          videos: chMap.videosName,
         },
         songs,
         announcements,
@@ -2544,18 +2476,16 @@ Deno.serve(async (req: Request) => {
         const title = String(body.title || '').trim()
         const by = String(body.by || '').trim() || 'Diák'
         const ytId = body.ytId ? String(body.ytId).trim() : undefined
-        const isVideo = body.mediaKind === 'video'
-        const mediaKind = isVideo ? '🎬 Videókérés' : '🎵 Zenekérés'
         const ytUrl = ytId ? `https://youtu.be/${ytId}` : undefined
-        const targetCh = isVideo && chMap.videos ? chMap.videos : chMap.music
+        const targetCh = chMap.music
 
         if (targetCh) {
           await discordApi(`/channels/${targetCh}/messages`, 'POST', {
             embeds: [
               {
-                title: `${mediaKind} a SuliBell weboldalról!`,
+                title: '🎵 Zenekérés a SuliBell weboldalról!',
                 description: ytUrl ? `**[${title}](${ytUrl})**\n🔗 ${ytUrl}` : `**${title}**`,
-                color: isVideo ? 0x2de2ff : 0xff4fc3,
+                color: 0xff4fc3,
                 thumbnail: ytId ? { url: `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` } : undefined,
                 footer: { text: `Beküldte: ${by} • SuliBell Weboldal` },
                 timestamp: new Date().toISOString(),

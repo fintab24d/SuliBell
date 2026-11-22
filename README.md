@@ -35,20 +35,20 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 - **AI-alapú intelligens felismerés**: Bemásolt órarend-szövegből vagy fotó leírásából egy kattintással kitölti a heti órákat és termeket.
 - A számlap és a napirend ezután a saját tantárgyat és a terem jelzését (pl. `📍 204. terem`) mutatja.
 
-### 🎵 Szüneti Zenegép & 🎬 Videólejátszó (Jukebox)
-- **Különválasztott zene- és videóbeküldés**: Zenéket és 4K videókat külön dedikált űrlapon és Discord csatornán keresztül lehet beküldeni.
+### 🎵 Szüneti Zenegép (Jukebox)
+- **Zenei kívánságlista**: Zenéket dedikált űrlapon és Discord csatornán keresztül lehet beküldeni a szünetekre.
 - **🗳️ 5 szavazatos aktiválás & 1 ember 1 szavazat**:
-  - A szüneti lejátszáshoz **legalább 5 szavazat** szükséges egy zenére vagy videóra. Amíg nem éri el az 5 szavazatot, nem indul el, a felület jelzi a szavazás állását.
+  - A szüneti lejátszáshoz **legalább 5 szavazat** szükséges egy zenére. Amíg nem éri el az 5 szavazatot, nem indul el, a felület jelzi a szavazás állását.
   - **1 ember = 1 szavazat**: Egy diák egy számra csak egyetlen szavazatot adhat le (egyedi szavazóazonosítóval a Supabase `jukebox_votes` táblában és helyi tárhelyen védve; az újraküldés sem duplázhat szavazatot).
-- **🗑️ Lejátszás utáni automatikus törlés**: Miután egy szám vagy videó lement a szünetben, automatikusan kikerül a beküldött listából, hogy ne ismétlődjön, és helyet adjon az új kívánságoknak.
+- **🗑️ Lejátszás utáni automatikus törlés**: Miután egy szám lement a szünetben, automatikusan kikerül a beküldött listából, hogy ne ismétlődjön, és helyet adjon az új kívánságoknak.
 - **🌅 Napváltáskor tiszta lap**: Éjfélkor / új tanítási nap kezdetén a rendszer automatikusan törli az összes előző napról megmaradt kívánságot, szavazatot és gyorsítótárat — minden nap tiszta listával indul.
 - **🛡️ Automatikus Moderációs & NSFW Szűrő**:
-  - **Nincs névtelen beküldés**: Kötelező megadni a diák nevét vagy becenevét, anonim módon sem zene, sem videó nem küldhető be.
+  - **Nincs névtelen beküldés**: Kötelező megadni a diák nevét vagy becenevét, anonim módon nem küldhető be zene.
   - **Káromkodás- és tartalomvédelem**: Beépített magyar és angol nyelvű leetspeak- és ékezetnormalizált szűrő védi a felületet a trágár, alpári vagy kétértelmű kifejezésektől.
   - **Admin AutoMod (Egyéni tiltott szavak)**: Pont úgy, mint a Discord AutoModban, az adminok saját tiltott szavakat, neveket vagy `*minta*` kifejezéseket adhatnak hozzá az admin felületen, amelyeket a rendszer valós időben azonnal letilt az egész oldalon (Zenegépben, játékosnevekben és a toplistán), élő tesztelő mezővel.
   - **YouTube korhatár és beágyazás-ellenőrzés**: Valós idejű YouTube oEmbed vizsgálat szűri ki a korhatáros (NSFW / 18+) tartalmakat még a közzététel előtt.
-- **🔒 Adminisztrátori Előnézet**: A főoldalról a diákok számára az előnézet / belehallgatás teljesen el van távolítva; a beküldött számokat és 4K videókat kizárólag az admin tudja az adminisztrációs felületen előnézetben megnézni, belehallgatni és ellenőrizni.
-- **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus szüneti lejátszás.
+- **🔒 Adminisztrátori Előnézet**: A főoldalról a diákok számára a belehallgatás teljesen el van távolítva; a beküldött számokba kizárólag az admin tud az adminisztrációs felületen belehallgatni és ellenőrizni.
+- **Neon Equalizer & Visualizer**: Élő hanghullám-animáció és dinamikus szüneti zenelejátszás.
 
 ### 💬 Élő Hangulatfal & Reakciók (Emoji-eső)
 - A diákok egyetlen kattintással élő reakciókat küldhetnek be (🔥, 🎉, 😴, 🤯, ☕, ❤️).
@@ -77,8 +77,7 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
   - `📌 INFORMÁCIÓK` (`#👋-üdvözlő`, `#📜-szabályzat`, `#📢-közlemények`, `#🚪-belépések-és-kilépések`)
   - `💬 DIÁK KÖZÖSSÉG`:
     - `#🎵-zenekérés-ötletek`: Zenei javaslatok beküldése és szavazás (Discord reakciók = weboldali szavazat).
-    - `#🎬-videóbeküldés`: Külön dedikált videóbeküldő szoba sulis és szüneti videóknak.
-    - `#💡-ötletek-javaslatok`: Fórum csatorna külön bejegyzésekkel, szavazással és címkékkel (✨ Új funkció, 🎵 Zenegép, 🎮 Játékok, 🎨 Design, 📱 Mobil, 💡 Egyéb).
+    - `#💡-ötletek-javaslatok`: Fórum csatorna külön bejegyzésekkel, szavazással és címkékkel (✨ Új funkció, 🎵 Zenegép, 🎮 Játék & Ranglista, 🎨 Kinézet & Design, 📱 Mobil & PWA, 💡 Egyéb ötlet).
     - `#🐛-hibajelentés`, `#🔊-szüneti-társalgó`
   - `🔒 FEJLESZTŐI ZÓNA (DEV)`:
     - `#🚀-deploy-és-git`: Valós idejű GitHub commit és automatikus Vercel deploy értesítések commit üzenettel és szerzővel.
