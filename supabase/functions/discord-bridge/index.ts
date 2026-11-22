@@ -58,6 +58,7 @@ const PERM = {
   ADD_REACTIONS: 1n << 6n,
   CONNECT: 1n << 20n,
   SPEAK: 1n << 21n,
+  MANAGE_THREADS: 1n << 34n,
 }
 const pStr = (...bits: bigint[]) => bits.reduce((a, b) => a | b, 0n).toString()
 
@@ -2132,6 +2133,160 @@ Deno.serve(async (req: Request) => {
         botRole: { id: botRole?.id, name: botRole?.name, created: botRoleCreated },
         updatedBots,
         bugForum: { id: bugForum?.id, name: bugForum?.name, created: bugForumCreated, deletedOldTextId },
+      })
+    }
+
+    if (action === 'setup_forum_status_tags') {
+      const guildId = getGuild()
+      const [channels, roles]: [any[], any[]] = await Promise.all([
+        discordApi(`/guilds/${guildId}/channels`),
+        discordApi(`/guilds/${guildId}/roles`),
+      ])
+
+      const stripEmoji = (s: string) =>
+        String(s || '')
+          .replace(/^[\p{Extended_Pictographic}\p{Emoji_Presentation}\u200d\ufe0f\s]+/gu, '')
+          .trim()
+      const norm = (s: string) =>
+        stripEmoji(s)
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+
+      const forumSpecs = [
+        {
+          key: 'ideas',
+          match: (ch: any) =>
+            ch.id === '1569437160799609036' || /ötlet|otlet|javaslat/i.test(String(ch.name || '')),
+          defaultReaction: { emoji_name: '👍' },
+          statusTags: [
+            { name: 'Megnézve', emoji_name: '👀' },
+            { name: 'Tervben', emoji_name: '📋' },
+            { name: 'Folyamatban', emoji_name: '🔨' },
+            { name: 'Elkészült', emoji_name: '✅' },
+            { name: 'Elutasítva', emoji_name: '❌' },
+          ],
+        },
+        {
+          key: 'bugs',
+          match: (ch: any) =>
+            ch.id === '1573047517497786428' || /hiba|bug/i.test(String(ch.name || '')),
+          defaultReaction: { emoji_name: '👀' },
+          statusTags: [
+            { name: 'Vizsgálat alatt', emoji_name: '🔍' },
+            { name: 'Tervben', emoji_name: '📋' },
+            { name: 'Javítás alatt', emoji_name: '🔧' },
+            { name: 'Javítva', emoji_name: '✅', aliases: ['javitva'] },
+            { name: 'Nem reprodukálható', emoji_name: '🚫' },
+          ],
+        },
+        {
+          key: 'roadmap',
+          match: (ch: any) =>
+            ch.id === '1570134622891802677' || /roadmap|teendő|teendo/i.test(String(ch.name || '')),
+          defaultReaction: { emoji_name: '🚀' },
+          statusTags: [
+            { name: 'Tervben', emoji_name: '📋', aliases: ['tervezett'] },
+            { name: 'Folyamatban', emoji_name: '🔨' },
+            { name: 'Tesztelés', emoji_name: '🧪' },
+            { name: 'Elkészült', emoji_name: '✅', aliases: ['kesz', 'kész'] },
+            { name: 'Halasztva', emoji_name: '⏸️' },
+          ],
+        },
+      ]
+
+      const isDev = (name: string) =>
+        /tulajdonos|főadmin|foadmin|lead\s*dev|fejlesztő|fejleszto|\bdev\b/i.test(name)
+      const isNonDev = (name: string) =>
+        /diák|diak|tanár|tanar|vip|moderátor|moderator/i.test(name)
+
+      const devRoles = roles.filter((r: any) => isDev(String(r.name || '')))
+      const nonDevRoles = roles.filter(
+        (r: any) => !isDev(String(r.name || '')) && (r.id === guildId || isNonDev(String(r.name || '')))
+      )
+
+      const updatedForums: any[] = []
+      for (const ch of channels.filter((c: any) => c.type === 15)) {
+        const cfg = forumSpecs.find((s) => s.match(ch))
+        if (!cfg) continue
+
+        const existing: any[] = Array.isArray(ch.available_tags) ? ch.available_tags : []
+        const matchesSpec = (tagName: string, specs: typeof cfg.statusTags) => {
+          const n = norm(tagName)
+          return specs.find(
+            (sp) => norm(sp.name) === n || (sp.aliases || []).some((a) => norm(a) === n)
+          )
+        }
+
+        const topicTags = existing
+          .filter((t) => !matchesSpec(t.name, cfg.statusTags))
+          .map((t) => ({
+            id: t.id,
+            name: ((t.emoji_name || t.emoji_id) ? stripEmoji(t.name) || String(t.name) : String(t.name)).slice(0, 20),
+            ...(t.emoji_id ? { emoji_id: t.emoji_id } : t.emoji_name ? { emoji_name: t.emoji_name } : {}),
+            moderated: false,
+          }))
+
+        const usedIds = new Set<string>()
+        const statusTags = cfg.statusTags.map((sp) => {
+          const prev = existing.find((t) => !usedIds.has(t.id) && matchesSpec(t.name, [sp]))
+          if (prev?.id) usedIds.add(prev.id)
+          return {
+            ...(prev?.id ? { id: prev.id } : {}),
+            name: sp.name.slice(0, 20),
+            emoji_name: sp.emoji_name,
+            moderated: true,
+          }
+        })
+
+        const owMap = new Map<string, { id: string; type: number; allow: bigint; deny: bigint }>()
+        for (const ow of Array.isArray(ch.permission_overwrites) ? ch.permission_overwrites : []) {
+          owMap.set(String(ow.id), {
+            id: String(ow.id),
+            type: Number(ow.type ?? 0),
+            allow: BigInt(ow.allow || '0'),
+            deny: BigInt(ow.deny || '0'),
+          })
+        }
+        for (const r of devRoles) {
+          const cur = owMap.get(r.id) || { id: r.id, type: 0, allow: 0n, deny: 0n }
+          cur.allow = cur.allow | PERM.MANAGE_THREADS
+          cur.deny = cur.deny & ~PERM.MANAGE_THREADS
+          owMap.set(r.id, cur)
+        }
+        for (const r of nonDevRoles) {
+          const cur = owMap.get(r.id) || { id: r.id, type: 0, allow: 0n, deny: 0n }
+          cur.allow = cur.allow & ~PERM.MANAGE_THREADS
+          cur.deny = cur.deny | PERM.MANAGE_THREADS
+          owMap.set(r.id, cur)
+        }
+
+        const patched = await discordApi(`/channels/${ch.id}`, 'PATCH', {
+          available_tags: [...topicTags, ...statusTags].slice(0, 20),
+          default_reaction_emoji: cfg.defaultReaction,
+          permission_overwrites: Array.from(owMap.values()).map((ow) => ({
+            id: ow.id,
+            type: ow.type,
+            allow: ow.allow.toString(),
+            deny: ow.deny.toString(),
+          })),
+        })
+
+        updatedForums.push({
+          id: patched.id,
+          name: patched.name,
+          key: cfg.key,
+          tags: patched.available_tags || [],
+        })
+      }
+
+      return reply({
+        ok: true,
+        devRoles: devRoles.map((r: any) => r.name),
+        deniedRoles: nonDevRoles.map((r: any) => r.name),
+        updatedForums,
       })
     }
 
