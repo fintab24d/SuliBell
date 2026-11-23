@@ -363,6 +363,14 @@ function SandboxWorkspace() {
                     ✕ Időjárás ki
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={sb.forceXmasAfterDec5 ? 'active' : ''}
+                  onClick={() => updateSandbox({ forceXmasAfterDec5: !sb.forceXmasAfterDec5 })}
+                  title="Karácsonyi skin + dec. 5. utáni kukucskáló Mikulás és fenti repülő szán élő előnézete"
+                >
+                  🎅 Dec. 6+ Mikulás &amp; Szán teszt
+                </button>
               </div>
               <div className="testlab-row">
                 <input

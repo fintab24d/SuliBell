@@ -89,24 +89,92 @@ export function AdventWreathIcon({
   )
 }
 
-/** Mini Mikulás-sapka díszítés a SuliBell két "ll" betűjére. */
+/** Mini Mikulás-sapka díszítés pontosan a SuliBell csengő logó tetejére. */
 export function SantaHatSvg() {
   return (
     <svg
       className="santa-hat-svg"
-      viewBox="0 0 44 36"
-      width="26"
-      height="22"
+      viewBox="0 0 56 40"
+      width="32"
+      height="24"
       aria-hidden="true"
     >
+      {/* Piros süveg, jobbra konyuló csúccsal */}
       <path
-        d="M7 26 C10 11, 23 3, 35 12 C37 13.5, 38 15.5, 37 17 C33 15, 29 15.5, 28 24 Z"
+        d="M9 28 C11 11, 24 2, 39 9 C45 12, 49 16, 48 20 C43 16.5, 39 17.5, 42 28 Z"
+        fill="#d90429"
+        stroke="#ff4d6d"
+        strokeWidth="1.15"
+        strokeLinejoin="round"
+      />
+      {/* Enyhe belső fény-árnyék ív a sapka tetején */}
+      <path
+        d="M15 21 C18 11, 28 6.5, 38 11"
+        fill="none"
+        stroke="rgba(255, 255, 255, 0.28)"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {/* Ívelt, puha fehér szőrmeperem a csengő ívéhez igazítva */}
+      <path
+        d="M7 27 Q26 23.5 45 27 C47.2 27.4 48 31.8 45.2 33 Q26 30 6.8 33 C4 31.8 4.8 27.4 7 27 Z"
+        fill="#f8fafc"
+        stroke="#e2e8f0"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+      {/* Fehér bojt a jobbra hajló csúcson */}
+      <circle cx="49" cy="20" r="4.6" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
+    </svg>
+  )
+}
+
+/** Ünnepi karácsonyi zokni, mintha a SuliBell utolsó „l” betűje felhúzta volna a lábára. */
+export function ChristmasStockingSvg() {
+  return (
+    <svg
+      className="xmas-stocking-svg"
+      viewBox="0 0 36 32"
+      width="22"
+      height="20"
+      aria-hidden="true"
+    >
+      {/* Zokni fő piros teste + jobbra hajló zoknifej */}
+      <path
+        d="M4 6.5 L16 6.5 L16 15.5 C16 18.2, 19.5 19.2, 24.5 20 C29 20.8, 32.5 23.8, 31.2 26.8 C29.8 29.8, 22.5 30.2, 13.5 29.6 C7 29.2, 4 26, 4 20.5 Z"
         fill="#d90429"
         stroke="#ff4d6d"
         strokeWidth="1"
+        strokeLinejoin="round"
       />
-      <rect x="4" y="23" width="27" height="7" rx="3.5" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="0.9" />
-      <circle cx="38" cy="16" r="4.3" fill="#ffffff" stroke="#e2e8f0" strokeWidth="0.9" />
+      {/* Enyhe highlight csík a szárán */}
+      <path
+        d="M7.2 10.5 L7.2 18.5"
+        fill="none"
+        stroke="rgba(255, 255, 255, 0.24)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      {/* Meleg arany sarok- és orr-rész */}
+      <path
+        d="M4.1 20.5 C4.2 24.2, 6.2 26.6, 9.5 27.6 C9.6 23.8, 7.4 21.3, 4.1 20.5 Z"
+        fill="#ffd166"
+        opacity="0.92"
+      />
+      <path
+        d="M25.8 20.3 C30.4 21.4, 32.3 24.1, 31.1 26.8 C30.3 28.5, 28.4 29.4, 26 29.6 C25.2 26.1, 25.2 22.8, 25.8 20.3 Z"
+        fill="#ffd166"
+        opacity="0.95"
+      />
+      {/* Pici fehér hópihe-dísz a zokni szárán */}
+      <g stroke="#ffffff" strokeWidth="1.05" strokeLinecap="round" opacity="0.88">
+        <line x1="10.2" y1="11.6" x2="10.2" y2="16.4" />
+        <line x1="8.1" y1="12.8" x2="12.3" y2="15.2" />
+        <line x1="12.3" y1="12.8" x2="8.1" y2="15.2" />
+      </g>
+      {/* Puha fehér szőrmepasszé + vékony arany díszcsík */}
+      <rect x="2" y="1" width="16" height="6.8" rx="3.2" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="0.95" />
+      <line x1="3.8" y1="7.2" x2="16.2" y2="7.2" stroke="#ffd166" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
   )
 }
@@ -602,7 +670,7 @@ export function AdventModal({
                 <div>
                   <h3>{unlocked.hasSantaFrame ? '🎅 Mikulás keret' : '🔒 Mikulás keret (Dec. 6.)'}</h3>
                   <small>
-                    Ünnepi piros-arany keret a visszaszámláló köré és Mikulás-sapka a SuliBell feliratra.
+                    Ünnepi piros-arany keret a visszaszámláló köré, Mikulás-sapka a SuliBell csengőre és ünnepi zokni a logóra.
                   </small>
                 </div>
                 <button

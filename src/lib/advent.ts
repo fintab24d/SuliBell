@@ -130,7 +130,7 @@ export const ADVENT_DOORS: ReadonlyArray<AdventDoor> = [
     icon: '🎅',
     category: 'Mikulás • 2. Adventi vasárnap',
     title: 'Mikulás keret feloldva!',
-    body: 'Boldog Mikulást! Meggyulladt a 2. adventi gyertya, és megkaptad az ünnepi piros-arany Mikulás keretet a fő visszaszámláló köré, plusz a SuliBell feliratra kerülő Mikulás-sapkát!',
+    body: 'Boldog Mikulást! Meggyulladt a 2. adventi gyertya, és megkaptad az ünnepi piros-arany Mikulás keretet a fő visszaszámláló köré, plusz a SuliBell csengőre kerülő Mikulás-sapkát és ünnepi zoknit!',
     rewardKind: 'frame',
     sundayNumber: 2,
   },
@@ -384,6 +384,14 @@ export function getServerBudapestDate(nowMs?: number): string {
 
 export function isChristmasSeason(date: string): boolean {
   return date >= ADVENT_START_DATE && date <= XMAS_SEASON_END_DATE
+}
+
+/** Igaz, ha a megadott YYYY-MM-DD szerveridő december 5. után van (azaz dec. 6–31.). */
+export function isAfterDec5(date: string): boolean {
+  if (!date || date.length < 10) return false
+  const month = Number(date.slice(5, 7))
+  const day = Number(date.slice(8, 10))
+  return month === 12 && day > 5
 }
 
 export function getLitAdventCandles(date: string): number {

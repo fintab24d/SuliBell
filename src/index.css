@@ -1343,7 +1343,9 @@ html.egg-warp #root main {
 :root[data-potato="1"] .cur,
 :root[data-potato="1"] .fxcanvas,
 :root[data-potato="1"] .fxcanvas-fg,
-:root[data-potato="1"] .fx-ledges-root {
+:root[data-potato="1"] .fx-ledges-root,
+:root[data-potato="1"] .xmas-peek-layer,
+:root[data-potato="1"] .xmas-sleigh-layer {
   display: none !important;
 }
 :root[data-potato="1"] *,
@@ -2447,26 +2449,50 @@ html.egg-warp #root main {
     0 0 28px -4px rgba(255, 209, 102, 0.38);
 }
 
-/* Mikulás-sapka díszítés a SuliBell két "ll" betűjén */
+/* Mikulás-sapka a SuliBell csengőre, ünnepi zokni az utolsó "l" betűre */
 .brand-word {
   display: inline-block;
   white-space: nowrap;
 }
-.brand-ll {
+.brand-logo-wrap {
   position: relative;
-  display: inline-block;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
 }
 .santa-hat-svg {
   position: absolute;
-  width: 1.08em;
-  height: 0.88em;
-  top: -0.56em;
-  left: 50%;
-  transform: translateX(-42%) rotate(8deg);
+  width: 96%;
+  height: auto;
+  max-width: none;
+  left: 55.5%;
+  top: -42%;
+  transform: translateX(-46.4%) rotate(4deg);
+  pointer-events: none;
+  z-index: 3;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.52));
+}
+.brand-stocking-letter {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  padding-right: 0.48em;
+}
+.xmas-stocking-svg {
+  position: absolute;
+  width: 0.68em;
+  height: auto;
+  max-width: none;
+  bottom: 0.02em;
+  left: -0.04em;
   pointer-events: none;
   z-index: 2;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.48));
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.48));
+}
+.tv-hdr {
+  overflow: visible;
 }
 
 /* Adventi koszorú SVG gyertyaláng animáció */
@@ -4011,4 +4037,161 @@ iframe {
 }
 .tv-subgrid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+/* ==================== 🎅 DEC. 5. UTÁNI KARÁCSONYI DEKOR (KUKUCSKÁLÓ MIKULÁS & REPÜLŐ SZÁN) ==================== */
+.xmas-peek-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.xmas-peek-slot {
+  position: fixed;
+  overflow: hidden;
+  pointer-events: none;
+}
+.xmas-peek-actor {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+.xmas-peek-actor.side-top {
+  animation: santaPeekTop 5.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.xmas-peek-actor.side-right {
+  animation: santaPeekRight 5.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.xmas-peek-actor.side-left {
+  animation: santaPeekLeft 5.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.xmas-peek-svg {
+  display: block;
+  width: 84px;
+  height: 68px;
+  max-width: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.48));
+}
+.xmas-peek-svg.rot-right {
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  transform: rotate(90deg);
+  transform-origin: center center;
+}
+.xmas-peek-svg.rot-left {
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  transform: rotate(-90deg);
+  transform-origin: center center;
+}
+.santa-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: santaBlink 3.4s infinite;
+}
+@keyframes santaPeekTop {
+  0% { transform: translateY(105%); }
+  16% { transform: translateY(2%); }
+  50% { transform: translateY(6%); }
+  82% { transform: translateY(2%); }
+  100% { transform: translateY(105%); }
+}
+@keyframes santaPeekRight {
+  0% { transform: translateX(-105%); }
+  16% { transform: translateX(-2%); }
+  50% { transform: translateX(-6%); }
+  82% { transform: translateX(-2%); }
+  100% { transform: translateX(-105%); }
+}
+@keyframes santaPeekLeft {
+  0% { transform: translateX(105%); }
+  16% { transform: translateX(2%); }
+  50% { transform: translateX(6%); }
+  82% { transform: translateX(2%); }
+  100% { transform: translateX(105%); }
+}
+@keyframes santaBlink {
+  0%, 42%, 48%, 100% { transform: scaleY(1); }
+  45% { transform: scaleY(0.1); }
+}
+
+.xmas-sleigh-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 96px;
+  z-index: 42;
+  pointer-events: none;
+  overflow: hidden;
+}
+.xmas-sleigh-runner {
+  position: absolute;
+  left: 0;
+  will-change: transform;
+}
+.xmas-sleigh-runner.ltr {
+  animation: sleighFlyLtr 12.5s linear forwards;
+}
+.xmas-sleigh-runner.rtl {
+  animation: sleighFlyRtl 12.5s linear forwards;
+}
+.xmas-sleigh-bob {
+  animation: sleighBob 2.2s ease-in-out infinite;
+}
+.xmas-sleigh-flip.rtl {
+  transform: scaleX(-1);
+}
+.xmas-sleigh-svg {
+  display: block;
+  width: min(248px, 46vw);
+  height: auto;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
+}
+.rudolph-nose {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rudolphGlow 1.1s ease-in-out infinite;
+}
+.sleigh-sparkle circle {
+  animation: sleighSparkle 0.9s ease-in-out infinite alternate;
+}
+@keyframes sleighFlyLtr {
+  from { transform: translateX(-320px); }
+  to { transform: translateX(calc(100vw + 80px)); }
+}
+@keyframes sleighFlyRtl {
+  from { transform: translateX(calc(100vw + 80px)); }
+  to { transform: translateX(-320px); }
+}
+@keyframes sleighBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes rudolphGlow {
+  0%, 100% { opacity: 0.78; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.18); }
+}
+@keyframes sleighSparkle {
+  from { opacity: 0.35; }
+  to { opacity: 0.95; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xmas-peek-actor,
+  .xmas-sleigh-runner,
+  .xmas-sleigh-bob,
+  .santa-eye,
+  .rudolph-nose,
+  .sleigh-sparkle circle {
+    animation: none !important;
+  }
+  .xmas-peek-layer,
+  .xmas-sleigh-layer {
+    display: none !important;
+  }
 }

@@ -2,8 +2,9 @@ import { Fragment, Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef
 import { audioReady, enableAudio, preload, ring, type BellSoundStyle } from './lib/sound'
 import { useSupporters, useVip, type VipPrefs } from './lib/vip'
 import { SupporterTicker, VipModal, type VipModalTab } from './VipModal'
-import { useAdvent, WINTER_BREAK_DATE, type HolidayThemeMode } from './lib/advent'
-import { AdventModal, AdventWreathIcon, SantaHatSvg, WinterBreakStrip, type AdventModalTab } from './AdventModal'
+import { applyHolidayDom, isAfterDec5, useAdvent, WINTER_BREAK_DATE, type HolidayThemeMode } from './lib/advent'
+import { AdventModal, AdventWreathIcon, ChristmasStockingSvg, SantaHatSvg, WinterBreakStrip, type AdventModalTab } from './AdventModal'
+import { FlyingSleighTop, PeekingSantaBg } from './ChristmasDecor'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
@@ -425,8 +426,19 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const vip = useVip()
   const hasCustomVipTheme = vip.status.active && vip.prefs.theme !== 'neon-green'
   const advent = useAdvent(hasCustomVipTheme)
-  const isXmasSkin = advent.activeTheme === 'christmas'
-  const showSantaHat = isXmasSkin || advent.santaFrameActive
+  const devXmasPreview = import.meta.env.DEV && typeof location !== 'undefined' && /[?&]xmaspreview=1\b/.test(location.search)
+  const sandboxXmasPreview = !!sandbox && sb.forceXmasAfterDec5
+  const xmasPreviewActive = devXmasPreview || sandboxXmasPreview
+  const isXmasSkin = advent.activeTheme === 'christmas' || xmasPreviewActive
+  const showBrandHoliday = isXmasSkin || advent.santaFrameActive
+  const showXmasAfterDec5 = !potato && isXmasSkin && (isAfterDec5(advent.serverDate) || xmasPreviewActive)
+  useEffect(() => {
+    if (!xmasPreviewActive) return
+    document.documentElement.dataset.holidayTheme = 'christmas'
+    return () => {
+      applyHolidayDom(advent.activeTheme, advent.santaFrameActive)
+    }
+  }, [xmasPreviewActive, advent.activeTheme, advent.santaFrameActive])
   const [adventModal, setAdventModal] = useState<{ open: boolean; tab: AdventModalTab }>({ open: false, tab: 'calendar' })
   const handleUpdateVipPrefs = (patch: Partial<VipPrefs>) => {
     vip.updatePrefs(patch)
@@ -849,6 +861,36 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     : e0 ? { icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined
   const restBox = (tv || layoutMode === 'classic') && s.phase === 'closed' && data.settings.rest_mode !== false && <Suspense fallback={null}><RestMode tv={tv} reason={s.reason} day={z.date} ev={restEv} /></Suspense>
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
+  const brandLogoContent = (
+    <>
+      <span className="brand-logo-wrap">
+        <img
+          className="logo"
+          src={data.settings.logo_url || '/logo.png'}
+          alt=""
+          onError={e => {
+            const wrap = e.currentTarget.parentElement
+            if (wrap) wrap.style.display = 'none'
+            else e.currentTarget.style.display = 'none'
+          }}
+        />
+        {showBrandHoliday && <SantaHatSvg />}
+      </span>
+      <span className="brand-word">
+        {showBrandHoliday && APP_NAME.endsWith('l') ? (
+          <>
+            {APP_NAME.slice(0, -1)}
+            <span className="brand-stocking-letter">
+              {APP_NAME.slice(-1)}
+              <ChristmasStockingSvg />
+            </span>
+          </>
+        ) : (
+          APP_NAME
+        )}
+      </span>
+    </>
+  )
 
   // ==================== TV / DISPLAY NÉZET (FIX 100SVH, GÖRGETÉS NÉLKÜL) ====================
   if (tv) {
@@ -859,20 +901,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <header className="tv-hdr">
               <div className="tv-hdr-left">
                 <span className="brand">
-                  <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
-                  <span className="brand-word">
-                    {APP_NAME.endsWith('ll') ? (
-                      <>
-                        {APP_NAME.slice(0, -2)}
-                        <span className="brand-ll">
-                          {APP_NAME.slice(-2)}
-                          {showSantaHat && <SantaHatSvg />}
-                        </span>
-                      </>
-                    ) : (
-                      APP_NAME
-                    )}
-                  </span>
+                  {brandLogoContent}
                   {advent.litCandles > 0 && <AdventWreathIcon litCount={advent.litCandles} size="sm" />}
                 </span>
                 <div className="date">{dateText}</div>
@@ -913,24 +942,12 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
     return (
       <>
+        <PeekingSantaBg enabled={showXmasAfterDec5} fastPreview={xmasPreviewActive} />
         <main className={`tv${isUpdating ? ' is-updating' : ''}`}>
           <header className="tv-hdr">
             <div className="tv-hdr-left">
               <span className="brand">
-                <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
-                <span className="brand-word">
-                  {APP_NAME.endsWith('ll') ? (
-                    <>
-                      {APP_NAME.slice(0, -2)}
-                      <span className="brand-ll">
-                        {APP_NAME.slice(-2)}
-                        {showSantaHat && <SantaHatSvg />}
-                      </span>
-                    </>
-                  ) : (
-                    APP_NAME
-                  )}
-                </span>
+                {brandLogoContent}
                 {advent.litCandles > 0 && <AdventWreathIcon litCount={advent.litCandles} size="sm" />}
               </span>
               <div className="date">{dateText}</div>
@@ -1024,6 +1041,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
           {overlay}
         </main>
+        <FlyingSleighTop enabled={showXmasAfterDec5} fastPreview={xmasPreviewActive} />
         {maintPrepBanner}
       {maintOverlay}
         {!potato && <VibeOverlay floats={vibeFloats} />}
@@ -1038,24 +1056,12 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   // ==================== NORMÁL (BENTO DASHBOARD) NÉZET ====================
   return (
     <>
+      <PeekingSantaBg enabled={showXmasAfterDec5} fastPreview={xmasPreviewActive} />
       <main className={`bento-app${isUpdating ? ' is-updating' : ''}`}>
         <header className="bento-hdr">
           <div className="hdr-brand-col">
             <span className="brand">
-              <img className="logo" src={data.settings.logo_url || '/logo.png'} alt="" onError={e => { e.currentTarget.style.display = 'none' }} />
-              <span className="brand-word">
-                {APP_NAME.endsWith('ll') ? (
-                  <>
-                    {APP_NAME.slice(0, -2)}
-                    <span className="brand-ll">
-                      {APP_NAME.slice(-2)}
-                      {showSantaHat && <SantaHatSvg />}
-                    </span>
-                  </>
-                ) : (
-                  APP_NAME
-                )}
-              </span>
+              {brandLogoContent}
               {advent.unlocked.hasSurvivorBadge && (
                 <span className="survivor-pill" title="2026. dec. 24. — Exkluzív adventi jelvény">
                   🏅 Téli Túlélő ’26
@@ -1612,6 +1618,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         />
         {overlay}
       </main>
+      <FlyingSleighTop enabled={showXmasAfterDec5} fastPreview={xmasPreviewActive} />
       {maintPrepBanner}
       {maintOverlay}
       {!potato && (layoutMode === 'classic' || activeTab === 'home') && <VibeOverlay floats={vibeFloats} />}

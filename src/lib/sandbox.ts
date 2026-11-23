@@ -25,6 +25,8 @@ export interface SandboxConfig {
   forceBreakMedia: boolean
   /** Teszt időjárási kód (pl. 61 = eső, 71 = hó, 95 = vihar, null = valós időjárás) */
   simWeatherCode: number | null
+  /** Dec. 5. utáni karácsonyi extrák (kukucskáló Mikulás + repülő szán) erőltetett előnézete */
+  forceXmasAfterDec5: boolean
 }
 
 export const DEFAULT_SANDBOX: SandboxConfig = {
@@ -41,6 +43,7 @@ export const DEFAULT_SANDBOX: SandboxConfig = {
   testAnnouncement: '',
   forceBreakMedia: true,
   simWeatherCode: null,
+  forceXmasAfterDec5: false,
 }
 
 const EVT = 'sulibell:sandbox-change'
