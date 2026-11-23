@@ -906,7 +906,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           </main>
           {maintPrepBanner}
           {maintOverlay}
-          {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={false} festiveSnow={advent.state.snowEnabled && !potato} />}
+          {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={false} festiveSnow={advent.state.snowEnabled && !potato} />}
         </>
       )
     }
@@ -1027,10 +1027,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         {maintPrepBanner}
       {maintOverlay}
         {!potato && <VibeOverlay floats={vibeFloats} />}
-        {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
-        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
+        {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
+        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
         {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
-        {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
+        {fx && <BellFlash bellKey={key} day={z.date} phase={s.phase} label={s.current?.label} />}
       </>
     )
   }
@@ -1615,10 +1615,10 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       {maintPrepBanner}
       {maintOverlay}
       {!potato && (layoutMode === 'classic' || activeTab === 'home') && <VibeOverlay floats={vibeFloats} />}
-      {fx && <Fx phase={s.phase} bellKey={key} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
-      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
+      {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
+      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
-      {fx && <BellFlash bellKey={key} phase={s.phase} label={s.current?.label} />}
+      {fx && <BellFlash bellKey={key} day={z.date} phase={s.phase} label={s.current?.label} />}
     </>
   )
 }

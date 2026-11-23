@@ -132,6 +132,8 @@ export function loadAllLocalSongs(): SongWish[] {
   return all.sort((a, b) => b.at - a.at)
 }
 
+const titleVoteKey = (title: string) => `t:${title.trim().toLowerCase()}`
+
 function loadVotedSet(day: string): Set<string> {
   try {
     const arr = JSON.parse(localStorage.getItem(VOTED_PREFIX + day) ?? '[]')
@@ -193,6 +195,8 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
 export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean, breakKey?: string) {
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
   const [voted, setVoted] = useState<Set<string>>(() => loadVotedSet(day))
+  const votedRef = useRef<Set<string>>(voted)
+  votedRef.current = voted
   const [submitted, setSubmitted] = useState<Set<string>>(() => loadSubmittedSet(day))
   const [discordChannels, setDiscordChannels] = useState<{ music: string }>({
     music: '#🎵-zenekérés-ötletek',
@@ -204,15 +208,27 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   const songsRef = useRef(songs)
   songsRef.current = songs
 
+  const recordVotedKeys = useCallback((keys: string[]) => {
+    const merged = new Set([...loadVotedSet(day), ...votedRef.current, ...keys.filter(Boolean)])
+    votedRef.current = merged
+    saveVotedSet(day, merged)
+    setVoted(merged)
+  }, [day])
+
   useEffect(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
     pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
-    setVoted(loadVotedSet(day))
+    const initialVoted = loadVotedSet(day)
+    votedRef.current = initialVoted
+    setVoted(initialVoted)
     setSubmitted(loadSubmittedSet(day))
     const onStorage = (e: StorageEvent) => {
-      if (e.key === VOTED_PREFIX + day) setVoted(loadVotedSet(day))
-      else if (e.key === SUB_PREFIX + day) setSubmitted(loadSubmittedSet(day))
+      if (e.key === VOTED_PREFIX + day) {
+        const next = loadVotedSet(day)
+        votedRef.current = next
+        setVoted(next)
+      } else if (e.key === SUB_PREFIX + day) setSubmitted(loadSubmittedSet(day))
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
@@ -243,6 +259,27 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     let alive = true
     const recentCreatedAt = new Map<string, number>()
 
+    const syncMyVotesFromDb = async (loadedSongs: SongWish[]) => {
+      try {
+        const { data: voteRows, error: voteErr }: any = await supabase
+          .from('jukebox_votes')
+          .select('song_id')
+          .eq('school_id', schoolId)
+          .eq('day', day)
+          .eq('voter_id', voterId())
+        if (!alive || voteErr || !Array.isArray(voteRows) || voteRows.length === 0) return
+        const keys: string[] = []
+        for (const vr of voteRows) {
+          const sid = String(vr.song_id || '')
+          if (!sid) continue
+          keys.push(sid)
+          const match = loadedSongs.find(x => x.id === sid)
+          if (match) keys.push(titleVoteKey(match.title))
+        }
+        if (keys.length > 0) recordVotedKeys(keys)
+      } catch { /* nem baj ha nincs RLS olvasási jog */ }
+    }
+
     const syncFromDb = async () => {
       const { data, error }: any = await supabase.rpc('get_jukebox_state', { p_school: schoolId, p_day: day })
       if (!alive) return
@@ -252,6 +289,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         if (!alive || fallback.error || !Array.isArray(fallback.data)) return
         const del = loadDeletedSet(day)
         const dbIds = new Set<string>()
+        let mergedList: SongWish[] = []
         setSongs(prev => {
           let next: SongWish[] = []
           for (const r of fallback.data) {
@@ -279,8 +317,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
             }
           }
           saveLocalSongs(day, next)
+          mergedList = next
           return next
         })
+        void syncMyVotesFromDb(mergedList)
         return
       }
 
@@ -310,6 +350,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       }
       saveDeletedSet(day, del)
 
+      let mergedList: SongWish[] = []
       setSongs(prev => {
         let next: SongWish[] = []
         for (const item of dbActive) {
@@ -324,8 +365,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           }
         }
         saveLocalSongs(day, next)
+        mergedList = next
         return next
       })
+      void syncMyVotesFromDb(mergedList)
     }
 
     // Discord #🎵-zenekérés-ötletek szinkronizáció
@@ -542,7 +585,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     }
 
     const existing = songs.find(x => x.title.trim().toLowerCase() === cleanTitle.toLowerCase())
-    if (existing && voted.has(existing.id)) {
+    const tKey = titleVoteKey(cleanTitle)
+    if ((existing && (votedRef.current.has(existing.id) || votedRef.current.has(titleVoteKey(existing.title)))) || votedRef.current.has(tKey)) {
       // Erre a számra már szavazott a felhasználó, többször nem szavazhat rá!
       return { ok: false, reason: 'voted' }
     }
@@ -575,12 +619,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       return next
     })
 
-    setVoted(prev => {
-      const next = new Set(prev)
-      next.add(created.id)
-      saveVotedSet(day, next)
-      return next
-    })
+    recordVotedKeys([created.id, titleVoteKey(created.title)])
 
     if (breakKey) {
       setSubmitted(prev => {
@@ -635,11 +674,29 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return { ok: true }
   }, [schoolId, day, breakKey, songs, voted, submitted, broadcastSong])
 
-  const voteSong = useCallback((songId: string) => {
-    if (isJukeboxWeekend(day)) return
-    if (voted.has(songId) || loadVotedSet(day).has(songId)) return
+  const hasVoted = useCallback((song: SongWish) => {
+    return voted.has(song.id) || voted.has(titleVoteKey(song.title))
+  }, [voted])
+
+  const voteSong = useCallback((songId: string): boolean => {
+    if (isJukeboxWeekend(day)) return false
     const found = songs.find(s => s.id === songId)
-    if (!found) return
+    if (!found) return false
+    const tKey = titleVoteKey(found.title)
+    const persisted = loadVotedSet(day)
+    if (
+      votedRef.current.has(songId) ||
+      votedRef.current.has(tKey) ||
+      persisted.has(songId) ||
+      persisted.has(tKey)
+    ) {
+      recordVotedKeys([songId, tKey])
+      return false
+    }
+
+    // Szinkron azonnali zárolás dupla kattintás ellen
+    recordVotedKeys([songId, tKey])
+
     const updated: SongWish = { ...found, votes: found.votes + 1 }
 
     setSongs(prev => {
@@ -647,13 +704,6 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       const sorted = sortSongs(next)
       saveLocalSongs(day, sorted)
       return sorted
-    })
-
-    setVoted(prev => {
-      const next = new Set([...loadVotedSet(day), ...prev])
-      next.add(songId)
-      saveVotedSet(day, next)
-      return next
     })
 
     if (soundRef.current) fxSound('pop', 0.2)
@@ -673,7 +723,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         p_base_votes: found.votes,
       }).then(() => {})
     }
-  }, [schoolId, day, songs, voted, broadcastSong])
+    return true
+  }, [schoolId, day, songs, broadcastSong, recordVotedKeys])
 
   const removeSong = useCallback(async (songId: string, targetDay?: string): Promise<{ error?: string }> => {
     const d = targetDay || day
@@ -754,7 +805,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, voted, channels: discordChannels, hasSubmittedInBreak, addSong, voteSong, removeSong, finishSong, clearAllSongs }
+  return { songs, voted, hasVoted, channels: discordChannels, hasSubmittedInBreak, addSong, voteSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default memo(function Jukebox({
@@ -772,7 +823,7 @@ export default memo(function Jukebox({
   sound?: boolean
   christmas?: boolean
 }) {
-  const { songs, voted, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
+  const { songs, hasVoted, channels, hasSubmittedInBreak, addSong, voteSong } = useJukebox(schoolId, day, sound, breakKey)
   const weekend = isJukeboxWeekend(day)
   const [title, setTitle] = useState('')
   const [by, setBy] = useState(() => {
@@ -1000,7 +1051,7 @@ export default memo(function Jukebox({
       ) : (
         <ol className="jb-list">
           {songs.slice(0, 8).map((s, i) => {
-            const isVoted = voted.has(s.id)
+            const isVoted = hasVoted(s)
             const ytSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(s.title)}`
             return (
               <li key={s.id} className={`jb-item ${i === 0 ? 'lead' : ''}`}>
@@ -1041,15 +1092,19 @@ export default memo(function Jukebox({
                         🔍 YouTube
                       </a>
                     </div>
+                    {isVoted && (
+                      <small className="jb-voted-note">✓ Már szavaztál — többször nem lehet szavazni</small>
+                    )}
                   </div>
                   <button
                     type="button"
                     className={`jb-vote ${isVoted ? 'voted' : ''}`}
                     disabled={isVoted}
+                    aria-disabled={isVoted}
                     onClick={() => voteSong(s.id)}
-                    title={isVoted ? 'Már szavaztál erre' : 'Szavazok erre!'}
+                    title={isVoted ? 'Már szavaztál — többször nem lehet szavazni' : 'Szavazok erre!'}
                   >
-                    <span>🔥</span>
+                    <span>{isVoted ? '✓' : '🔥'}</span>
                     <b>{s.votes}</b>
                   </button>
                 </div>
