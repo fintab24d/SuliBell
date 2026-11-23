@@ -77,7 +77,7 @@ export async function fetchDiscordSync(force = false): Promise<DiscordSyncData> 
  * Weboldal esemény átküldése a Discord szerver megfelelő csatornájába.
  */
 export async function postToDiscord(payload: {
-  kind: 'jukebox' | 'announcement' | 'alert' | 'change' | 'menu' | 'poll' | 'version' | 'git'
+  kind: 'jukebox' | 'announcement' | 'alert' | 'change' | 'menu' | 'poll' | 'version' | 'git' | 'bug' | 'idea'
   [key: string]: unknown
 }): Promise<boolean> {
   try {
@@ -87,5 +87,39 @@ export async function postToDiscord(payload: {
     return !error && !!data?.ok
   } catch {
     return false
+  }
+}
+
+/** Hibajelentés vagy ötlet/javaslat beküldése közvetlenül a Discord fórum-csatornába. */
+export async function submitFeedbackToDiscord(params: {
+  kind: 'bug' | 'idea'
+  title: string
+  details: string
+  by?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('discord-bridge', {
+      body: {
+        action: 'post',
+        kind: params.kind,
+        title: params.title,
+        details: params.details,
+        by: params.by,
+      },
+    })
+    if (error) {
+      return { ok: false, error: 'Nem sikerült kapcsolódni a szerverhez. Próbáld meg Discordon!' }
+    }
+    if (!data?.ok) {
+      return {
+        ok: false,
+        error: typeof data?.error === 'string' && data.error
+          ? data.error
+          : 'A beküldés most nem sikerült — írd meg nyugodtan a Discordon!',
+      }
+    }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Hálózati hiba történt. Próbáld meg kicsit később vagy a Discordon!' }
   }
 }

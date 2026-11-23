@@ -17,6 +17,7 @@ import { VibeOverlay, VibePanel, useVibe } from './Vibe'
 const Arena = lazy(() => import('./Arena'))
 import Jukebox, { useJukebox, type SongWish } from './Jukebox'
 import Daily from './Daily'
+import FeedbackPanel from './FeedbackPanel'
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const MediaPage = lazy(() => import('./pages/MediaPage'))
 
@@ -324,7 +325,65 @@ function DayStrip({ L, secs, phase, cancelledIds }: { L: any[]; secs: number; ph
   </div>
 }
 
+const ScrollCue = memo(function ScrollCue({ layoutKey }: { layoutKey: string }) {
+  const [showMedia, setShowMedia] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
 
+  useEffect(() => {
+    const check = () => {
+      const mediaEl = document.querySelector('.jukebox, .arena') as HTMLElement | null
+      const fbEl = document.querySelector('.feedback-panel') as HTMLElement | null
+      const fold = window.innerHeight - 90
+      setShowMedia(!!mediaEl && mediaEl.getBoundingClientRect().top > fold)
+      setShowFeedback(!!fbEl && fbEl.getBoundingClientRect().top > fold)
+    }
+    check()
+    const t1 = window.setTimeout(check, 250)
+    const t2 = window.setTimeout(check, 900)
+    window.addEventListener('scroll', check, { passive: true })
+    window.addEventListener('resize', check, { passive: true })
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+      window.removeEventListener('scroll', check)
+      window.removeEventListener('resize', check)
+    }
+  }, [layoutKey])
+
+  if (!showMedia && !showFeedback) return null
+
+  const scrollTo = (sel: string) => {
+    const target = document.querySelector(sel) as HTMLElement | null
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  return (
+    <div className="scroll-cue-dock" role="navigation" aria-label="Gyors görgetés">
+      {showMedia && (
+        <button
+          type="button"
+          className="scroll-cue"
+          onClick={() => scrollTo('.jukebox, .arena')}
+          title="Ugrás a zenebeküldéshez és a szüneti játékhoz"
+        >
+          <span className="scroll-cue-txt">🎵 Zene beküldés &amp; játék</span>
+          <span className="scroll-cue-arr" aria-hidden="true">↓</span>
+        </button>
+      )}
+      {showFeedback && (
+        <button
+          type="button"
+          className="scroll-cue scroll-cue-fb"
+          onClick={() => scrollTo('.feedback-panel')}
+          title="Ugrás a hibajelentéshez és ötletbeküldéshez"
+        >
+          <span className="scroll-cue-txt">💬 Hibajelentés &amp; ötlet</span>
+          <span className="scroll-cue-arr" aria-hidden="true">↓</span>
+        </button>
+      )}
+    </div>
+  )
+})
 
 export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const sb = useSandbox(!!sandbox)
@@ -591,46 +650,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const partnersBox = !tv && partners.length > 0 && <section className="panel partners-panel"><div className="tag">🤝 Társoldalak és hasznos linkek</div><div className="partners-grid">{partners.map(p => <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" className="partner-card"><span className="p-ico" aria-hidden="true">{p.icon || '🌐'}</span><div className="p-info"><b>{p.name}</b>{p.desc && <small>{p.desc}</small>}</div><span className="p-arr" aria-hidden="true">↗</span></a>)}</div></section>
 
   const kofiHref = kofi.url && !/^https?:\/\/(www\.)?ko-fi\.com\/?$/i.test(kofi.url) ? kofi.url : 'https://ko-fi.com/sulibell'
-  const kofiTvBox = tv && (
-    <section className="panel kofi-tv">
-      <div className="kofi-tv-left">
-        <div className="kofi-tv-head">
-          <div className="tag" style={{ marginBottom: 0 }}>☕ Ko-fi &amp; VIP</div>
-          <span className="kofi-vip-pill">💎 VIP</span>
-        </div>
-        {kofi.donors.length > 0 ? (
-          <ul className="kofi-tv-list">
-            {kofi.donors.slice(0, 3).map((d, idx) => (
-              <li key={d.id}>
-                <span>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
-                <b>{d.name}</b>
-                <small>{formatDonationAmount(d.amount, d.currency)}</small>
-              </li>
-            ))}
-          </ul>
-        ) : sup.supporters.length > 0 ? (
-          <ul className="kofi-tv-list">
-            {sup.supporters.slice(0, 3).map(sp => (
-              <li key={sp.id}>
-                <span>{sp.is_top_tier ? '👑' : '💚'}</span>
-                <b>{sp.name}</b>
-                <small>{sp.class_name || (sp.is_top_tier ? 'Top VIP' : 'VIP')}</small>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="kofi-tv-empty">
-            Támogasd az oldalt &amp; szerezd meg a <b>💎 VIP</b> rangot Discordon!
-          </p>
-        )}
-      </div>
-      <div className="kofi-tv-qr">
-        <img src="/kofi-qr.png" alt="Ko-fi QR-kód" />
-        <span>ko-fi.com/sulibell</span>
-      </div>
-    </section>
-  )
-  const kofiBox = !tv && (
+  const kofiBox = !tv && kofi.enabled !== false && (
     <section className="panel kofi-panel">
       <div className="kofi-head">
         <div className="tag" style={{ marginBottom: 0 }}>☕ Ko-fi Támogatás & 💎 VIP Toplista</div>
@@ -763,9 +783,57 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const lunchBox = menu && s.phase !== 'closed' && <section className="panel lunch"><div className="tag">Mai ebéd{lunchTime ? ` (${lunchTime})` : ''}</div><p>{menu.text}</p></section>
   const tms = (d: string) => Date.parse(d + 'T00:00:00Z')
   const yp = sett.year_start && sett.year_end ? Math.round(Math.min(1, Math.max(0, (tms(z.date) - tms(sett.year_start)) / (tms(sett.year_end) - tms(sett.year_start)) || 0)) * 100) : 0
+  const yearDaysLeft = sett.year_start && sett.year_end
+    ? schoolDaysBetween(startDay, sett.year_end, data.schedules, data.closed, ovMap)
+    : 0
   const yearBox = sett.year_start && sett.year_end && <div className="year-inline"><div className="tag">Tanév haladása</div>
     <div className="yearbar"><i style={{ width: `${yp}%` }} /></div>
-    <p className="meta" style={{ marginBottom: 0 }}>{yp}%, még {schoolDaysBetween(startDay, sett.year_end, data.schedules, data.closed, ovMap)} tanítási nap a tanév végéig</p></div>
+    <p className="meta" style={{ marginBottom: 0 }}>{yp}%, még {yearDaysLeft} tanítási nap a tanév végéig</p></div>
+  const tvInfoCard = tv && (
+    <section className="panel tv-info-card">
+      <div className="tag">📅 Közelgő &amp; Tanév</div>
+      {events.length > 0 ? (
+        <ul className="tv-info-list">
+          {events.slice(0, 2).map((e: any) => {
+            const k = KIND[e.kind] ?? KIND.other
+            const d = Math.floor(e.left / 86400)
+            const h = Math.floor((e.left % 86400) / 3600)
+            return (
+              <li key={e.id}>
+                <span aria-hidden="true">{k.icon}</span>
+                <b>{e.title}</b>
+                <small>{d > 0 ? `${d} nap` : `${Math.max(1, h)} óra`}</small>
+              </li>
+            )
+          })}
+        </ul>
+      ) : upcoming.length > 0 ? (
+        <ul className="tv-info-list">
+          {upcoming.slice(0, 2).map((c: { day: string; reason: string }) => (
+            <li key={c.day}>
+              <span aria-hidden="true">🗓️</span>
+              <b>{c.reason}</b>
+              <small>{dayName(c.day, { month: 'short', day: 'numeric' })}</small>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="tv-info-fallback">
+          <b>{schedule?.name || 'Normál csengetési rend'}</b>
+          <span>{T.length > 0 ? `${T.length} tanítási óra ma` : 'Nincs tanítás ma'}</span>
+        </p>
+      )}
+      {sett.year_start && sett.year_end && (
+        <div className="tv-info-year">
+          <div className="tv-info-year-head">
+            <span>Tanév haladása</span>
+            <b>{yp}% · még {yearDaysLeft} nap</b>
+          </div>
+          <div className="yearbar"><i style={{ width: `${yp}%` }} /></div>
+        </div>
+      )}
+    </section>
+  )
   const overlay = sett.alert_active && sett.alert_text && dismissed !== sett.alert_text && <div className="alertfs" role="alertdialog" aria-live="assertive">
     <div className="alertbox"><div className="tag">Fontos közlemény</div><p>{sett.alert_text}</p>{!tv && <button onClick={() => setDismissed(sett.alert_text)}>Értettem</button>}</div></div>
 
@@ -986,7 +1054,6 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               {isXmasSkin && (s.phase === 'lesson' || s.phase === 'break' || s.phase === 'before') && (
                 <div className="xmas-bar" aria-hidden="true"><i style={{ width: `${Math.round(s.progress * 100)}%` }} /></div>
               )}
-              <SupporterTicker supporters={sup.withMessages} tv />
               {data.settings.tv_show_next && (
                 pv && first
                   ? <NextDay label={dayName(pv.date, { weekday: 'long' })} time={fmtHM(first.start_time)} until={until} />
@@ -1014,7 +1081,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
                     <Suspense fallback={null}><Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv /></Suspense>
                     <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
-                    {kofiTvBox}
+                    {tvInfoCard}
                   </div>
                 </>
               ) : (
@@ -1027,7 +1094,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
                     <Suspense fallback={null}><Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv /></Suspense>
                     <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
-                    {kofiTvBox}
+                    {tvInfoCard}
                   </div>
                 </>
               )}
@@ -1046,7 +1113,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       {maintOverlay}
         {!potato && <VibeOverlay floats={vibeFloats} />}
         {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
-        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
+        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} allowEasterEggs={false} />
         {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
         {fx && <BellFlash bellKey={key} day={z.date} phase={s.phase} label={s.current?.label} />}
       </>
@@ -1275,6 +1342,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
               {pollCard}
               {partnersBox}
+              <FeedbackPanel />
             </div>
           </div>
         ) : (
@@ -1409,6 +1477,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
               {/* Társoldalak és hasznos linkek a főoldalon */}
               {partnersBox}
+
+              {/* Hibajelentés & Ötletek a főoldalon */}
+              <FeedbackPanel />
 
               <section className="panel quick-nav-card">
                 <div className="tag" style={{ marginBottom: 8 }}>🚀 Gyors ugrás más menükre</div>
@@ -1626,6 +1697,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} day={z.date} phase={s.phase} label={s.current?.label} />}
+      {!isUpdating && !overlay && !adventModal.open && !vipModal.open && !myModalOpen && (
+        <ScrollCue layoutKey={`${layoutMode}:${activeTab}`} />
+      )}
     </>
   )
 }

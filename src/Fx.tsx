@@ -138,7 +138,7 @@ export const BellFlash = memo(function BellFlash({ bellKey, day, phase, label }:
  *  - Nagy óra 7× kattintás → Időutazó mód
  *  - Verziószám 5× kattintás → Kódmágus mód
  *  - Időjárás ikon 5× kattintás → Időjárás-varázslat */
-export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events, enabled, sound }: { phase: string; day?: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean }) {
+export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events, enabled, sound, allowEasterEggs = true }: { phase: string; day?: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean; allowEasterEggs?: boolean }) {
   const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
   const eggTimerRef = useRef<number>(0)
   const dayRef = useRef(day || 'today')
@@ -204,6 +204,11 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
 
   // 3) Kattintásos & URL Easter Eggek + DevTools konzol üzenet
   useEffect(() => {
+    if (!allowEasterEggs) {
+      if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
+      document.documentElement.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+      return
+    }
     const clicks: Record<string, { n: number; t: number }> = {}
     const bump = (id: string, need: number, windowMs = 3000) => {
       const now = Date.now(), cur = clicks[id]
@@ -247,10 +252,11 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
       window.removeEventListener('click', onClick)
       if (partyTimer) window.clearTimeout(partyTimer)
     }
-  }, [enabled, sound])
+  }, [enabled, sound, allowEasterEggs])
 
   // 4) Billentyűs Easter Eggek: Konami-kód + titkos varázsszavak (input mezőkön kívül)
   useEffect(() => {
+    if (!allowEasterEggs) return
     const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a']
     let kIdx = 0
     let buf = ''
@@ -308,10 +314,11 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, sound])
+  }, [enabled, sound, allowEasterEggs])
 
   // 5) Egyszeri titkos üzenet a DevTools konzolban
   useEffect(() => {
+    if (!allowEasterEggs) return
     try {
       console.log(
         '%c🔔 SuliBell Titkos Konzol %c Gratulálok, megtaláltad a fejlesztői konzolt! Tipp: ↑↑↓↓←→←→BA vagy gépeld be az üres oldalon: matrix, cica, sulibell 😉',
@@ -319,7 +326,7 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
         'color:#9ca6cc;font-weight:600'
       )
     } catch { /* ignore */ }
-  }, [])
+  }, [allowEasterEggs])
 
   return msg ? <div key={msg.id} className="bellbanner after party" role="status"><b>{msg.title}</b><span>{msg.sub}</span></div> : null
 })

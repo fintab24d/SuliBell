@@ -2641,6 +2641,43 @@ Deno.serve(async (req: Request) => {
         return reply({ ok: true })
       }
 
+      if ((kind === 'bug' || kind === 'idea') && (kind === 'bug' ? chMap.bugs : chMap.ideas)) {
+        const targetCh = kind === 'bug' ? chMap.bugs! : chMap.ideas!
+        const title = String(body.title || '').trim().slice(0, 90)
+        const details = String(body.details || '').trim().slice(0, 1000)
+        const by = String(body.by || '').trim().slice(0, 45) || 'Névtelen diák'
+        if (title.length < 3 || details.length < 5) {
+          return reply(
+            { ok: false, error: 'Adj meg legalább 3 karakteres címet és 5 karakteres leírást!' },
+            400
+          )
+        }
+        const isBug = kind === 'bug'
+        const threadTitle = `${isBug ? '🐛' : '💡'} ${title}`.slice(0, 100)
+        const embed = {
+          title: `${isBug ? '🐛 Hibajelentés' : '💡 Ötlet / Javaslat'}: ${title}`,
+          description: details,
+          color: isBug ? 0xe63946 : 0xffd166,
+          fields: [
+            { name: '👤 Beküldő', value: by, inline: true },
+            { name: '🌐 Forrás', value: 'SuliBell weboldal', inline: true },
+          ],
+          footer: { text: 'SuliBell Visszajelzés • Főoldal' },
+          timestamp: new Date().toISOString(),
+        }
+        try {
+          await discordApi(`/channels/${targetCh}/threads`, 'POST', {
+            name: threadTitle,
+            message: { embeds: [embed] },
+          })
+        } catch {
+          await discordApi(`/channels/${targetCh}/messages`, 'POST', {
+            embeds: [embed],
+          })
+        }
+        return reply({ ok: true })
+      }
+
       return reply({ ok: false, error: 'Ismeretlen cél vagy hiányzó csatorna' }, 400)
     }
 

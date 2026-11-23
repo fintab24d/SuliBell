@@ -633,7 +633,7 @@ function Panel() {
                 type="button"
                 onClick={async () => {
                   if (!confirm('Biztosan törlöd az összes támogatót a toplistáról?')) return
-                  await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: [] })
+                  await saveKofiToDb(d.id, d.announcements ?? [], { ...kofiCfg, donors: [] })
                   setMsg('Ko-fi toplista ürítve.')
                   load()
                 }}
@@ -645,6 +645,20 @@ function Panel() {
           <p className="hint">
             Itt állíthatod be a Ko-fi oldalad linkjét és kezelheted a támogatói toplistát. Ha a Ko-fi-n a <b>Webhooks</b> menüpontban beállítod az alábbi Webhook URL-t, minden új támogatás <b>automatikusan</b> megjelenik a weboldalon, bekerül a Discord <b>#🎁-vip-infó-és-fal</b> szobába, és a támogató megkapja a <b>💎 VIP Támogató</b> rangot!
           </p>
+          <div className="row" style={{ marginBottom: 8 }}>
+            <label>
+              <input
+                type="checkbox"
+                checked={kofiCfg.enabled !== false}
+                onChange={async e => {
+                  const val = e.target.checked
+                  await saveKofiToDb(d.id, d.announcements ?? [], { ...kofiCfg, enabled: val })
+                  setMsg(val ? 'Ko-fi doboz megjelenítve a főoldalon.' : 'Ko-fi doboz elrejtve a főoldalról.')
+                  load()
+                }}
+              /> 🌐 Megjelenítés a főoldalon
+            </label>
+          </div>
           <div className="row" style={{ marginBottom: 8 }}>
             <label>☕ Ko-fi profil URL
               <input
@@ -658,7 +672,7 @@ function Panel() {
               type="button"
               onClick={async () => {
                 const nextUrl = (kfUrl || kofiCfg.url).trim() || 'https://ko-fi.com/sulibell'
-                await saveKofiToDb(d.id, d.announcements ?? [], { url: nextUrl, donors: kofiCfg.donors })
+                await saveKofiToDb(d.id, d.announcements ?? [], { ...kofiCfg, url: nextUrl })
                 setMsg('Ko-fi profil URL elmentve!')
                 load()
               }}
@@ -701,7 +715,7 @@ function Panel() {
                     })
                     if (res.vipGranted) {
                       const updated = kofiCfg.donors.map(x => x.id === dn.id ? { ...x, vip_granted: true, discord: res.discordUsername || x.discord, discord_user_id: res.discordUserId || x.discord_user_id } : x)
-                      await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: updated })
+                      await saveKofiToDb(d.id, d.announcements ?? [], { ...kofiCfg, donors: updated })
                       setMsg(`💎 VIP Támogató rang sikeresen kiosztva (@${res.discordUsername || dn.name})!`)
                       load()
                     } else {
@@ -715,7 +729,7 @@ function Panel() {
                   type="button"
                   onClick={async () => {
                     const updated = kofiCfg.donors.filter(x => x.id !== dn.id)
-                    await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: updated })
+                    await saveKofiToDb(d.id, d.announcements ?? [], { ...kofiCfg, donors: updated })
                     setMsg('Támogató eltávolítva.')
                     load()
                   }}
@@ -756,7 +770,7 @@ function Panel() {
                     at: Date.now()
                   }
                 ]
-                await saveKofiToDb(d.id, d.announcements ?? [], { url: kofiCfg.url, donors: nextDonors })
+                await saveKofiToDb(d.id, d.announcements ?? [], { ...kofiCfg, donors: nextDonors })
               }
               setKf({ name: '', amount: '1000', currency: 'HUF', discord: '', message: '' })
               setMsg(vipRes.vipGranted ? 'Támogató hozzáadva + 💎 Discord VIP rang kiosztva!' : 'Támogató hozzáadva a toplistához és beküldve a Discord VIP falra!')
