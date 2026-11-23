@@ -54,16 +54,16 @@ export const MIN_VOTES_TO_PLAY = 5
  */
 export function pruneOldJukeboxDays(currentDay: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(currentDay)) return
+  const keep = new Set([
+    STORAGE_PREFIX + currentDay,
+    VOTED_PREFIX + currentDay,
+    DELETED_PREFIX + currentDay,
+    SUB_PREFIX + currentDay,
+  ])
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i)
-      if (!k) continue
-      if (
-        (k.startsWith(STORAGE_PREFIX) && k !== STORAGE_PREFIX + currentDay) ||
-        (k.startsWith(VOTED_PREFIX) && k !== VOTED_PREFIX + currentDay) ||
-        (k.startsWith(DELETED_PREFIX) && k !== DELETED_PREFIX + currentDay) ||
-        (k.startsWith(SUB_PREFIX) && k !== SUB_PREFIX + currentDay)
-      ) {
+      if (k && k.startsWith(STORAGE_PREFIX) && !keep.has(k)) {
         localStorage.removeItem(k)
       }
     }
@@ -261,12 +261,11 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
     const syncMyVotesFromDb = async (loadedSongs: SongWish[]) => {
       try {
-        const { data: voteRows, error: voteErr }: any = await supabase
-          .from('jukebox_votes')
-          .select('song_id')
-          .eq('school_id', schoolId)
-          .eq('day', day)
-          .eq('voter_id', voterId())
+        const { data: voteRows, error: voteErr }: any = await supabase.rpc('get_my_jukebox_votes', {
+          p_school: schoolId,
+          p_day: day,
+          p_voter: voterId(),
+        })
         if (!alive || voteErr || !Array.isArray(voteRows) || voteRows.length === 0) return
         const keys: string[] = []
         for (const vr of voteRows) {
@@ -277,7 +276,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           if (match) keys.push(titleVoteKey(match.title))
         }
         if (keys.length > 0) recordVotedKeys(keys)
-      } catch { /* nem baj ha nincs RLS olvasási jog */ }
+      } catch { /* offline vagy átmeneti hiba */ }
     }
 
     const syncFromDb = async () => {
@@ -289,24 +288,27 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         if (!alive || fallback.error || !Array.isArray(fallback.data)) return
         const del = loadDeletedSet(day)
         const dbIds = new Set<string>()
-        let mergedList: SongWish[] = []
+        const fbSongs: SongWish[] = []
+        for (const r of fallback.data) {
+          if (r.kind === 'video') continue
+          const sid = String(r.song_id)
+          if (del.has(sid)) continue
+          dbIds.add(sid)
+          fbSongs.push({
+            id: sid,
+            day,
+            kind: 'music',
+            title: String(r.title),
+            by: String(r.requester ?? ''),
+            ytId: r.yt_id ? String(r.yt_id) : undefined,
+            votes: Number(r.votes) || 1,
+            at: Date.parse(r.created_at) || Date.now(),
+          })
+        }
         setSongs(prev => {
           let next: SongWish[] = []
-          for (const r of fallback.data) {
-            if (r.kind === 'video') continue
-            const sid = String(r.song_id)
-            if (del.has(sid)) continue
-            dbIds.add(sid)
-            next = mergeSong(next, {
-              id: sid,
-              day,
-              kind: 'music',
-              title: String(r.title),
-              by: String(r.requester ?? ''),
-              ytId: r.yt_id ? String(r.yt_id) : undefined,
-              votes: Number(r.votes) || 1,
-              at: Date.parse(r.created_at) || Date.now(),
-            }, del)
+          for (const item of fbSongs) {
+            next = mergeSong(next, item, del)
           }
           // Csak Discord vagy épp most beküldött (optimista) elemek maradnak helyben
           const nowMs = Date.now()
@@ -317,10 +319,9 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
             }
           }
           saveLocalSongs(day, next)
-          mergedList = next
           return next
         })
-        void syncMyVotesFromDb(mergedList)
+        void syncMyVotesFromDb(fbSongs)
         return
       }
 
@@ -350,7 +351,6 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       }
       saveDeletedSet(day, del)
 
-      let mergedList: SongWish[] = []
       setSongs(prev => {
         let next: SongWish[] = []
         for (const item of dbActive) {
@@ -365,10 +365,9 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           }
         }
         saveLocalSongs(day, next)
-        mergedList = next
         return next
       })
-      void syncMyVotesFromDb(mergedList)
+      void syncMyVotesFromDb(dbActive)
     }
 
     // Discord #🎵-zenekérés-ötletek szinkronizáció

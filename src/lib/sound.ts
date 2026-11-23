@@ -388,7 +388,11 @@ export function fxSound(kind: FxSoundKind, pan = 0) {
     tone('sine', 120, 38, t, 0.7, 0.55); burst(t, 0.8, 2200, 180, 0.7, 0.55)
     for (let i = 0; i < 9; i++) burst(t + 0.25 + Math.random() * 0.8, 0.05, 6000, 3000, 1.5, 0.12 + Math.random() * 0.1, 'highpass')   // sistergés
   }
-  else if (kind === 'pop') { tone('sine', 260, 70, t, 0.14, 0.5); burst(t, 0.14, 3200, 800, 0.8, 0.45, 'bandpass'); for (let i = 0; i < 6; i++) burst(t + 0.1 + Math.random() * 0.5, 0.04, 5000, 2500, 1.2, 0.06, 'highpass') }
+  else if (kind === 'pop') {
+    // Lágy, tiszta buborék/marimba kattintáshang (zajmentes)
+    tone('sine', 440, 740, t, 0.085, 0.22)
+    tone('triangle', 880, 1180, t + 0.018, 0.07, 0.08)
+  }
   else [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone('triangle', f, f, t + i * 0.13, i === 5 ? 0.6 : 0.18, 0.18))
   setTimeout(() => out.disconnect(), 2500)
 }
