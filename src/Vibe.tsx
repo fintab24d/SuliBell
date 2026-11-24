@@ -135,7 +135,7 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
     ch.on('broadcast', { event: 'react' }, (msg: any) => {
       const payload = msg?.payload
       if (!alive || !payload?.vibe) return
-      spawnEmoji(payload.vibe, 2)
+      if (!document.hidden) spawnEmoji(payload.vibe, 2)
       setCounts(prev => {
         const next = { ...prev, [payload.vibe]: (prev[payload.vibe] ?? 0) + 1 }
         saveLocalCounts(day, next)
@@ -150,7 +150,7 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
       bc = new BroadcastChannel(`sulibell-vibe-${schoolId}`)
       bc.onmessage = ev => {
         if (!alive || !ev.data?.vibe) return
-        spawnEmoji(ev.data.vibe, 2)
+        if (!document.hidden) spawnEmoji(ev.data.vibe, 2)
         setCounts(prev => {
           const next = { ...prev, [ev.data.vibe]: (prev[ev.data.vibe] ?? 0) + 1 }
           saveLocalCounts(day, next)

@@ -9,6 +9,7 @@ export interface BellState {
   progress: number    // 0..1 az aktuális óra/szünet előrehaladása
   soon: boolean       // 60 mp-en belül csengetés
   total?: number      // az aktuális fázis teljes hossza másodpercben
+  elapsed?: number    // az aktuális csengetés óta eltelt másodpercek
   reason?: string
 }
 
@@ -100,7 +101,9 @@ export function computeState(
   const curCancelled = cancelledLessons.find(cl => secs >= toSec(cl.start_time) && secs < toSec(cl.end_time))
   const mk = (phase: Phase, from: number, to: number, o: Partial<BellState>): BellState => ({
     phase, remaining: to - secs, progress: Math.min(1, Math.max(0, (secs - from) / (to - from))),
-    soon: to - secs <= 60, total: to - from, ...o })
+    soon: to - secs <= 60, total: to - from,
+    elapsed: phase === 'lesson' || phase === 'break' ? Math.max(0, secs - from) : undefined,
+    ...o })
   if (secs < toSec(L[0].start_time)) {
     const firstCancelledStart = cancelledLessons.length > 0 ? Math.min(...cancelledLessons.map(cl => toSec(cl.start_time))) : 0
     const fromSec = curCancelled ? firstCancelledStart : 0
@@ -120,11 +123,13 @@ export function computeState(
       })
     }
   }
+  const lastEnd = toSec(L[L.length - 1].end_time)
   return {
     phase: 'after',
     remaining: 0,
     progress: 1,
     soon: false,
+    elapsed: Math.max(0, secs - lastEnd),
     reason: curCancelled ? `Vége a tanításnak (${curCancelled.label} elmarad)` : undefined,
   }
 }

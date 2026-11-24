@@ -4583,3 +4583,224 @@ iframe {
     justify-content: center;
   }
 }
+
+/* ==================== 🎆 SZILVESZTER & ÚJÉV GÁLA EFFEKT ==================== */
+.nye-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 88;
+}
+
+:root[data-nye="1"] .panel,
+:root[data-nye="1"] .tv-hdr {
+  border-color: color-mix(in srgb, #ffd166 32%, var(--line));
+  box-shadow: 0 0 28px rgba(255, 209, 102, 0.08);
+}
+
+.nye-hero {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  width: min(92vw, 760px);
+  z-index: 95;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  pointer-events: none;
+  padding: 24px;
+  transform-origin: center center;
+  animation: nyeHeroAnim 7.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.nye-hero-sparkles {
+  position: relative;
+  width: min(560px, 86vw);
+  height: 0;
+}
+.nye-hero-sparkles span {
+  position: absolute;
+  color: #fff3b0;
+  text-shadow: 0 0 22px rgba(255, 215, 96, 0.95);
+  animation: nyeStar 1.6s ease-in-out infinite alternate;
+}
+.nye-hero-sparkles .s1 { left: 6%; top: -28px; font-size: 1.55rem; animation-delay: 0s; }
+.nye-hero-sparkles .s2 { right: 8%; top: -36px; font-size: 1.85rem; animation-delay: 0.35s; }
+.nye-hero-sparkles .s3 { left: 14%; top: 112px; font-size: 1.25rem; animation-delay: 0.7s; }
+.nye-hero-sparkles .s4 { right: 12%; top: 102px; font-size: 1.6rem; animation-delay: 1s; }
+
+.nye-hero-kicker {
+  font-size: clamp(1rem, 2.5vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fef08a;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.8), 0 0 28px rgba(255, 209, 102, 0.65);
+}
+.nye-hero-year {
+  font: 900 clamp(4.8rem, 17vw, 12.5rem)/0.92 var(--f);
+  letter-spacing: 0.06em;
+  background: linear-gradient(120deg, #b45309 0%, #fde047 22%, #fffbeb 42%, #ffd166 58%, #f59e0b 78%, #fef08a 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 42px rgba(255, 209, 102, 0.6));
+  animation: nyeSheen 2.2s linear infinite;
+}
+@keyframes nyeHeroAnim {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.08);
+    filter: brightness(2.8) blur(6px) drop-shadow(0 0 80px rgba(255, 243, 176, 0.98));
+  }
+  9% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+    filter: brightness(1.65) blur(0px) drop-shadow(0 0 56px rgba(255, 209, 102, 0.88));
+  }
+  17% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.98);
+    filter: brightness(1.08) drop-shadow(0 0 28px rgba(255, 209, 102, 0.45));
+  }
+  23% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: brightness(1) drop-shadow(0 0 18px rgba(255, 209, 102, 0.35));
+  }
+  84% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: brightness(1) drop-shadow(0 0 18px rgba(255, 209, 102, 0.35));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.06);
+    filter: brightness(0.9) blur(2px);
+  }
+}
+@keyframes nyeSheen {
+  0% { background-position: 100% 0; }
+  100% { background-position: -120% 0; }
+}
+@keyframes nyeStar {
+  from { opacity: 0.35; transform: scale(0.75) rotate(0deg); }
+  to { opacity: 1; transform: scale(1.25) rotate(24deg); }
+}
+
+.nye-ribbon {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #1c1406 88%, var(--panel));
+  border: 1px solid rgba(255, 215, 96, 0.55);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42), 0 0 22px rgba(255, 209, 102, 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fef08a;
+  max-width: calc(100vw - 20px);
+}
+.nye-ribbon span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nye-btn {
+  padding: 5px 12px !important;
+  border-radius: 999px !important;
+  font-size: 0.8rem !important;
+  font-weight: 800 !important;
+  color: #1c1100 !important;
+  background: linear-gradient(135deg, #ffd166, #fbbf24) !important;
+  border: 0 !important;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.45) !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.nye-btn:hover {
+  filter: brightness(1.08);
+}
+.nye-close {
+  padding: 2px 6px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #fde68a !important;
+  opacity: 0.72;
+  cursor: pointer;
+  font-size: 0.85rem !important;
+}
+.nye-close:hover {
+  opacity: 1;
+}
+
+.nye-countdown {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 94;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(24, 16, 4, 0.9);
+  border: 1.5px solid rgba(255, 215, 96, 0.65);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48), 0 0 24px rgba(255, 209, 102, 0.28);
+  color: #fde68a;
+  font-weight: 700;
+  font-size: 0.98rem;
+  pointer-events: none;
+}
+.nye-countdown b {
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.nye-final-ten {
+  position: fixed;
+  inset: 0;
+  z-index: 93;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  pointer-events: none;
+  animation: nyePulse 0.9s ease-out forwards;
+}
+.nye-final-ten span {
+  font-size: clamp(1rem, 2.2vw, 1.5rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fde68a;
+  text-shadow: 0 0 16px rgba(255, 209, 102, 0.6);
+}
+.nye-final-ten b {
+  font: 900 clamp(5rem, 18vw, 13rem)/1 var(--f);
+  color: #ffd166;
+  text-shadow: 0 0 38px rgba(255, 209, 102, 0.7), 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+@keyframes nyePulse {
+  0% { opacity: 0; transform: scale(1.24); }
+  25% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0.25; transform: scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nye-hero,
+  .nye-hero-year,
+  .nye-hero-sparkles span,
+  .nye-final-ten {
+    animation: none;
+  }
+}

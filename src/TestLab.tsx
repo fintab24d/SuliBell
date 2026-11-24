@@ -371,6 +371,14 @@ function SandboxWorkspace() {
                 >
                   🎅 Dec. 6+ Mikulás &amp; Szán teszt
                 </button>
+                <button
+                  type="button"
+                  className={sb.forceNewYear ? 'active' : ''}
+                  onClick={() => updateSandbox({ forceNewYear: !sb.forceNewYear })}
+                  title="Újévi tűzijáték-sorozat, pezsgőarany konfetti és ünnepi sáv előnézete"
+                >
+                  🎆 Újévi tűzijáték teszt
+                </button>
               </div>
               <div className="testlab-row">
                 <input

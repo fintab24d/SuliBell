@@ -277,6 +277,7 @@ export class FxEngine {
   private last = 0
   private frame = 0
   private time = 0
+  private hiddenAt = 0
   private running = false
   private wkind: WeatherKind = 'none'
   private wpow = 0
@@ -423,6 +424,7 @@ export class FxEngine {
 
   /** Csengetés: gyűrű-hullámok és szikra-robbanás a számlap körül (x, y, a számlap sugara). */
   bell(x: number, y: number, rad: number) {
+    if (typeof document !== 'undefined' && document.hidden) return
     for (let i = 0; i < 3; i++) this.waves.push({ x, y, r0: rad * 0.9, r1: rad * (2.6 + i * 0.7), t: -i * 0.16, max: 1.25, ci: this.focus })
     const n = Math.round((this.tv ? 80 : 120) * this.perfScale)
     for (let i = 0; i < n; i++) {
@@ -524,6 +526,7 @@ export class FxEngine {
 
   /** Nagy pillanat vagy Easter Egg: mindegyik típushoz egyedi vizuális effekt tartozik. */
   celebrate(kind: CelebrateKind = 'both', power = 1, ox?: number, oy?: number) {
+    if (typeof document !== 'undefined' && document.hidden) return
     const k = (this.tv ? 0.7 : 1) * this.perfScale
     const cx = ox ?? this.w * 0.5
     const cy = oy ?? this.h * 0.45
@@ -1029,11 +1032,71 @@ export class FxEngine {
     this.scrollY = window.scrollY
     this.refreshVisibleLedges()
   }
+  /** Amíg a fül rejtve volt, a központi valós idővel előreléptetjük/lejáratjuk az átmeneti effekteket, hogy visszatéréskor ne fussanak le késve. */
+  private expireTransient(awaySec: number) {
+    this.time += awaySec
+    if (this.queue.length) {
+      this.queue = this.queue.filter(q => q.t > this.time)
+    }
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      this.waves[i].t += awaySec
+      if (this.waves[i].t > this.waves[i].max) {
+        this.waves[i] = this.waves[this.waves.length - 1]
+        this.waves.pop()
+      }
+    }
+    for (let i = this.sparks.length - 1; i >= 0; i--) {
+      this.sparks[i].life -= awaySec
+      if (this.sparks[i].life <= 0) {
+        this.sparks[i] = this.sparks[this.sparks.length - 1]
+        this.sparks.pop()
+      }
+    }
+    for (let i = this.pixels.length - 1; i >= 0; i--) {
+      this.pixels[i].life -= awaySec
+      if (this.pixels[i].life <= 0) {
+        this.pixels[i] = this.pixels[this.pixels.length - 1]
+        this.pixels.pop()
+      }
+    }
+    for (let i = this.stickers.length - 1; i >= 0; i--) {
+      this.stickers[i].life -= awaySec
+      if (this.stickers[i].life <= 0) {
+        this.stickers[i] = this.stickers[this.stickers.length - 1]
+        this.stickers.pop()
+      }
+    }
+    for (let i = this.papers.length - 1; i >= 0; i--) {
+      const p = this.papers[i]
+      p.y += p.vy * awaySec
+      if (p.y > this.h + 24) {
+        this.papers[i] = this.papers[this.papers.length - 1]
+        this.papers.pop()
+      }
+    }
+    if (awaySec >= 1.5) this.rockets.length = 0
+    if (awaySec >= 0.5) this.bolts.length = 0
+    this.flash = Math.max(0, this.flash - awaySec * 2)
+    if (this.matrixCols.length && this.time >= this.matrixUntil) {
+      this.matrixCols.length = 0
+    }
+    if (this.ctxFg && this.canvasFg) {
+      this.ctxFg.clearRect(0, 0, this.canvasFg.width, this.canvasFg.height)
+    }
+  }
+
   private onVis = () => {
-    if (document.hidden) { cancelAnimationFrame(this.raf) }
-    else if (this.running) {
+    if (document.hidden) {
       cancelAnimationFrame(this.raf)
-      this.last = performance.now()
+      if (!this.hiddenAt) this.hiddenAt = performance.now()
+      this.queue.length = 0
+    } else if (this.running) {
+      cancelAnimationFrame(this.raf)
+      const now = performance.now()
+      const awaySec = this.hiddenAt ? Math.max(0, (now - this.hiddenAt) / 1000) : 0
+      this.hiddenAt = 0
+      if (awaySec > 0.25) this.expireTransient(awaySec)
+      this.last = now
       this.raf = requestAnimationFrame(this.tick)
     }
   }

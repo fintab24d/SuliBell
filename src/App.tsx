@@ -5,6 +5,7 @@ import { SupporterTicker, VipModal, type VipModalTab } from './VipModal'
 import { applyHolidayDom, isAfterDec5, useAdvent, WINTER_BREAK_DATE, type HolidayThemeMode } from './lib/advent'
 import { AdventModal, AdventWreathIcon, ChristmasStockingSvg, SantaHatSvg, WinterBreakStrip, type AdventModalTab } from './AdventModal'
 import { FlyingSleighTop, PeekingSantaBg } from './ChristmasDecor'
+import NewYearEffect from './NewYearEffect'
 import QRCode from 'qrcode'
 import NotifyButton from './Notify'
 import Fx, { BellFlash, Celebrate, FinalCount } from './Fx'
@@ -488,6 +489,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const devXmasPreview = import.meta.env.DEV && typeof location !== 'undefined' && /[?&]xmaspreview=1\b/.test(location.search)
   const sandboxXmasPreview = !!sandbox && sb.forceXmasAfterDec5
   const xmasPreviewActive = devXmasPreview || sandboxXmasPreview
+  const devNyePreview = import.meta.env.DEV && typeof location !== 'undefined' && /[?&]nye=1\b/.test(location.search)
+  const sandboxNyePreview = !!sandbox && sb.forceNewYear
+  const nyePreviewActive = devNyePreview || sandboxNyePreview
   const isXmasSkin = advent.activeTheme === 'christmas' || xmasPreviewActive
   const showBrandHoliday = isXmasSkin || advent.santaFrameActive
   const showXmasAfterDec5 = !potato && isXmasSkin && (isAfterDec5(advent.serverDate) || xmasPreviewActive)
@@ -580,7 +584,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
   useEffect(() => {
-    if (prev.current && key !== prev.current && state?.phase !== 'closed' && data?.settings.sound_enabled && !muted) ring(data.settings.bell_sound_url, bellStyleRef.current)
+    const liveBell = typeof state?.elapsed === 'number' && state.elapsed >= 0 && state.elapsed <= 3
+    if (prev.current && key !== prev.current && state?.phase !== 'closed' && liveBell && data?.settings.sound_enabled && !muted) ring(data.settings.bell_sound_url, bellStyleRef.current)
     prev.current = key
   }, [key])
   // TV-mód méretezése az admin beállítása szerint.
@@ -1005,7 +1010,8 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           </main>
           {maintPrepBanner}
           {maintOverlay}
-          {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={false} festiveSnow={advent.state.snowEnabled && !potato} />}
+          {fx && <Fx phase={s.phase} bellKey={key} elapsed={s.elapsed} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={false} festiveSnow={advent.state.snowEnabled && !potato} />}
+          <NewYearEffect date={z.date} secs={z.secs} tv={tv} enabled={fx && !potato} sound={false} preview={nyePreviewActive} />
         </>
       )
     }
@@ -1114,10 +1120,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         {maintPrepBanner}
       {maintOverlay}
         {!potato && <VibeOverlay floats={vibeFloats} />}
-        {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
-        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} allowEasterEggs={false} />
+        {fx && <Fx phase={s.phase} bellKey={key} elapsed={s.elapsed} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
+        <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} elapsed={s.elapsed} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} allowEasterEggs={false} />
+        <NewYearEffect date={z.date} secs={z.secs} tv={tv} enabled={fx && !potato} sound={!!data.settings.sound_enabled && audioOn} preview={nyePreviewActive} />
         {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
-        {fx && <BellFlash bellKey={key} day={z.date} phase={s.phase} label={s.current?.label} />}
+        {fx && <BellFlash bellKey={key} elapsed={s.elapsed} day={z.date} phase={s.phase} label={s.current?.label} />}
       </>
     )
   }
@@ -1696,10 +1703,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       {maintPrepBanner}
       {maintOverlay}
       {!potato && (layoutMode === 'classic' || activeTab === 'home') && <VibeOverlay floats={vibeFloats} />}
-      {fx && <Fx phase={s.phase} bellKey={key} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
-      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
+      {fx && <Fx phase={s.phase} bellKey={key} elapsed={s.elapsed} day={z.date} tv={tv} wx={wx?.c} night={isNight} sound={!!data.settings.sound_enabled && audioOn} festiveSnow={advent.state.snowEnabled && !potato} />}
+      <Celebrate enabled={fx} sound={!!data.settings.sound_enabled && audioOn} phase={s.phase} elapsed={s.elapsed} day={z.date} awayDays={pv ? Math.round((tms(pv.date) - tms(z.date)) / 86400000) : 0} events={events} />
+      <NewYearEffect date={z.date} secs={z.secs} tv={tv} enabled={fx && !potato} sound={!!data.settings.sound_enabled && audioOn} preview={nyePreviewActive} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
-      {fx && <BellFlash bellKey={key} day={z.date} phase={s.phase} label={s.current?.label} />}
+      {fx && <BellFlash bellKey={key} elapsed={s.elapsed} day={z.date} phase={s.phase} label={s.current?.label} />}
       {!isUpdating && !overlay && !adventModal.open && !vipModal.open && !myModalOpen && (
         <ScrollCue layoutKey={`${layoutMode}:${activeTab}`} />
       )}

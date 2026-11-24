@@ -1,18 +1,23 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { FxEngine, type CelebrateKind } from './lib/fx'
 import { fxSound } from './lib/sound'
-import { claimDailyAnimationOnce, claimEasterEggOnce } from './lib/animGuard'
+import { canTriggerEasterEgg, claimLiveBellEvent } from './lib/animGuard'
+import { serverNowMs } from './lib/serverTime'
 
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** Neon háttér-réteg: részecskék, kattintás-szikrák, fényfolt a paneleken, csengetéskor robbanás. Csak a Neon stílusban él. */
-const Fx = memo(function Fx({ phase, bellKey, day, tv, wx, night, sound, festiveSnow }: { phase: string; bellKey: string; day?: string; tv: boolean; wx?: number | null; night?: boolean; sound?: boolean; festiveSnow?: boolean }) {
+const Fx = memo(function Fx({ phase, bellKey, elapsed, day, tv, wx, night, sound, festiveSnow }: { phase: string; bellKey: string; elapsed?: number; day?: string; tv: boolean; wx?: number | null; night?: boolean; sound?: boolean; festiveSnow?: boolean }) {
   const refBg = useRef<HTMLCanvasElement>(null)
   const refFg = useRef<HTMLCanvasElement>(null)
   const eng = useRef<FxEngine | null>(null)
   const off = reduced()
   const dayRef = useRef(day || 'today')
   dayRef.current = day || 'today'
+  const elapsedRef = useRef<number | undefined>(elapsed)
+  elapsedRef.current = elapsed
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
 
   // Csak a releváns propok változásakor induljon újra az engine
   useEffect(() => {
@@ -34,6 +39,7 @@ const Fx = memo(function Fx({ phase, bellKey, day, tv, wx, night, sound, festive
   useEffect(() => { eng.current?.setFestiveSnow(!!festiveSnow) }, [festiveSnow]) // kapcsolható ünnepi hóesés
   useEffect(() => {                                                    // tűzijáték / konfetti a nagy pillanatokra
     const on = (e: Event) => {
+      if (typeof document !== 'undefined' && document.hidden) return
       const d = (e as CustomEvent).detail ?? {}
       eng.current?.celebrate(d.kind ?? 'both', d.power ?? 1, d.ox, d.oy)
     }
@@ -41,17 +47,44 @@ const Fx = memo(function Fx({ phase, bellKey, day, tv, wx, night, sound, festive
     return () => window.removeEventListener('sulibell:celebrate', on)
   }, [])
 
-  // Állapotváltáskor (csengetés) szikra-robbanás a számlap körül; központilag egyszer játszódik le, betöltéskor nem.
+  // Állapotváltáskor (csengetés) szikra-robbanás a számlap körül; csak a valódi pillanat élő ablakában indul el.
   const prev = useRef('')
+  const pendingBurstRef = useRef<string | null>(null)
+  const burstChangedAtRef = useRef(0)
+  const triggerBellBurst = useCallback((k: string) => {
+    const ph = phaseRef.current
+    if (!k || ph === 'closed' || ph === 'before') return
+    if (typeof document !== 'undefined' && document.hidden) {
+      pendingBurstRef.current = k
+      return
+    }
+    pendingBurstRef.current = null
+    const el = elapsedRef.current
+    const liveEl = typeof el === 'number' ? Math.max(el, (serverNowMs() - burstChangedAtRef.current) / 1000) : undefined
+    if (!claimLiveBellEvent(dayRef.current, `bell-burst:${k}`, liveEl, 2.5)) return
+    const r = document.querySelector('.ring')?.getBoundingClientRect()
+    eng.current?.bell(r ? r.left + r.width / 2 : window.innerWidth / 2, r ? r.top + r.height / 2 : window.innerHeight / 3, r ? r.width / 2 : 180)
+  }, [])
+
   useEffect(() => {
     if (!bellKey) return
     const was = prev.current
     prev.current = bellKey
-    if (!was || was === bellKey || phase === 'closed' || phase === 'before') return
-    if (!claimDailyAnimationOnce(dayRef.current, `bell-burst:${bellKey}`)) return
-    const r = document.querySelector('.ring')?.getBoundingClientRect()
-    eng.current?.bell(r ? r.left + r.width / 2 : window.innerWidth / 2, r ? r.top + r.height / 2 : window.innerHeight / 3, r ? r.width / 2 : 180)
-  }, [bellKey])
+    if (!was || was === bellKey) return
+    burstChangedAtRef.current = serverNowMs()
+    triggerBellBurst(bellKey)
+  }, [bellKey, triggerBellBurst])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden || !pendingBurstRef.current) return
+      const k = pendingBurstRef.current
+      pendingBurstRef.current = null
+      triggerBellBurst(k)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [triggerBellBurst])
 
   // Fényfolt: a panelek az egér alatt finoman felfénylenek (csak egérrel, cache-elt recttel, nulla layout thrashinggel).
   useEffect(() => {
@@ -108,43 +141,105 @@ export const FinalCount = memo(function FinalCount({ phase, remaining }: { phase
   return <div key={remaining} className={`final ${phase}`} aria-hidden="true"><i /><b>{remaining}</b></div>
 })
 
-/** Csengetéskor rövid felirat: "Becsengettek" / "Kicsengettek" / "Vége a tanításnak". Központilag csak egyszer játszódik le. */
-export const BellFlash = memo(function BellFlash({ bellKey, day, phase, label }: { bellKey: string; day?: string; phase: string; label?: string }) {
-  const [msg, setMsg] = useState<{ id: string; phase: string; title: string; sub: string } | null>(null)
+/** Csengetéskor rövid felirat: "Becsengettek" / "Kicsengettek" / "Vége a tanításnak". Központilag az élő időablakhoz szinkronizálva. */
+export const BellFlash = memo(function BellFlash({ bellKey, elapsed, day, phase, label }: { bellKey: string; elapsed?: number; day?: string; phase: string; label?: string }) {
+  const [msg, setMsg] = useState<{ id: string; phase: string; title: string; sub: string; delaySec: number; expiresAt: number } | null>(null)
   const prev = useRef('')
+  const pendingKeyRef = useRef<string | null>(null)
+  const flashChangedAtRef = useRef(0)
   const dayRef = useRef(day || 'today')
   dayRef.current = day || 'today'
+  const elapsedRef = useRef<number | undefined>(elapsed)
+  elapsedRef.current = elapsed
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  const labelRef = useRef(label)
+  labelRef.current = label
+  const bellKeyRef = useRef(bellKey)
+  bellKeyRef.current = bellKey
+
+  const triggerFlash = useCallback((k: string) => {
+    const ph = phaseRef.current
+    if (ph !== 'lesson' && ph !== 'break' && ph !== 'after') return
+    if (typeof document !== 'undefined' && document.hidden) {
+      pendingKeyRef.current = k
+      return
+    }
+    pendingKeyRef.current = null
+    const el = elapsedRef.current
+    const liveEl = typeof el === 'number' ? Math.max(el, (serverNowMs() - flashChangedAtRef.current) / 1000) : undefined
+    if (!claimLiveBellEvent(dayRef.current, `bell-banner:${k}`, liveEl, 2.3)) return
+    const elNum = typeof liveEl === 'number' ? Math.max(0, liveEl) : 0
+    const remainingMs = Math.max(250, Math.round((2.7 - elNum) * 1000))
+    const expiresAt = serverNowMs() + remainingMs
+    const delaySec = -elNum
+    if (ph === 'lesson') setMsg({ id: k, phase: ph, title: 'Becsengettek', sub: labelRef.current ?? '', delaySec, expiresAt })
+    else if (ph === 'break') setMsg({ id: k, phase: ph, title: 'Kicsengettek', sub: 'Szünet', delaySec, expiresAt })
+    else setMsg({ id: k, phase: ph, title: 'Vége a tanításnak', sub: 'Szép napot!', delaySec, expiresAt })
+  }, [])
+
   useEffect(() => {
     if (!bellKey) return
     const was = prev.current
     prev.current = bellKey
     if (!was || was === bellKey) return          // első betöltés: nincs villanás
-    if (!claimDailyAnimationOnce(dayRef.current, `bell-banner:${bellKey}`)) return
-    if (phase === 'lesson') setMsg({ id: bellKey, phase, title: 'Becsengettek', sub: label ?? '' })
-    else if (phase === 'break') setMsg({ id: bellKey, phase, title: 'Kicsengettek', sub: 'Szünet' })
-    else if (phase === 'after') setMsg({ id: bellKey, phase, title: 'Vége a tanításnak', sub: 'Szép napot!' })
-    else return
-    const t = setTimeout(() => setMsg(null), 2700)
-    return () => clearTimeout(t)
-  }, [bellKey])
-  return msg ? <div key={msg.id} className={`bellbanner ${msg.phase}`} role="status"><b>{msg.title}</b>{msg.sub && <span>{msg.sub}</span>}</div> : null
+    flashChangedAtRef.current = serverNowMs()
+    triggerFlash(bellKey)
+  }, [bellKey, triggerFlash])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden || !pendingKeyRef.current) return
+      const pending = pendingKeyRef.current
+      pendingKeyRef.current = null
+      if (pending === bellKeyRef.current) triggerFlash(pending)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [triggerFlash])
+
+  useEffect(() => {
+    if (!msg) return
+    const checkExpiry = () => {
+      if (serverNowMs() >= msg.expiresAt) setMsg(null)
+    }
+    const rem = Math.max(0, msg.expiresAt - serverNowMs())
+    const t = setTimeout(() => setMsg(null), rem)
+    const onVis = () => { if (!document.hidden) checkExpiry() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [msg?.id])
+
+  return msg ? (
+    <div key={msg.id} className={`bellbanner ${msg.phase}`} style={{ animationDelay: `${msg.delaySec}s` }} role="status">
+      <b>{msg.title}</b>{msg.sub && <span>{msg.sub}</span>}
+    </div>
+  ) : null
 })
 
-/** Nagy pillanatok és rejtett Easter Eggek (minden animáció központilag csak egyszer játszódik le):
- *  - Visszaszámláló 0 / hétvége előtti utolsó óra
+/** Nagy pillanatok és rejtett Easter Eggek:
+ *  - A mérföldkövek központi élő időablakhoz vannak kötve (háttérből nem játszódnak le utólag)
+ *  - Az Easter Eggek többször is aktiválhatók
  *  - Logó 5× kattintás (Parti mód) / ?party
  *  - Konami-kód (↑↑↓↓←→←→BA) → 8-bites árkád mód
  *  - Titkos begépelt szavak (matrix, cica/miau, szunet/pihi, sulibell)
  *  - Nagy óra 7× kattintás → Időutazó mód
  *  - Verziószám 5× kattintás → Kódmágus mód
  *  - Időjárás ikon 5× kattintás → Időjárás-varázslat */
-export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events, enabled, sound, allowEasterEggs = true }: { phase: string; day?: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean; allowEasterEggs?: boolean }) {
-  const [msg, setMsg] = useState<{ id: number; title: string; sub: string } | null>(null)
+export const Celebrate = memo(function Celebrate({ phase, elapsed, day, awayDays, events, enabled, sound, allowEasterEggs = true }: { phase: string; elapsed?: number; day?: string; awayDays: number; events: { id: string; title: string; left: number }[]; enabled: boolean; sound?: boolean; allowEasterEggs?: boolean }) {
+  const [msg, setMsg] = useState<{ id: number; title: string; sub: string; expiresAt: number } | null>(null)
   const eggTimerRef = useRef<number>(0)
+  const eggClassUntilRef = useRef<number>(0)
   const dayRef = useRef(day || 'today')
   dayRef.current = day || 'today'
+  const elapsedRef = useRef<number | undefined>(elapsed)
+  elapsedRef.current = elapsed
 
   const fire = (title: string, sub: string, kind: CelebrateKind = 'both', power = 1, originEl?: Element | null) => {
+    if (typeof document !== 'undefined' && document.hidden) return
     if (enabled && sound) fxSound('fanfare', 0)
     let ox: number | undefined
     let oy: number | undefined
@@ -154,25 +249,49 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
       oy = r.top + r.height * 0.5
     }
     if (enabled) window.dispatchEvent(new CustomEvent('sulibell:celebrate', { detail: { kind, power, ox, oy } }))
-    setMsg({ id: Date.now() + Math.random(), title, sub })
+    setMsg({ id: Date.now() + Math.random(), title, sub, expiresAt: serverNowMs() + 4400 })
   }
 
   const flashHtmlClass = (cls: string, ms = 7500) => {
     const h = document.documentElement
     h.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
     h.classList.add(cls)
+    eggClassUntilRef.current = serverNowMs() + ms
     if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
     eggTimerRef.current = window.setTimeout(() => {
+      eggClassUntilRef.current = 0
       h.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
     }, ms)
   }
 
-  useEffect(() => () => {
-    if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
-    document.documentElement.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+  useEffect(() => {
+    const onVis = () => {
+      if (!document.hidden && eggClassUntilRef.current && serverNowMs() >= eggClassUntilRef.current) {
+        eggClassUntilRef.current = 0
+        document.documentElement.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
+      document.documentElement.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
+    }
   }, [])
 
-  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4400); return () => clearTimeout(t) }, [msg?.id])
+  useEffect(() => {
+    if (!msg) return
+    const rem = Math.max(0, msg.expiresAt - serverNowMs())
+    const t = setTimeout(() => setMsg(null), rem)
+    const onVis = () => {
+      if (!document.hidden && serverNowMs() >= msg.expiresAt) setMsg(null)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [msg?.id])
 
   // 1) Visszaszámláló nullára ér
   const seen = useRef<Map<string, number>>(new Map())
@@ -181,8 +300,8 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
   useEffect(() => {
     for (const e of events) {
       const was = seen.current.get(e.id)
-      if (!first.current && was != null && was > 0 && e.left <= 0 && e.left > -120) {
-        if (claimDailyAnimationOnce(dayRef.current, `celebrate-ev:${e.id}`)) {
+      if (!first.current && was != null && was > 0 && e.left <= 0 && e.left >= -3) {
+        if (claimLiveBellEvent(dayRef.current, `celebrate-ev:${e.id}`, Math.max(0, -e.left), 3.5)) {
           fire(e.title, 'Megérkeztünk!', 'both', 1.4)
         }
       }
@@ -195,7 +314,7 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
   const prevPhase = useRef('')
   useEffect(() => {
     if (prevPhase.current === 'lesson' && phase === 'after' && awayDays >= 2) {
-      if (claimDailyAnimationOnce(dayRef.current, `celebrate-weekend:${dayRef.current}`)) {
+      if (claimLiveBellEvent(dayRef.current, `celebrate-weekend:${dayRef.current}`, elapsedRef.current, 4)) {
         fire('Jó hétvégét!', awayDays > 3 ? 'Pihenjetek jól!' : 'Szép pihenést!', 'both', 1.3)
       }
     }
@@ -206,6 +325,7 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
   useEffect(() => {
     if (!allowEasterEggs) {
       if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
+      eggClassUntilRef.current = 0
       document.documentElement.classList.remove('egg-arcade', 'egg-matrix', 'egg-gold', 'egg-warp')
       return
     }
@@ -226,17 +346,17 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
       const verEl = target.closest('.foot .ver')
       const wxEl = target.closest('.wx')
       if (brandEl && bump('brand', 5)) {
-        if (!claimEasterEggOnce('egg:brand')) return
+        if (!canTriggerEasterEgg('egg:brand')) return
         fire('Parti!', 'Szuper rejtett funkciót találtál', 'both', 1.6, brandEl)
       } else if (clockEl && bump('clock', 7)) {
-        if (!claimEasterEggOnce('egg:clock')) return
+        if (!canTriggerEasterEgg('egg:clock')) return
         flashHtmlClass('egg-warp', 6500)
         fire('⏳ Időutazó mód!', 'Sajnos az órát így sem tudod előretekerni a kicsengetésig 😅', 'warp', 1.5, clockEl)
       } else if (verEl && bump('ver', 5)) {
-        if (!claimEasterEggOnce('egg:ver')) return
+        if (!canTriggerEasterEgg('egg:ver')) return
         fire('🛠️ Kódmágus!', 'Ezt a titkot a diákok 99%-a sosem találja meg. Szép munka!', 'hacker', 1.4, verEl)
       } else if (wxEl && bump('wx', 5)) {
-        if (!claimEasterEggOnce('egg:wx')) return
+        if (!canTriggerEasterEgg('egg:wx')) return
         fire('🌦️ Időjárás-varázsló!', 'Hószünetet ugyan nem tudunk rendelni, de jár egy varázs-kavalkád ✨', 'weather', 1.3, wxEl)
       }
     }
@@ -245,7 +365,7 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
     let partyTimer: number | undefined
     if (/[?&]party\b/.test(location.search)) {
       partyTimer = window.setTimeout(() => {
-        if (claimEasterEggOnce('egg:party-url')) fire('Parti!', 'SuliBell', 'both', 1.2)
+        if (canTriggerEasterEgg('egg:party-url')) fire('Parti!', 'SuliBell', 'both', 1.2)
       }, 1200)
     }
     return () => {
@@ -274,7 +394,7 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
         kIdx++
         if (kIdx === KONAMI.length) {
           kIdx = 0
-          if (claimEasterEggOnce('egg:konami')) {
+          if (canTriggerEasterEgg('egg:konami')) {
             flashHtmlClass('egg-arcade', 8000)
             fire('👾 KONAMI-KÓD FELOLDVA!', 'Titkos 8-bites árkád mód aktiválva (+1000 tiszteletpont!)', 'arcade', 1.6)
           }
@@ -288,23 +408,23 @@ export const Celebrate = memo(function Celebrate({ phase, day, awayDays, events,
         buf = (buf + low).slice(-14)
         if (buf.endsWith('matrix')) {
           buf = ''
-          if (claimEasterEggOnce('egg:matrix')) {
+          if (canTriggerEasterEgg('egg:matrix')) {
             flashHtmlClass('egg-matrix', 8000)
             fire('🕶️ Mátrix-mód!', '„Nem a csengő késik, a Mátrix hajlik meg.”', 'matrix', 1.4)
           }
         } else if (buf.endsWith('cica') || buf.endsWith('miau')) {
           buf = ''
-          if (claimEasterEggOnce('egg:cats')) {
+          if (canTriggerEasterEgg('egg:cats')) {
             fire('🐱 Titkos Iskolamacska!', 'Miaú! A folyosói kabalamacska áldását adta a napodra.', 'cats', 1.25)
           }
         } else if (buf.endsWith('szunet') || buf.endsWith('pihi')) {
           buf = ''
-          if (claimEasterEggOnce('egg:chill')) {
+          if (canTriggerEasterEgg('egg:chill')) {
             fire('🛋️ Szünet-idézés!', 'Hivatalosan is szünetre szavaztál (sajnos a csengő dönt 😅).', 'chill', 1.25)
           }
         } else if (buf.endsWith('sulibell')) {
           buf = ''
-          if (claimEasterEggOnce('egg:gold')) {
+          if (canTriggerEasterEgg('egg:gold')) {
             flashHtmlClass('egg-gold', 8000)
             fire('🔔 Arany Harang!', 'Megtaláltad a névadó titkos varázsszót!', 'gold', 1.6)
           }

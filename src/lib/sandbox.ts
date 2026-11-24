@@ -27,6 +27,8 @@ export interface SandboxConfig {
   simWeatherCode: number | null
   /** Dec. 5. utáni karácsonyi extrák (kukucskáló Mikulás + repülő szán) erőltetett előnézete */
   forceXmasAfterDec5: boolean
+  /** Szilveszter / Újév tűzijáték és ünneplés élő előnézete */
+  forceNewYear: boolean
 }
 
 export const DEFAULT_SANDBOX: SandboxConfig = {
@@ -44,6 +46,7 @@ export const DEFAULT_SANDBOX: SandboxConfig = {
   forceBreakMedia: true,
   simWeatherCode: null,
   forceXmasAfterDec5: false,
+  forceNewYear: false,
 }
 
 const EVT = 'sulibell:sandbox-change'

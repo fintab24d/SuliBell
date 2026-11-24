@@ -1,116 +1,135 @@
-const STORAGE_DAY_PREFIX = 'sulibell-anim-day-'
-const STORAGE_EGGS_KEY = 'sulibell-anim-eggs-v1'
-const CHANNEL_NAME = 'sulibell-anim-guard'
+/**
+ * Központi, szerveridőhöz szinkronizált élő animáció-vezérlés:
+ * - A csengetési/esemény animációk csak a valódi pillanat élő időablakán belül indulnak el,
+ *   így háttérből előtérbe hozott vagy elaludt füleken soha nem játszódnak le utólag.
+ * - Az Easter Eggek nincsenek végleg letiltva localStorage-ban — bármikor újra aktiválhatók,
+ *   csak rövid spammelés elleni lehűlési idővel és láthatósági ellenőrzéssel.
+ */
 
-const memoryDaily = new Set<string>()
-const memoryEggs = new Set<string>()
+const LEGACY_DAY_PREFIX = 'sulibell-anim-day-'
+const LEGACY_EGGS_KEY = 'sulibell-anim-eggs-v1'
+const EGG_COOLDOWN_STORAGE_KEY = 'sulibell-egg-cd-v1'
 
-let bc: BroadcastChannel | null = null
-let initialized = false
+const GLOBAL_EGG_COOLDOWN_MS = 10_000
+const DEFAULT_PER_EGG_COOLDOWN_MS = 30_000
 
-function readSet(key: string): string[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || '[]')
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
+const liveDedupe = new Map<string, number>()
+const eggCooldown = new Map<string, number>()
+let lastAnyEggAt = 0
+let cleanedLegacy = false
+
+interface EggCooldownState {
+  globalAt: number
+  byId: Record<string, number>
 }
 
-function writeSet(key: string, values: Set<string>) {
+function readEggCooldownState(now: number): EggCooldownState {
+  const byId: Record<string, number> = {}
+  let globalAt = lastAnyEggAt
+  for (const [id, ts] of eggCooldown) {
+    if (now - ts < 120_000) byId[id] = ts
+  }
   try {
-    localStorage.setItem(key, JSON.stringify(Array.from(values)))
+    const raw = sessionStorage.getItem(EGG_COOLDOWN_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<EggCooldownState> | null
+      if (typeof parsed?.globalAt === 'number' && parsed.globalAt <= now) {
+        globalAt = Math.max(globalAt, parsed.globalAt)
+      }
+      if (parsed?.byId && typeof parsed.byId === 'object') {
+        for (const [id, ts] of Object.entries(parsed.byId)) {
+          if (typeof ts === 'number' && ts <= now && now - ts < 120_000) {
+            byId[id] = Math.max(byId[id] ?? 0, ts)
+          }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  return { globalAt, byId }
+}
+
+function writeEggCooldownState(state: EggCooldownState) {
+  lastAnyEggAt = state.globalAt
+  for (const [id, ts] of Object.entries(state.byId)) {
+    eggCooldown.set(id, ts)
+  }
+  try {
+    sessionStorage.setItem(EGG_COOLDOWN_STORAGE_KEY, JSON.stringify(state))
   } catch { /* ignore */ }
 }
 
-function pruneOldDailyKeys(currentDay: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(currentDay)) return
+function cleanupLegacyStorage() {
+  if (cleanedLegacy || typeof localStorage === 'undefined') return
+  cleanedLegacy = true
   try {
+    localStorage.removeItem(LEGACY_EGGS_KEY)
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i)
-      if (k && k.startsWith(STORAGE_DAY_PREFIX) && k !== STORAGE_DAY_PREFIX + currentDay) {
+      if (k && k.startsWith(LEGACY_DAY_PREFIX)) {
         localStorage.removeItem(k)
       }
     }
   } catch { /* ignore */ }
 }
 
-function ensureSync() {
-  if (initialized || typeof window === 'undefined') return
-  initialized = true
-
-  for (const id of readSet(STORAGE_EGGS_KEY)) memoryEggs.add(id)
-
-  try {
-    bc = new BroadcastChannel(CHANNEL_NAME)
-    bc.onmessage = (ev) => {
-      const d = ev.data
-      if (!d) return
-      if (d.kind === 'daily' && typeof d.token === 'string') memoryDaily.add(d.token)
-      else if (d.kind === 'egg' && typeof d.id === 'string') memoryEggs.add(d.id)
-    }
-  } catch { /* ignore */ }
-
-  window.addEventListener('storage', (e) => {
-    if (!e.key) return
-    if (e.key === STORAGE_EGGS_KEY) {
-      for (const id of readSet(STORAGE_EGGS_KEY)) memoryEggs.add(id)
-    } else if (e.key.startsWith(STORAGE_DAY_PREFIX)) {
-      const d = e.key.slice(STORAGE_DAY_PREFIX.length)
-      for (const evId of readSet(e.key)) memoryDaily.add(`${d}::${evId}`)
-    }
-  })
+/** Igaz, ha az aktuális esemény még a központi élő időablakban van (0 <= elapsed < maxWindowSec). */
+export function isLiveWindow(elapsedSec: number | undefined, maxWindowSec: number): boolean {
+  return typeof elapsedSec === 'number' && Number.isFinite(elapsedSec) && elapsedSec >= 0 && elapsedSec < maxWindowSec
 }
 
 /**
- * Központi napi egyszeri lejátszás-őr (pl. Becsengettek / Kicsengettek / Vége a tanításnak):
- * egy adott napon egy esemény animációja csak egyszer játszódhat le, akkor is ha újratöltik vagy több fülön nyitják meg.
+ * Élő csengetés / mérföldkő animáció engedélyezése:
+ * - Háttérben (document.hidden) sosem indul el.
+ * - Csak akkor futhat, ha a csengetés/mérföldkő óta eltelt valódi szerveridő még az élő ablakon belül van.
+ * - Rövid (15 mp) memóriabeli védelem gondoskodik róla, hogy ugyanabban a 2-3 mp-es ablakban
+ *   újrarendereléskor vagy fókuszváltáskor ne induljon duplán.
  */
-export function claimDailyAnimationOnce(day: string, eventId: string): boolean {
+export function claimLiveBellEvent(
+  day: string,
+  eventId: string,
+  elapsedSec: number | undefined,
+  maxWindowSec: number
+): boolean {
   if (!eventId) return false
-  ensureSync()
+  cleanupLegacyStorage()
+  if (typeof document !== 'undefined' && document.hidden) return false
+  if (!isLiveWindow(elapsedSec, maxWindowSec)) return false
+
+  const now = Date.now()
   const safeDay = /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : 'today'
-  if (safeDay !== 'today') pruneOldDailyKeys(safeDay)
-
   const token = `${safeDay}::${eventId}`
-  if (memoryDaily.has(token)) return false
+  const prev = liveDedupe.get(token)
+  if (prev != null && now - prev < 15_000) return false
 
-  const storageKey = STORAGE_DAY_PREFIX + safeDay
-  const persisted = new Set(readSet(storageKey))
-  for (const id of persisted) memoryDaily.add(`${safeDay}::${id}`)
-
-  if (memoryDaily.has(token) || persisted.has(eventId)) {
-    memoryDaily.add(token)
-    return false
+  if (liveDedupe.size > 32) {
+    for (const [k, ts] of liveDedupe) {
+      if (now - ts >= 60_000) liveDedupe.delete(k)
+    }
   }
-
-  memoryDaily.add(token)
-  persisted.add(eventId)
-  writeSet(storageKey, persisted)
-  try { bc?.postMessage({ kind: 'daily', token }) } catch { /* ignore */ }
+  liveDedupe.set(token, now)
   return true
 }
 
 /**
- * Központi egyszeri lejátszás-őr az Easter Egg animációkhoz:
- * minden Easter Egg animáció központilag csak egyszer játszódik le.
+ * Easter Egg aktiválhatóságának ellenőrzése:
+ * - Bármikor újra aktiválható (nincs örök tiltás).
+ * - Háttérben nem indul el, és spammelés ellen globálisan 10 mp,
+ *   ugyanarra az Easter Eggre pedig 30 mp cooldown védi (sessionStorage-ban is tükrözve F5 ellen).
  */
-export function claimEasterEggOnce(eggId: string): boolean {
+export function canTriggerEasterEgg(eggId: string, cooldownMs = DEFAULT_PER_EGG_COOLDOWN_MS): boolean {
   if (!eggId) return false
-  ensureSync()
-  if (memoryEggs.has(eggId)) return false
+  cleanupLegacyStorage()
+  if (typeof document !== 'undefined' && document.hidden) return false
 
-  const persisted = new Set(readSet(STORAGE_EGGS_KEY))
-  for (const id of persisted) memoryEggs.add(id)
+  const now = Date.now()
+  const state = readEggCooldownState(now)
+  if (state.globalAt > 0 && now - state.globalAt < GLOBAL_EGG_COOLDOWN_MS) return false
 
-  if (memoryEggs.has(eggId) || persisted.has(eggId)) {
-    memoryEggs.add(eggId)
-    return false
-  }
+  const prev = state.byId[eggId] ?? 0
+  if (prev > 0 && now - prev < cooldownMs) return false
 
-  memoryEggs.add(eggId)
-  persisted.add(eggId)
-  writeSet(STORAGE_EGGS_KEY, persisted)
-  try { bc?.postMessage({ kind: 'egg', id: eggId }) } catch { /* ignore */ }
+  state.globalAt = now
+  state.byId[eggId] = now
+  writeEggCooldownState(state)
   return true
 }
