@@ -710,13 +710,19 @@ html.cursor-on textarea,html.cursor-on [contenteditable="true"],html.cursor-on [
 .jb-chips{display:flex;flex-wrap:wrap;gap:6px}
 .jb-inputs{display:grid;gap:8px}
 .jb-inputs input{width:100%;min-width:0;padding:8px 11px;border-radius:10px;border:1px solid var(--edge);background:var(--key);color:var(--fg);font:inherit;font-size:.9rem}
+.jb-yt-preview{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:10px;background:color-mix(in srgb,var(--fg) 5%,transparent);border:1px solid color-mix(in srgb,var(--n-cyan,var(--break)) 35%,var(--line));min-width:0}
+.jb-yt-preview img{width:64px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0}
+.jb-yt-preview > div{min-width:0;display:grid;gap:2px}
+.jb-yt-preview small{color:var(--mut);font-size:.76rem;line-height:1.2}
+.jb-yt-preview b{font-size:.88rem;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.viz-radio-pill{background:color-mix(in srgb,var(--n-cyan,var(--break)) 16%,transparent)!important;color:var(--n-cyan,var(--break))!important;border-color:color-mix(in srgb,var(--n-cyan,var(--break)) 45%,transparent)!important}
 .jb-row2{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .jb-row2 input{flex:1;min-width:130px}
 .jb-empty{padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--fg) 4%,transparent);color:var(--mut);font-size:.92rem;text-align:center}
 .jb-list{list-style:none;margin:0;padding:0;display:grid;gap:7px}
 .jb-item{display:grid;gap:8px;padding:9px 12px;border-radius:12px;background:color-mix(in srgb,var(--fg) 5%,transparent);border:1px solid transparent;transition:border-color .2s,background-color .2s}
 .jb-item.lead{border-color:var(--n-pink,var(--lesson));background:color-mix(in srgb,var(--n-pink,var(--lesson)) 12%,transparent)}
-.jb-main{display:grid;grid-template-columns:1.8rem minmax(0,1fr) auto;align-items:center;gap:10px}
+.jb-main{display:grid;grid-template-columns:1.8rem minmax(0,1fr);align-items:center;gap:10px}
 .jb-rk{font-weight:700;color:var(--mut);display:inline-flex;align-items:center;justify-content:center}
 .jb-info{min-width:0;display:grid;gap:2px}
 .jb-info b{font-size:.96rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

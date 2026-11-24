@@ -14,6 +14,7 @@ import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
 import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
+import { CORE_RADIO_TRACKS, DEFAULT_RADIO_TRACKS, ROTATING_RADIO_TRACKS, XMAS_RADIO_TRACKS, getDailyRadioPlaylist } from './lib/radio'
 import { DISCORD_INVITE_URL, postToDiscord } from './lib/discord'
 
 interface Full {
@@ -1010,7 +1011,7 @@ function Panel() {
             🔒 <b>Előnézet védelem</b>: A főoldalon a diákok számára a belehallgatás le van tiltva. A beküldött számokba kizárólag az admin tud belehallgatni az alábbi listában az ellenőrzéshez.
           </p>
           <p>
-            A zenéket a diákok küldik be és szavazzák meg a főoldalon (minimum 5 szavazat kell a lejátszáshoz). Ha valaki iskolába nem illő számot küldött be, itt belehallgatással ellenőrizheted és egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
+            A zenéket a diákok YouTube-linkkel küldhetik be (a cím automatikusan töltődik be, a számok érkezési sorrendben szólnak; ha nincs beküldött kívánság, a beépített SuliRádió Auto-DJ szól). Ha valaki iskolába nem illő számot küldött be, itt belehallgatással ellenőrizheted és egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
           </p>
 
           {mergedWishes.length === 0 ? (
@@ -1026,7 +1027,6 @@ function Panel() {
                       <div>
                         <b>🎵 Zene: {w.title}</b>
                         {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
-                        {' '}• <span>🔥 {w.votes} szavazat</span>
                         {' '}• <small>{w.day}</small>
                         {mediaLink && (
                           <>
@@ -1086,6 +1086,63 @@ function Panel() {
               })}
             </>
           )}
+
+          {(() => {
+            const todayRadio = getDailyRadioPlaylist(todayStr)
+            const allBuiltIn = [...DEFAULT_RADIO_TRACKS, ...XMAS_RADIO_TRACKS]
+            return (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+                <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem' }}>
+                  📻 SuliRádió (Auto-DJ) — Mai műsorlista ({todayRadio.length} / {DEFAULT_RADIO_TRACKS.length} beépített szám)
+                </h3>
+                <p style={{ color: 'var(--mut)', fontSize: '0.88rem', margin: '0 0 8px' }}>
+                  Beépített, csak olvasható tartalék lista: ha épp nincs beküldött diák-kívánság, reggel 07:45-től, a szünetekben és tanítás után 15:00-ig innen szól a zene. A {CORE_RADIO_TRACKS.length} állandó alap-szám mellett naponta 4 szám frissül a {ROTATING_RADIO_TRACKS.length} rotálódó dal közül.
+                </p>
+
+                <details style={{ marginBottom: 8 }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                    🎵 Mai aktív SuliRádió műsor ({todayRadio.length} szám — {todayStr})
+                  </summary>
+                  <div style={{ maxHeight: 260, overflowY: 'auto', marginTop: 8, paddingRight: 4, display: 'grid', gap: 6 }}>
+                    {todayRadio.map((tr, i) => (
+                      <div key={tr.id} className="row" style={{ justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', borderBottom: '1px solid color-mix(in srgb, var(--line) 55%, transparent)', paddingBottom: 4 }}>
+                        <span>
+                          <b>{i + 1}.</b> {tr.title}{' '}
+                          <small style={{ color: tr.tier === 'core' ? 'var(--next)' : 'var(--mut)' }}>
+                            ({tr.tier === 'core' ? '⭐ Állandó' : '🔄 Mai rotáció'})
+                          </small>
+                        </span>
+                        <a href={`https://youtu.be/${tr.ytId}`} target="_blank" rel="noopener noreferrer">
+                          🔗 YouTube
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+
+                <details>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                    📚 Teljes beépített katalógus ({DEFAULT_RADIO_TRACKS.length} + {XMAS_RADIO_TRACKS.length} ünnepi dal)
+                  </summary>
+                  <div style={{ maxHeight: 260, overflowY: 'auto', marginTop: 8, paddingRight: 4, display: 'grid', gap: 6 }}>
+                    {allBuiltIn.map((tr, i) => (
+                      <div key={tr.id} className="row" style={{ justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', borderBottom: '1px solid color-mix(in srgb, var(--line) 55%, transparent)', paddingBottom: 4 }}>
+                        <span>
+                          <b>{i + 1}.</b> {tr.title}{' '}
+                          <small style={{ color: 'var(--mut)' }}>
+                            ({tr.tier === 'core' ? '⭐ Állandó' : tr.tier === 'xmas' ? '🎄 Ünnepi' : '🔄 Rotáló'})
+                          </small>
+                        </span>
+                        <a href={`https://youtu.be/${tr.ytId}`} target="_blank" rel="noopener noreferrer">
+                          🔗 YouTube
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            )
+          })()}
         </section>
       )
     })()}

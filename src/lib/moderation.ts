@@ -330,6 +330,74 @@ export async function verifyYouTubeSafe(ytId: string): Promise<{ ok: boolean; ti
   }
 }
 
+/**
+ * Automatikusan lekéri a YouTube-videó hivatalos címét (YouTube oEmbed, majd noembed tartalék),
+ * közben lefutatva az iskolabarát / káromkodásszűrő ellenőrzést is.
+ */
+export async function fetchYouTubeTitle(ytId: string): Promise<{ ok: boolean; title?: string; error?: string }> {
+  if (!/^[\w-]{11}$/.test(ytId)) {
+    return { ok: false, error: 'Érvénytelen YouTube-azonosító.' }
+  }
+
+  const safe = await verifyYouTubeSafe(ytId)
+  if (!safe.ok) {
+    return { ok: false, error: safe.error }
+  }
+  if (safe.title && safe.title.trim()) {
+    return { ok: true, title: safe.title.trim().slice(0, 80) }
+  }
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 2200)
+  try {
+    const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${ytId}`, {
+      signal: ctrl.signal,
+    })
+    if (!res.ok) {
+      return { ok: false, error: 'Nem sikerült lekérni a zene címét a YouTube-ról. Ellenőrizd a linket!' }
+    }
+    const data = await res.json()
+    if (data?.error) {
+      return { ok: false, error: 'A megadott YouTube-videó nem található vagy korlátozott.' }
+    }
+    const rawTitle = String(data?.title || '').trim()
+    const rawAuthor = String(data?.author_name || '').trim()
+    if (!rawTitle) {
+      return { ok: false, error: 'Nem található cím ehhez a YouTube-linkhez.' }
+    }
+
+    const titleCheck = checkProfanity(rawTitle)
+    if (!titleCheck.clean) {
+      const errRes = {
+        ok: false,
+        title: rawTitle,
+        error: `A zene címe („${rawTitle.slice(0, 40)}”) nem felel meg az iskolai szabályzatnak (${titleCheck.matchedWord}).`,
+      }
+      ytSafeCache.set(ytId, errRes)
+      return errRes
+    }
+
+    const authorCheck = checkProfanity(rawAuthor)
+    if (!authorCheck.clean) {
+      const errRes = {
+        ok: false,
+        title: rawTitle,
+        error: `Az előadó/csatorna („${rawAuthor.slice(0, 32)}”) nem megengedett tartalmú.`,
+      }
+      ytSafeCache.set(ytId, errRes)
+      return errRes
+    }
+
+    const cleanTitle = rawTitle.slice(0, 80)
+    ytSafeCache.set(ytId, { ok: true, title: cleanTitle })
+    return { ok: true, title: cleanTitle }
+  } catch {
+    return { ok: false, error: 'Nem sikerült lekérni a szám címét a YouTube-ról. Ellenőrizd a linket!' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export const PLAYER_NAME_KEY = 'csengeto-arena-name'
 
 /**
@@ -452,7 +520,7 @@ export async function validateMediaSubmission(params: {
   ytId?: string
   url?: string
 }): Promise<{ valid: boolean; error?: string; cleanTitle?: string; cleanBy?: string }> {
-  const cleanTitle = (params.title || '').trim().slice(0, 60)
+  const cleanTitle = (params.title || '').trim().slice(0, 80)
 
   // 1. Név ellenőrzése (kötelező név, névtelen tiltva)
   const nameVal = validatePlayerName(params.by)

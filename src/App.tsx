@@ -913,13 +913,15 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   )
 
   const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: 'music', title: 'Cartoon – On & On (Szüneti Zene Mix)', by: 'Admin Tesztlabor', ytId: 'K4DyBUG242c', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
-  const hasAnyWish = effectiveWishes.some(w => !!w.ytId)
   const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
   const curJukeboxBreakKey = `${z.date}-${s.phase}-${s.current?.id ?? s.next?.id ?? '0'}`
   const breakTotalSec = s.phase === 'break' ? s.total : undefined
   const isWeekendDay = z.weekday === 6 || z.weekday === 7
-  const vid = !isWeekendDay && s.phase === 'break' && data.settings.break_videos !== false && hasAnyWish && (
-    <BreakVideo wishes={effectiveWishes} breakKey={s.next?.id ?? key} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
+  const isMorningMusic = s.phase === 'before' && z.secs >= 7 * 3600 + 45 * 60
+  const isAfterSchoolMusic = s.phase === 'after' && z.secs < 15 * 3600
+  const musicBreakKey = isMorningMusic ? `${z.date}-before` : isAfterSchoolMusic ? `${z.date}-after` : (s.next?.id ?? key)
+  const vid = !isWeekendDay && (s.phase === 'break' || isMorningMusic || isAfterSchoolMusic) && data.settings.break_videos !== false && (
+    <BreakVideo wishes={effectiveWishes} breakKey={musicBreakKey} day={z.date} christmas={isXmasSkin} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
   )
   const e0 = events[0]
   const restEv = pv && first && until > 0
@@ -1618,8 +1620,9 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               schoolId={data.id}
               day={z.date}
               phase={s.phase}
+              secs={z.secs}
               breakKey={curJukeboxBreakKey}
-              videoBreakKey={s.next?.id ?? key}
+              videoBreakKey={musicBreakKey}
               breakMusicEnabled={data.settings.break_videos !== false}
               sound={!!data.settings.sound_enabled && audioOn}
               userMuted={muted}

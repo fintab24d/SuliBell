@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { MIN_VOTES_TO_PLAY, type SongWish } from './Jukebox'
+import type { SongWish } from './Jukebox'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
+import { pickRadioTrack } from './lib/radio'
 
 const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
   const d = ((i * 7 + 3) % 13) / 10
@@ -17,21 +18,23 @@ const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
 export function MusicVisualizer({
   title,
   by,
-  votes,
   ytId,
+  radioMode = false,
   initialMuted = false,
   compact = false,
   onClose,
   onFinished,
+  onNextRadio,
 }: {
   title: string
   by?: string
-  votes?: number
   ytId?: string
+  radioMode?: boolean
   initialMuted?: boolean
   compact?: boolean
   onClose?: () => void
   onFinished?: () => void
+  onNextRadio?: () => void
 }) {
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(initialMuted)
@@ -210,13 +213,21 @@ export function MusicVisualizer({
                 <span className="eq" aria-hidden="true"><i /><i /><i /></span>
                 {playing ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'MOST SZÓL A HÁTTÉRBEN') : 'SZÜNETELTETVE'}
               </span>
-              {typeof votes === 'number' && (
-                <span className="pill">🔥 {votes} szavazat</span>
+              {radioMode ? (
+                <span className="pill viz-radio-pill">📻 SULIRÁDIÓ • AUTO-DJ</span>
+              ) : (
+                <span className="pill">🎵 DIÁKKÍVÁNSÁG</span>
               )}
             </div>
             <h3 className="viz-title" title={title}>{title}</h3>
             <div className="viz-sub">
-              {by ? <span>Küldi: <b>{by}</b></span> : <span>Szüneti Zenegép</span>}
+              {radioMode ? (
+                <span>SuliRádió • Automatikus szüneti zene (ha beküldesz egy számot, az szól következőnek!)</span>
+              ) : by ? (
+                <span>Küldi: <b>{by}</b></span>
+              ) : (
+                <span>Szüneti Zenegép</span>
+              )}
             </div>
 
             <div className="viz-controls">
@@ -252,6 +263,16 @@ export function MusicVisualizer({
                   title="Ha a böngésző letiltotta az automatikus hangot, kattints ide a hangos újraindításhoz"
                 >
                   🔄 Hang frissítése
+                </button>
+              )}
+              {onNextRadio && (
+                <button
+                  type="button"
+                  className="viz-btn"
+                  onClick={onNextRadio}
+                  title="Ugrás a következő rádiószámra"
+                >
+                  ⏭ Következő
                 </button>
               )}
               {onClose && (
@@ -294,37 +315,43 @@ export function MusicVisualizer({
 
 /**
  * Szünetben szóló zenelejátszó:
- * A diákok által beküldött és legalább 5 szavazattal megszavazott zenék szólalnak meg a Neon Visualizerrel.
+ * A diákok által beküldött zenék érkezési sorrendben szólnak a Neon Visualizerrel;
+ * ha épp nincs beküldött szám, automatikusan elindul a beépített SuliRádió (Auto-DJ) rotáció.
  */
 export default function BreakVideo({
   wishes = [],
   breakKey,
+  day = '',
+  christmas = false,
+  tv = false,
   soundOn: _soundOn,
   userMuted = false,
   onFinished,
 }: {
   wishes?: SongWish[]
   breakKey: string
+  day?: string
+  christmas?: boolean
+  tv?: boolean
   soundOn?: boolean
   userMuted?: boolean
   onFinished?: (songId: string) => void
 }) {
-  // Lejátszható diák-kívánságok: csak akkor játszható le, ha legalább MIN_VOTES_TO_PLAY (5) szavazat érkezett rá!
-  const playableWishes = wishes.filter(w => !!w.ytId && w.votes >= MIN_VOTES_TO_PLAY)
+  const [radioStep, setRadioStep] = useState(0)
+  useEffect(() => {
+    setRadioStep(0)
+  }, [breakKey])
+
+  const playableWishes = wishes.filter(w => !!w.ytId)
 
   if (playableWishes.length > 0) {
-    const topVotes = playableWishes[0].votes
-    const leaders = playableWishes.filter(w => w.votes === topVotes)
-    let h = 0
-    for (const c of breakKey) h = (h * 31 + c.charCodeAt(0)) >>> 0
-    const chosen = leaders[h % leaders.length] ?? playableWishes[0]
+    const chosen = playableWishes[0]
 
     return (
       <section className="panel full vid music-panel">
         <MusicVisualizer
           title={chosen.title}
           by={chosen.by}
-          votes={chosen.votes}
           ytId={chosen.ytId}
           initialMuted={userMuted}
           onFinished={() => onFinished?.(chosen.id)}
@@ -333,30 +360,18 @@ export default function BreakVideo({
     )
   }
 
-  // Tartalék: diákok küldtek be kívánságot, de még egyik sem érte el az 5 szavazatot
-  if (wishes.length > 0) {
-    const topWish = [...wishes].sort((a, b) => b.votes - a.votes)[0]
-    return (
-      <section className="panel full vid music-panel">
-        <div className="tag">
-          🎵 Szüneti Zene — Várakozás szavazatokra
-        </div>
-        <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 8 }}>⏳</div>
-          <h3 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>
-            Még egyetlen zene sem érte el az 5 szavazatot!
-          </h3>
-          <p className="meta" style={{ margin: 0, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
-            A szüneti lejátszáshoz legalább <b>{MIN_VOTES_TO_PLAY} szavazat</b> szükséges.
-            {topWish ? (
-              <> Jelenleg a legnépszerűbb: <b>{topWish.title}</b> ({topWish.votes}/{MIN_VOTES_TO_PLAY} szavazat).</>
-            ) : null}
-            {' '}Szavazzatok a Zenegépben a kedvencetekre!
-          </p>
-        </div>
-      </section>
-    )
-  }
+  const track = pickRadioTrack(day || 'today', breakKey, radioStep, christmas)
 
-  return null
+  return (
+    <section className="panel full vid music-panel">
+      <MusicVisualizer
+        title={track.title}
+        ytId={track.ytId}
+        radioMode
+        initialMuted={userMuted}
+        onFinished={() => setRadioStep(n => n + 1)}
+        onNextRadio={tv ? undefined : () => setRadioStep(n => n + 1)}
+      />
+    </section>
+  )
 }

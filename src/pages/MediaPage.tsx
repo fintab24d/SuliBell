@@ -7,6 +7,7 @@ export interface MediaPageProps {
   schoolId?: string
   day: string
   phase: Phase
+  secs: number
   breakKey: string
   videoBreakKey: string
   breakMusicEnabled: boolean
@@ -20,6 +21,7 @@ const MediaPage = memo(function MediaPage({
   schoolId,
   day,
   phase,
+  secs,
   breakKey,
   videoBreakKey,
   breakMusicEnabled,
@@ -47,8 +49,7 @@ const MediaPage = memo(function MediaPage({
       : jbWishes
 
   const weekend = isJukeboxWeekend(day)
-  const hasAnyWish = effectiveWishes.some(w => !!w.ytId)
-  const showPlayer = !weekend && phase === 'break' && breakMusicEnabled && hasAnyWish
+  const showPlayer = !weekend && (phase === 'break' || (phase === 'before' && secs >= 7 * 3600 + 45 * 60) || (phase === 'after' && secs < 15 * 3600)) && breakMusicEnabled
 
   return (
     <div className="page-grid page-media">
@@ -57,6 +58,8 @@ const MediaPage = memo(function MediaPage({
           <BreakVideo
             wishes={effectiveWishes}
             breakKey={videoBreakKey}
+            day={day}
+            christmas={christmas}
             soundOn={sound}
             userMuted={userMuted}
             onFinished={finishSong}
@@ -64,14 +67,12 @@ const MediaPage = memo(function MediaPage({
         ) : (
           <section className="panel page-hint-card">
             <div className="tag" style={{ marginBottom: 6 }}>
-              {weekend ? '🛌 Hétvégi szünet' : '🎧 Szüneti Zenelejátszó'}
+              {weekend ? '🛌 Hétvégi szünet' : '🎧 Szüneti Zenelejátszó & SuliRádió'}
             </div>
             <p className="meta" style={{ margin: 0 }}>
               {weekend
                 ? 'Hétvégén a szüneti zenebeküldés és zenelejátszás szünetel. Hétfőn újra indul!'
-                : phase === 'break'
-                  ? 'Még nincs elegendő szavazattal rendelkező mai zenekérés — küldj be egyet jobbra (vagy lent), és már indul is!'
-                  : 'A szüneti zenelejátszó automatikusan elindul, amint kicsengetnek szünetre. Addig is küldd be a kedvenc számodat vagy szavazz a listán!'}
+                : 'A zenelejátszó reggel 07:45-től, a szünetekben és tanítás után 15:00-ig automatikusan működik! Ha beküldesz egy YouTube-linket, az szól elsőként érkezési sorrendben — ha pedig nincs beküldött szám, automatikusan a SuliRádió gondoskodik a zenéről.'}
             </p>
           </section>
         )}
