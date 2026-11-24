@@ -3,11 +3,15 @@ import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { voterId } from './Poll'
 import { PLAYER_NAME_KEY, checkProfanity, isAnonymousName, validatePlayerName } from './lib/moderation'
+import SnakeGame from './SnakeGame'
+import { getChampionBadge, useChampions } from './lib/useChampions'
+
+export type ArenaMode = 'reflex' | 'quiz' | 'snake'
 
 export interface LeaderEntry {
   playerId: string
   name: string
-  mode: 'reflex' | 'quiz'
+  mode: ArenaMode
   score: number
   at: number
 }
@@ -214,7 +218,7 @@ function mergeLeaderboard(existing: LeaderEntry[], incoming: LeaderEntry): Leade
   }
   return Array.from(map.values())
     .sort((a, b) => b.score - a.score || a.at - b.at)
-    .slice(0, 12)
+    .slice(0, 24)
 }
 
 export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
@@ -239,7 +243,7 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
         next = mergeLeaderboard(next, {
           playerId: r.player_id,
           name: r.player_name,
-          mode: r.mode === 'quiz' ? 'quiz' : 'reflex',
+          mode: r.mode === 'quiz' ? 'quiz' : r.mode === 'snake' ? 'snake' : 'reflex',
           score: r.score,
           at: Date.parse(r.created_at) || Date.now(),
         })
@@ -350,7 +354,7 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
     }
   }, [schoolId, day])
 
-  const submitScore = useCallback((name: string, mode: 'reflex' | 'quiz', score: number) => {
+  const submitScore = useCallback((name: string, mode: ArenaMode, score: number) => {
     if (score <= 0) return
     const validation = validatePlayerName(name, true)
     if (!validation.valid || !validation.cleanName) return
@@ -520,7 +524,9 @@ export default memo(function Arena({
   sound?: boolean
 }) {
   const { board, submitScore } = useArenaLeaderboard(schoolId, day)
-  const [tab, setTab] = useState<'reflex' | 'quiz'>('reflex')
+  const { champions, myTier, frameEnabled, toggleFrame, justWon, refresh: refreshChampions } = useChampions(schoolId, day)
+  const [tab, setTab] = useState<ArenaMode>('reflex')
+  const [raceTab, setRaceTab] = useState<'week' | 'month'>('week')
   const [name, setName] = useState(() => {
     try {
       const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
@@ -543,12 +549,15 @@ export default memo(function Arena({
   const maxPlaysPerBreak = isLongBreak ? Math.max(3, Math.floor(breakMins / 5)) : 1
   const reflexPlayCount = currentBreakId ? (breakPlays[`${currentBreakId}:reflex`] ?? 0) : 0
   const quizPlayCount = currentBreakId ? (breakPlays[`${currentBreakId}:quiz`] ?? 0) : 0
+  const snakePlayCount = currentBreakId ? (breakPlays[`${currentBreakId}:snake`] ?? 0) : 0
   const reflexLocked = !!currentBreakId && reflexPlayCount >= maxPlaysPerBreak
   const quizLocked = !!currentBreakId && quizPlayCount >= maxPlaysPerBreak
+  const snakeLocked = !!currentBreakId && snakePlayCount >= maxPlaysPerBreak
   const reflexLeft = currentBreakId ? Math.max(0, maxPlaysPerBreak - reflexPlayCount) : null
   const quizLeft = currentBreakId ? Math.max(0, maxPlaysPerBreak - quizPlayCount) : null
+  const snakeLeft = currentBreakId ? Math.max(0, maxPlaysPerBreak - snakePlayCount) : null
 
-  const markBreakPlayed = useCallback((mode: 'reflex' | 'quiz') => {
+  const markBreakPlayed = useCallback((mode: ArenaMode) => {
     if (!currentBreakId) return
     const k = `${currentBreakId}:${mode}`
     setBreakPlays(prev => {
@@ -630,8 +639,9 @@ export default memo(function Arena({
     if (rState === 'over' && !rSubmitted.current) {
       rSubmitted.current = true
       submitScore(name, 'reflex', rScore)
+      window.setTimeout(() => void refreshChampions(), 400)
     }
-  }, [rState, rScore, name, submitScore])
+  }, [rState, rScore, name, submitScore, refreshChampions])
 
   const startReflex = () => {
     if (reflexLocked) {
@@ -700,8 +710,9 @@ export default memo(function Arena({
     if (qState === 'over' && !qSubmitted.current) {
       qSubmitted.current = true
       submitScore(name, 'quiz', qScore)
+      window.setTimeout(() => void refreshChampions(), 400)
     }
-  }, [qState, qScore, name, submitScore])
+  }, [qState, qScore, name, submitScore, refreshChampions])
 
   const startQuiz = () => {
     if (quizLocked) {
@@ -756,26 +767,52 @@ export default memo(function Arena({
     setQIdx(i => i + 1)
   }
 
+  const modeChip = (m: ArenaMode) => (m === 'quiz' ? '🧠 Kvíz' : m === 'snake' ? '🐍 Snake' : '⚡ Reflex')
+  const renderChampBadge = (pid: string) => {
+    const tier = getChampionBadge(champions, pid)
+    if (!tier) return null
+    return (
+      <span className={`champ-badge ${tier}`} title={tier === 'monthly' ? 'Havi Nagy Győztes' : 'Heti Nagy Győztes'}>
+        {tier === 'monthly' ? '💎 Havi Bajnok' : '🏆 Heti Bajnok'}
+      </span>
+    )
+  }
+
   const modeBoard = board.filter(b => b.mode === tab).slice(0, 5)
   const curQ = makeDailyQuestion(day, qBaseIdx + qIdx)
 
-  // TV nézet: kompakt Napi Toplista kártya
+  // TV nézet: kompakt Napi Toplista kártya + Nagy Győztes sáv
   if (tv) {
-    if (board.length === 0) return null
+    if (board.length === 0 && !champions.weeklyChampion && !champions.monthlyChampion) return null
     const top4 = board.slice(0, 4)
     return (
       <section className="panel arena-tv">
         <div className="tag" style={{ marginBottom: 6 }}>🏆 Szüneti Aréna — Napi Toplista</div>
-        <ol className="arena-lb">
-          {top4.map((b, i) => (
-            <li key={`${b.playerId}-${b.mode}-${i}`} className={i === 0 ? 'gold' : ''}>
-              <span className="rk">{i === 0 ? '👑' : `${i + 1}.`}</span>
-              <b>{b.name}</b>
-              <span className="chip">{b.mode === 'reflex' ? '⚡ Reflex' : '🧠 Kvíz'}</span>
-              <strong className="pts">{b.score} p</strong>
-            </li>
-          ))}
-        </ol>
+        {top4.length > 0 && (
+          <ol className="arena-lb">
+            {top4.map((b, i) => (
+              <li key={`${b.playerId}-${b.mode}-${i}`} className={i === 0 ? 'gold' : ''}>
+                <span className="rk">{i === 0 ? '👑' : `${i + 1}.`}</span>
+                <b>
+                  {b.name}
+                  {renderChampBadge(b.playerId)}
+                </b>
+                <span className="chip">{modeChip(b.mode)}</span>
+                <strong className="pts">{b.score} p</strong>
+              </li>
+            ))}
+          </ol>
+        )}
+        {(champions.weeklyChampion || champions.monthlyChampion) && (
+          <div className="tv-champ-bar">
+            {champions.weeklyChampion && (
+              <span>🏆 Heti Bajnok: <b>{champions.weeklyChampion.name}</b> ({champions.weeklyChampion.wins} győzelem)</span>
+            )}
+            {champions.monthlyChampion && (
+              <span>💎 Havi Bajnok: <b>{champions.monthlyChampion.name}</b> ({champions.monthlyChampion.wins} győzelem)</span>
+            )}
+          </div>
+        )}
       </section>
     )
   }
@@ -786,7 +823,7 @@ export default memo(function Arena({
   return (
     <section className="panel arena">
       <div className="arena-head">
-        <div className="tag" style={{ margin: 0 }}>🎮 Szüneti Mini-Aréna & Napi Toplista</div>
+        <div className="tag" style={{ margin: 0 }}>🎮 Szüneti Mini-Aréna &amp; Napi Toplista</div>
         {inLesson && (
           <button type="button" onClick={() => setOpenDuringLesson(v => !v)}>
             {collapsed ? 'Megnyitás óra alatt is' : 'Elrejtés'}
@@ -821,6 +858,13 @@ export default memo(function Arena({
                   onClick={() => setTab('quiz')}
                 >
                   🧠 Napi Villámkvíz (30 mp)
+                </button>
+                <button
+                  type="button"
+                  className={tab === 'snake' ? 'on' : ''}
+                  onClick={() => setTab('snake')}
+                >
+                  🐍 Neon Snake
                 </button>
               </div>
               <div className="arena-name-wrap">
@@ -906,7 +950,7 @@ export default memo(function Arena({
                   )}
                 </div>
               </div>
-            ) : (
+            ) : tab === 'quiz' ? (
               <div className={`quiz-box ${qFlash ? `flash-${qFlash}` : ''}`}>
                 <div className="arena-hud">
                   <span>Pont: <b>{qScore}</b></span>
@@ -972,12 +1016,45 @@ export default memo(function Arena({
                   )}
                 </div>
               </div>
+            ) : (
+              <div className="arena-snake-wrap">
+                <SnakeGame
+                  tv={false}
+                  championTier={myTier}
+                  locked={snakeLocked}
+                  lockMessage={
+                    maxPlaysPerBreak > 1
+                      ? `Ebben a ${breakMins} perces szünetben már elérted a ${maxPlaysPerBreak} Snake kört!`
+                      : 'Ebben a szünetben már játszottál Snake-et! A következő szünetben újra játszhatsz.'
+                  }
+                  playsHint={
+                    snakeLocked
+                      ? maxPlaysPerBreak > 1
+                        ? `⏸️ Ebben a ${breakMins} perces szünetben már lejátszottad mind a(z) ${maxPlaysPerBreak} Snake kört!`
+                        : '⏸️ Ebben a szünetben már játszottál! Szünetenként 1 Snake kör engedélyezett.'
+                      : isLongBreak && snakeLeft !== null
+                        ? `⏱️ Hosszú szünet (${breakMins} perc): még ${snakeLeft} / ${maxPlaysPerBreak} Snake kör indítható!`
+                        : !isBreak && phase !== 'lesson'
+                          ? '🎉 Tanítási szüneten kívül: korlátlan a játék!'
+                          : null
+                  }
+                  externalName={name}
+                  onExternalNameChange={saveName}
+                  hideNameInput
+                  sound={sound}
+                  onStartPlay={() => markBreakPlayed('snake')}
+                  onGameOver={(pts) => {
+                    submitScore(name, 'snake', pts)
+                    window.setTimeout(() => void refreshChampions(), 400)
+                  }}
+                />
+              </div>
             )}
           </div>
 
           <div className="arena-side">
             <div className="tag" style={{ marginBottom: 10 }}>
-              🏆 Mai Toplista ({tab === 'reflex' ? '⚡ Reflex' : '🧠 Kvíz'})
+              🏆 Mai Toplista ({modeChip(tab)})
             </div>
             {modeBoard.length === 0 ? (
               <p className="meta">Még senki nem szerzett pontot ma ebben a módban. Legyél te az első!</p>
@@ -986,12 +1063,99 @@ export default memo(function Arena({
                 {modeBoard.map((b, i) => (
                   <li key={`${b.playerId}-${i}`} className={i === 0 ? 'gold' : ''}>
                     <span className="rk">{i === 0 ? '👑' : `${i + 1}.`}</span>
-                    <b>{b.name}</b>
+                    <b>
+                      {b.name}
+                      {renderChampBadge(b.playerId)}
+                    </b>
                     <strong className="pts">{b.score} p</strong>
                   </li>
                 ))}
               </ol>
             )}
+
+            <div className="champ-box">
+              <div className="champ-head">
+                <div className="tag" style={{ margin: 0 }}>👑 Heti &amp; Havi Nagy Győztesek</div>
+                <small className="champ-sub">Minden napi #1 helyezés (Reflex, Kvíz, Snake) 1 győzelmet ér!</small>
+              </div>
+
+              {myTier && (
+                <div className={`champ-reward ${myTier}`}>
+                  <div className="champ-reward-txt">
+                    <b>
+                      {justWon ? '🎉 Gratulálunk, új bajnoki cím! ' : '✨ Aktív bajnok: '}
+                      {myTier === 'monthly' ? '💎 Havi Nagy Győztes vagy!' : '🏆 Heti Nagy Győztes vagy!'}
+                    </b>
+                    <small>Feloldva: 👑 Arany Bajnok Snake skin + exkluzív {myTier === 'monthly' ? 'gyémánt' : 'arany'} oldalkeret</small>
+                  </div>
+                  <button type="button" className={frameEnabled ? 'on' : ''} onClick={toggleFrame}>
+                    {frameEnabled ? '✨ Keret: BE' : '✨ Keret: KI'}
+                  </button>
+                </div>
+              )}
+
+              <div className="champ-cards">
+                <div className="champ-card weekly">
+                  <span className="champ-label">🏆 Heti Nagy Győztes</span>
+                  {champions.weeklyChampion ? (
+                    <>
+                      <b>{champions.weeklyChampion.name}</b>
+                      <small>{champions.weeklyChampion.wins} napi győzelem • {champions.weeklyChampion.totalScore} p</small>
+                    </>
+                  ) : (
+                    <small style={{ opacity: 0.75 }}>Még nincs előző heti győztes</small>
+                  )}
+                </div>
+                <div className="champ-card monthly">
+                  <span className="champ-label">💎 Havi Nagy Győztes ({champions.prevMonthLabel})</span>
+                  {champions.monthlyChampion ? (
+                    <>
+                      <b>{champions.monthlyChampion.name}</b>
+                      <small>{champions.monthlyChampion.wins} napi győzelem • {champions.monthlyChampion.totalScore} p</small>
+                    </>
+                  ) : (
+                    <small style={{ opacity: 0.75 }}>Még nincs lezárt havi győztes</small>
+                  )}
+                </div>
+              </div>
+
+              <div className="champ-race">
+                <div className="champ-race-tabs">
+                  <button
+                    type="button"
+                    className={raceTab === 'week' ? 'on' : ''}
+                    onClick={() => setRaceTab('week')}
+                  >
+                    📅 Ezen a héten ({champions.daysLeftInWeek === 0 ? 'utolsó nap!' : `még ${champions.daysLeftInWeek} nap`})
+                  </button>
+                  <button
+                    type="button"
+                    className={raceTab === 'month' ? 'on' : ''}
+                    onClick={() => setRaceTab('month')}
+                  >
+                    🗓️ {champions.curMonthLabel} ({champions.daysLeftInMonth === 0 ? 'utolsó nap!' : `még ${champions.daysLeftInMonth} nap`})
+                  </button>
+                </div>
+                {(() => {
+                  const raceList = raceTab === 'week' ? champions.currentWeekTop : champions.currentMonthTop
+                  return raceList.length === 0 ? (
+                    <p className="meta" style={{ margin: '6px 0 0', fontSize: '0.82rem' }}>
+                      Még nincs napi győztes ebben az időszakban — szerezz ma első helyet!
+                    </p>
+                  ) : (
+                    <ol className="arena-lb champ-race-list">
+                      {raceList.map(c => (
+                        <li key={c.playerId} className={c.rank === 1 ? 'gold' : ''}>
+                          <span className="rk">{c.rank === 1 ? '👑' : `${c.rank}.`}</span>
+                          <b>{c.name}</b>
+                          <span className="pts">{c.wins} győzelem</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )
+                })()}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -35,7 +35,7 @@ const GamesPage = memo(function GamesPage({
       {showRest ? (
         <>
           <div className="dash-col">
-            <RestMode tv={false} reason={reason} day={day} ev={restEv} />
+            <RestMode tv={false} schoolId={schoolId} reason={reason} day={day} ev={restEv} sound={sound} />
             {poll && <PollCard poll={poll} counts={pollCounts} tv={false} />}
           </div>
           <div className="dash-col">
@@ -64,9 +64,9 @@ const GamesPage = memo(function GamesPage({
           <div className="dash-col">
             {poll && <PollCard poll={poll} counts={pollCounts} tv={false} />}
             <section className="panel page-hint-card">
-              <div className="tag" style={{ marginBottom: 6 }}>🐍 Pihenő mód (Snake &amp; Ünnepi játékok)</div>
+              <div className="tag" style={{ marginBottom: 6 }}>🐍 Játékok, Toplista &amp; Bajnokság</div>
               <p className="meta" style={{ margin: 0 }}>
-                Hétvégén, ünnepnapokon és iskolai szünetekben itt a Mini-Aréna mellett automatikusan megjelenik a Snake és a szezonális ünnepi minijáték is!
+                A Neon Snake már minden nap elérhető a Mini-Arénában külön napi toplistával! Hétvégén, ünnepnapokon és szünetekben az ünnepi minijáték is itt jelenik meg, a heti és havi legtöbb napi győzelmet szerző bajnokok pedig exkluzív jutalmakat kapnak.
               </p>
             </section>
           </div>

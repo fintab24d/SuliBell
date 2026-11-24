@@ -1463,41 +1463,45 @@ function Panel() {
           )}
         </div>
         <p>
-          A diákok által elért Reflex- és Kvíz-eredmények napi ranglistája. Ha valaki iskolába nem illő névvel, csalással vagy trágár kifejezéssel került fel, itt egy kattintással kitörölheted a nevét és pontszámát a ranglistáról (azonnal eltűnik a folyosói TV-ről és minden diák kijelzőjéről).
+          A diákok által elért Reflex-, Kvíz- és Snake-eredmények napi ranglistája. Ha valaki iskolába nem illő névvel, csalással vagy trágár kifejezéssel került fel, itt egy kattintással kitörölheted a nevét és pontszámát a ranglistáról (azonnal eltűnik a folyosói TV-ről és minden diák kijelzőjéről).
         </p>
 
         {arenaBoard.length === 0 ? (
           <p><i>Jelenleg nincs bejegyzés a mai toplistán.</i></p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {arenaBoard.map((entry, idx) => (
-              <div
-                className="row"
-                key={`${entry.playerId}-${entry.mode}-${idx}`}
-                style={{
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  borderBottom: '1px solid var(--line)',
-                  paddingBottom: 6,
-                }}
-              >
-                <div>
-                  <b>#{idx + 1} {entry.mode === 'quiz' ? '🧠 Kvíz' : '⚡ Reflex'}: {entry.name}</b>
-                  {' '}• <span className="pts" style={{ fontWeight: 600 }}>{entry.score} pont</span>
-                  {' '}• <small>{new Date(entry.at).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</small>
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!confirm(`Biztosan törlöd "${entry.name}" (${entry.score} pont, ${entry.mode === 'quiz' ? 'Kvíz' : 'Reflex'}) eredményét a toplistáról?`)) return
-                    await removeLeaderEntry(entry.playerId, entry.mode, entry.name)
-                    setMsg(`Törölve a toplistáról: ${entry.name}`)
+            {arenaBoard.map((entry, idx) => {
+              const modeLabel = entry.mode === 'quiz' ? '🧠 Kvíz' : entry.mode === 'snake' ? '🐍 Snake' : '⚡ Reflex'
+              const modeShort = entry.mode === 'quiz' ? 'Kvíz' : entry.mode === 'snake' ? 'Snake' : 'Reflex'
+              return (
+                <div
+                  className="row"
+                  key={`${entry.playerId}-${entry.mode}-${idx}`}
+                  style={{
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: '1px solid var(--line)',
+                    paddingBottom: 6,
                   }}
                 >
-                  🗑️ Név törlése a toplistáról
-                </button>
-              </div>
-            ))}
+                  <div>
+                    <b>#{idx + 1} {modeLabel}: {entry.name}</b>
+                    {' '}• <span className="pts" style={{ fontWeight: 600 }}>{entry.score} pont</span>
+                    {' '}• <small>{new Date(entry.at).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}</small>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`Biztosan törlöd "${entry.name}" (${entry.score} pont, ${modeShort}) eredményét a toplistáról?`)) return
+                      await removeLeaderEntry(entry.playerId, entry.mode, entry.name)
+                      setMsg(`Törölve a toplistáról: ${entry.name}`)
+                    }}
+                  >
+                    🗑️ Név törlése a toplistáról
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </section>

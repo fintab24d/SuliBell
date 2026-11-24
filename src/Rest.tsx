@@ -1,216 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as PE } from 'react'
-import { botDir, drawSnakeBoard, newGame, step, type G, type P, type SnakeSkin } from './lib/snake'
 import { botTarget, H, newCatch, stepCatch, W, type C } from './lib/catch'
 import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
-import { getAdventUnlocked, loadAdventState, saveAdventState } from './lib/advent'
-
-const COLS = 22, ROWS = 14
-const KEYS: Record<string, P> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, w: { x: 0, y: -1 }, s: { x: 0, y: 1 }, a: { x: -1, y: 0 }, d: { x: 1, y: 0 } }
-const bestGet = () => { try { return +(localStorage.getItem('snake-best') ?? 0) } catch { return 0 } }
-
-export type SnakeDiff = 'easy' | 'normal' | 'hard' | 'extreme'
-const SNAKE_DIFFS: { id: SnakeDiff; label: string; ms: number }[] = [
-  { id: 'easy', label: 'Könnyű', ms: 135 },
-  { id: 'normal', label: 'Normál', ms: 95 },
-  { id: 'hard', label: 'Nehéz', ms: 68 },
-  { id: 'extreme', label: 'Extrém', ms: 48 },
-]
-const diffGet = (): SnakeDiff => {
-  try {
-    const v = localStorage.getItem('snake-diff')
-    if (v === 'easy' || v === 'normal' || v === 'hard' || v === 'extreme') return v
-  } catch { /* ignore */ }
-  return 'normal'
-}
-
-/** Neon Snake. A TV-n (és amíg senki nem játszik) a gép játszik; koppintásra / Enter-re átveheted az irányítást.
- *  Irányítás: nyilak, WASD vagy ujjal húzás a játéktéren. */
-function Snake({ tv }: { tv: boolean }) {
-  const cv = useRef<HTMLCanvasElement>(null)
-  const g = useRef<G>(newGame(COLS, ROWS))
-  const q = useRef<P[]>([])
-  const [mode, setMode] = useState<'demo' | 'play' | 'over'>('demo')
-  const m = useRef(mode); m.current = mode
-  const [score, setScore] = useState(0)
-  const [best, setBest] = useState(bestGet)
-  const [diff, setDiff] = useState<SnakeDiff>(diffGet)
-  const [xmasUnlocked, setXmasUnlocked] = useState(() => getAdventUnlocked(loadAdventState().openedDays).hasSnakeSkin)
-  const [skin, setSkin] = useState<SnakeSkin>(() => {
-    const st = loadAdventState()
-    return getAdventUnlocked(st.openedDays).hasSnakeSkin && st.snakeSkinEnabled ? 'christmas' : 'neon'
-  })
-  const skinRef = useRef<SnakeSkin>(skin)
-  skinRef.current = skin
-
-  useEffect(() => {
-    const syncSkin = () => {
-      const st = loadAdventState()
-      const has = getAdventUnlocked(st.openedDays).hasSnakeSkin
-      setXmasUnlocked(has)
-      setSkin(has && st.snakeSkinEnabled ? 'christmas' : 'neon')
-    }
-    window.addEventListener('sulibell:advent-change', syncSkin)
-    window.addEventListener('storage', syncSkin)
-    return () => {
-      window.removeEventListener('sulibell:advent-change', syncSkin)
-      window.removeEventListener('storage', syncSkin)
-    }
-  }, [])
-
-  const toggleXmasSkin = (next: SnakeSkin) => {
-    if (next === 'christmas' && !xmasUnlocked) return
-    setSkin(next)
-    const st = loadAdventState()
-    saveAdventState({ ...st, snakeSkinEnabled: next === 'christmas' })
-  }
-  const wait = useRef(0)
-  const [playerName, setPlayerName] = useState(() => {
-    try {
-      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
-      return isAnonymousName(v) ? '' : v
-    } catch { return '' }
-  })
-  const [nameErr, setNameErr] = useState('')
-
-  const savePlayerName = (v: string) => {
-    setPlayerName(v)
-    if (nameErr) {
-      const val = validatePlayerName(v, true)
-      if (val.valid) setNameErr('')
-    }
-    try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
-  }
-
-  const changeDiff = (d: SnakeDiff) => {
-    setDiff(d)
-    try { localStorage.setItem('snake-diff', d) } catch { /* ignore */ }
-  }
-
-  const start = () => {
-    const val = validatePlayerName(playerName, true)
-    if (!val.valid) {
-      setNameErr(val.error || 'A játékhoz add meg a neved!')
-      return
-    }
-    setNameErr('')
-    g.current = newGame(COLS, ROWS); q.current = []; setScore(0); setMode('play')
-  }
-
-  useEffect(() => {
-    const draw = () => {
-      const c = cv.current; if (!c) return
-      const W = c.clientWidth || 440, dpr = Math.min(window.devicePixelRatio || 1, 2)
-      if (c.width !== Math.round(W * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round((W * ROWS / COLS) * dpr) }
-      const x = c.getContext('2d')!
-      drawSnakeBoard(x, c.width, c.height, g.current, skinRef.current, performance.now())
-    }
-    const tick = () => {
-      if (document.hidden) return
-      const G = g.current
-      if (m.current === 'over') { draw(); return }
-      if (m.current === 'demo') {
-        if (G.dead) { if (++wait.current > 10) { wait.current = 0; g.current = newGame(COLS, ROWS) } }
-        else step(G, botDir(G))
-        setScore(G.score)
-      } else {
-        step(G, q.current.shift())
-        setScore(G.score)
-        if (G.dead) { setMode('over'); setBest(b => { const v = Math.max(b, G.score); try { localStorage.setItem('snake-best', String(v)) } catch { /* nem baj */ } return v }) }
-      }
-      draw()
-    }
-    draw()
-    const speedMs = tv ? 85 : (SNAKE_DIFFS.find(d => d.id === diff)?.ms ?? 95)
-    const t = setInterval(tick, speedMs)
-    window.addEventListener('resize', draw)
-    return () => { clearInterval(t); window.removeEventListener('resize', draw) }
-  }, [tv, diff])
-
-  // Billentyűk: csak játék közben nyeljük el a nyilakat (hogy az oldal ne görögjön)
-  useEffect(() => {
-    if (tv) return
-    const on = (e: KeyboardEvent) => {
-      const d = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key]
-      if (m.current === 'play' && d) { e.preventDefault(); if (q.current.length < 2) q.current.push(d) }
-    }
-    window.addEventListener('keydown', on)
-    return () => window.removeEventListener('keydown', on)
-  }, [tv])
-
-  // Érintés: koppintás = indítás, húzás = irány
-  const p0 = useRef<P | null>(null)
-  const down = (e: PE<HTMLCanvasElement>) => { p0.current = { x: e.clientX, y: e.clientY } }
-  const up = (e: PE<HTMLCanvasElement>) => {
-    const a = p0.current; p0.current = null
-    if (!a || tv) return
-    const dx = e.clientX - a.x, dy = e.clientY - a.y
-    if (Math.hypot(dx, dy) < 24) { if (m.current !== 'play') start(); return }
-    if (m.current === 'play' && q.current.length < 2) q.current.push(Math.abs(dx) > Math.abs(dy) ? { x: Math.sign(dx), y: 0 } : { x: 0, y: Math.sign(dy) })
-  }
-
-  return <div className="snake">
-    <div className="snakehud">
-      <span>Snake</span>
-      {playerName && <span>Játékos: <b>{playerName}</b></span>}
-      <span>{mode === 'demo' ? (tv ? 'Gépi játékos' : 'Bemutató') : 'Pont'}: <b>{score}</b></span>
-      <span>Rekord: <b>{best}</b></span>
-    </div>
-    {!tv && (
-      <div className="snakediff" role="group" aria-label="Nehézségi szint">
-        <span>Nehézség:</span>
-        {SNAKE_DIFFS.map(d => (
-          <button
-            key={d.id}
-            type="button"
-            className={diff === d.id ? 'on' : ''}
-            onClick={() => changeDiff(d.id)}
-          >
-            {d.label}
-          </button>
-        ))}
-        {xmasUnlocked && (
-          <button
-            type="button"
-            className={skin === 'christmas' ? 'on' : ''}
-            onClick={() => toggleXmasSkin(skin === 'christmas' ? 'neon' : 'christmas')}
-            title="Adventi Karácsonyi Snake kinézet váltása"
-          >
-            {skin === 'christmas' ? '🎄 Karácsonyi: BE' : '🎄 Karácsonyi skin'}
-          </button>
-        )}
-      </div>
-    )}
-    <div className="snakescreen">
-      <canvas ref={cv} onPointerDown={down} onPointerUp={up} aria-label="Snake játék" />
-      {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
-      {!tv && mode !== 'play' && <div className="snakeover">
-        {mode === 'over' && <b>Vége! {score} pont</b>}
-        <div style={{ margin: '8px 0' }}>
-          <input
-            type="text"
-            placeholder="Osztály + név (pl. 10.A Dani) *"
-            value={playerName}
-            onChange={e => savePlayerName(e.target.value)}
-            maxLength={20}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: nameErr ? '1px solid #ff3b5c' : '1px solid rgba(255,255,255,0.25)',
-              background: 'rgba(0,0,0,0.5)',
-              color: '#fff',
-              textAlign: 'center',
-              fontSize: '0.9rem',
-              width: '80%',
-              maxWidth: 240,
-            }}
-          />
-          {nameErr && <small style={{ color: '#ff3b5c', display: 'block', marginTop: 4 }}>⚠️ {nameErr}</small>}
-        </div>
-        <button className="cta" onClick={start}>{mode === 'over' ? 'Újra' : '▶ Játssz te is'}</button>
-        <small>Nyilak / WASD, vagy húzd az ujjad</small></div>}
-    </div>
-  </div>
-}
+import SnakeGame from './SnakeGame'
+import { useArenaLeaderboard } from './Arena'
+import { getChampionBadge, useChampions } from './lib/useChampions'
 
 
 export type Game = 'snake' | 'halloween' | 'christmas' | 'easter' | 'none'
@@ -367,23 +160,79 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
 
 const QUIPS = ['Pihenj egy nagyot!', 'Ma nincs csengő, csak nyugi.', 'Tölts fel, jön az új hét!', 'Az ágy ma erősebb, mint a csengő.', 'Játsz egyet, a házi úgyis ráér.', 'Szünet van, a csengő is alszik.']
 
-/** Pihenő mód: ha nincs tanítás (hétvége, ünnep, szünet), vicces üzenet, a következő szünetig hátralévő idő és egy Snake-játék. */
-export default function RestMode({ tv, reason, day, ev }: { tv: boolean; reason?: string; day: string; ev?: { icon: string; days: number; hours: number; mins: number; note: string } }) {
+/** Pihenő mód: ha nincs tanítás (hétvége, ünnep, szünet), vicces üzenet, a következő szünetig hátralévő idő és egy Snake-játék toplistával. */
+export default function RestMode({
+  tv,
+  reason,
+  day,
+  ev,
+  schoolId,
+  sound,
+}: {
+  tv: boolean
+  reason?: string
+  day: string
+  ev?: { icon: string; days: number; hours: number; mins: number; note: string }
+  schoolId?: string
+  sound?: boolean
+}) {
   const game = gameFor(reason)
   const h = [...day].reduce((a, c) => a + c.charCodeAt(0), 0)
-  return <section className="panel full rest">
-    <div className="tag">Pihenő mód{reason ? `: ${reason}` : ''}</div>
-    <div className={`restgrid ${game === 'none' ? 'solo' : ''}`}>
-      <div className="restinfo">
-        <h2>{QUIPS[h % QUIPS.length]}</h2>
-        {ev && <div className="restcount">
-          <span className="ico" aria-hidden="true">{ev.icon}</span>
-          <b>{ev.days}</b><span>nap<small>{ev.hours} óra {ev.mins} perc</small></span>
-          <em>{ev.note}</em>
-        </div>}
+  const { board, submitScore } = useArenaLeaderboard(schoolId, day)
+  const { champions, myTier, refresh: refreshChampions } = useChampions(schoolId, day)
+  const snakeBoard = board.filter(b => b.mode === 'snake').slice(0, 5)
+
+  return (
+    <section className="panel full rest">
+      <div className="tag">Pihenő mód{reason ? `: ${reason}` : ''}</div>
+      <div className={`restgrid ${game === 'none' ? 'solo' : ''}`}>
+        <div className="restinfo">
+          <h2>{QUIPS[h % QUIPS.length]}</h2>
+          {ev && (
+            <div className="restcount">
+              <span className="ico" aria-hidden="true">{ev.icon}</span>
+              <b>{ev.days}</b><span>nap<small>{ev.hours} óra {ev.mins} perc</small></span>
+              <em>{ev.note}</em>
+            </div>
+          )}
+          {game === 'snake' && snakeBoard.length > 0 && (
+            <div className="snake-lb">
+              <div className="snake-lb-title">🏆 Mai Snake Toplista</div>
+              <ol className="arena-lb">
+                {snakeBoard.map((b, i) => {
+                  const tier = getChampionBadge(champions, b.playerId)
+                  return (
+                    <li key={`${b.playerId}-${i}`} className={i === 0 ? 'gold' : ''}>
+                      <span className="rk">{i === 0 ? '👑' : `${i + 1}.`}</span>
+                      <b>
+                        {b.name}
+                        {tier && (
+                          <span className={`champ-badge ${tier}`}>
+                            {tier === 'monthly' ? '💎 Havi' : '🏆 Heti'}
+                          </span>
+                        )}
+                      </b>
+                      <strong className="pts">{b.score} p</strong>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          )}
+        </div>
+        {game === 'snake' && (
+          <SnakeGame
+            tv={tv}
+            championTier={myTier}
+            sound={sound}
+            onGameOver={(score, _apples, _diff, playerName) => {
+              submitScore(playerName, 'snake', score)
+              window.setTimeout(() => void refreshChampions(), 350)
+            }}
+          />
+        )}
+        {(game === 'halloween' || game === 'christmas' || game === 'easter') && <Catch tv={tv} theme={game} />}
       </div>
-      {game === 'snake' && <Snake tv={tv} />}
-      {(game === 'halloween' || game === 'christmas' || game === 'easter') && <Catch tv={tv} theme={game} />}
-    </div>
-  </section>
+    </section>
+  )
 }

@@ -68,9 +68,9 @@ export function botDir(g: G): P {
   return ranked[0].m.d
 }
 
-export type SnakeSkin = 'neon' | 'christmas'
+export type SnakeSkin = 'neon' | 'christmas' | 'champion'
 
-/** Kirajzolja a Snake játéktáblát a választott kinézettel ('neon' vagy 'christmas' ünnepi skin). */
+/** Kirajzolja a Snake játéktáblát a választott kinézettel ('neon', 'christmas' vagy exkluzív 'champion' arany skin). */
 export function drawSnakeBoard(
   x: CanvasRenderingContext2D,
   width: number,
@@ -82,6 +82,123 @@ export function drawSnakeBoard(
   const k = width / G.cols
   const t = timeMs / 260
   x.setTransform(1, 0, 0, 1, 0, 0)
+
+  if (skin === 'champion') {
+    // Obszidián-arany bajnoki pálya csillogó arany csillagfénnyel
+    const bg = x.createLinearGradient(0, 0, 0, height)
+    bg.addColorStop(0, '#100a02')
+    bg.addColorStop(1, '#1d1305')
+    x.fillStyle = bg
+    x.fillRect(0, 0, width, height)
+
+    for (let i = 0; i < G.cols; i++) {
+      for (let j = 0; j < G.rows; j++) {
+        const spark = (i * 11 + j * 17) % 7 === 0 ? 0.28 + 0.14 * Math.sin(t + i + j) : 0.12
+        x.fillStyle = `rgba(255, 215, 90, ${spark})`
+        x.beginPath()
+        x.arc((i + 0.5) * k, (j + 0.5) * k, k * 0.055, 0, Math.PI * 2)
+        x.fill()
+      }
+    }
+
+    // Gyémánt-arany kincsétel
+    const f = G.food
+    if (f.x >= 0) {
+      const pulse = 1 + 0.09 * Math.sin(t * 1.2)
+      const cx = (f.x + 0.5) * k
+      const cy = (f.y + 0.5) * k
+      const r = k * 0.38 * pulse
+
+      x.shadowColor = '#ffd700'
+      x.shadowBlur = k * 0.95
+      x.fillStyle = '#ffd700'
+      x.beginPath()
+      x.moveTo(cx, cy - r)
+      x.lineTo(cx + r * 0.85, cy)
+      x.lineTo(cx, cy + r)
+      x.lineTo(cx - r * 0.85, cy)
+      x.closePath()
+      x.fill()
+
+      x.shadowBlur = 0
+      x.fillStyle = '#fffbeb'
+      x.beginPath()
+      x.moveTo(cx, cy - r * 0.55)
+      x.lineTo(cx + r * 0.42, cy)
+      x.lineTo(cx, cy + r * 0.55)
+      x.lineTo(cx - r * 0.42, cy)
+      x.closePath()
+      x.fill()
+    }
+
+    // Aranyozott kígyótest + korona a fején
+    const n = G.snake.length
+    G.snake.forEach((s, i) => {
+      const p = n > 1 ? i / (n - 1) : 0
+      const gleam = Math.sin(t * 1.5 - i * 0.6) > 0.72
+      const fill = G.dead
+        ? '#ff3b5c'
+        : i === 0
+          ? '#fffbeb'
+          : gleam
+            ? '#fef08a'
+            : `hsl(${43 - p * 8} 96% ${62 - p * 16}%)`
+      x.shadowColor = G.dead ? '#ff3b5c' : '#ffd700'
+      x.shadowBlur = k * (i === 0 ? 0.75 : 0.48)
+      x.fillStyle = fill
+      const r = k * (i === 0 ? 0.46 : 0.39)
+      const cx = (s.x + 0.5) * k
+      const cy = (s.y + 0.5) * k
+      const bx = cx - r
+      const by = cy - r
+      x.beginPath()
+      if (x.roundRect) x.roundRect(bx, by, r * 2, r * 2, r * 0.52)
+      else x.rect(bx, by, r * 2, r * 2)
+      x.fill()
+
+      if (i === 0) {
+        x.shadowBlur = 0
+        // Szemek
+        x.fillStyle = '#1c1100'
+        const ex = G.dir.x * r * 0.25
+        const ey = G.dir.y * r * 0.25
+        const px = -G.dir.y * r * 0.34
+        const py = G.dir.x * r * 0.34
+        const er = Math.max(1.3, k * 0.085)
+        x.beginPath()
+        x.arc(cx + ex + px, cy + ey + py, er, 0, Math.PI * 2)
+        x.arc(cx + ex - px, cy + ey - py, er, 0, Math.PI * 2)
+        x.fill()
+
+        // Királyi arany korona a kígyó fején
+        const cw = r * 1.45
+        const ch = r * 0.92
+        const cyBase = cy - r * 0.62
+        x.fillStyle = '#fbbf24'
+        x.strokeStyle = '#92400e'
+        x.lineWidth = Math.max(1, k * 0.04)
+        x.beginPath()
+        x.moveTo(cx - cw * 0.5, cyBase)
+        x.lineTo(cx - cw * 0.54, cyBase - ch * 0.78)
+        x.lineTo(cx - cw * 0.2, cyBase - ch * 0.35)
+        x.lineTo(cx, cyBase - ch)
+        x.lineTo(cx + cw * 0.2, cyBase - ch * 0.35)
+        x.lineTo(cx + cw * 0.54, cyBase - ch * 0.78)
+        x.lineTo(cx + cw * 0.5, cyBase)
+        x.closePath()
+        x.fill()
+        x.stroke()
+
+        // Drágakövek a korona csúcsain
+        x.fillStyle = '#38bdf8'
+        x.beginPath()
+        x.arc(cx, cyBase - ch * 0.95, Math.max(1.2, k * 0.065), 0, Math.PI * 2)
+        x.fill()
+      }
+    })
+    x.shadowBlur = 0
+    return
+  }
 
   if (skin === 'christmas') {
     // Mély fenyőzöld havas játéktér

@@ -4804,3 +4804,196 @@ iframe {
     animation: none;
   }
 }
+
+/* ======================== BAJNOKOK & SNAKE TOPLISTA ======================== */
+.champ-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.champ-badge.weekly {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.22);
+}
+.champ-badge.monthly {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(251, 191, 36, 0.24));
+  color: #e0f2fe;
+  border: 1px solid rgba(125, 211, 252, 0.6);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3);
+}
+.champ-badge.hdr {
+  margin-left: 0;
+  padding: 6px 11px;
+  font-size: 0.78rem;
+}
+
+.snakediff button.champ-skin-btn {
+  border-color: rgba(251, 191, 36, 0.5);
+  color: #fde047;
+}
+.snakediff button.champ-skin-btn.on {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.24), rgba(245, 158, 11, 0.18));
+  border-color: #fbbf24;
+  color: #fffbeb;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.4);
+}
+
+.arena-snake-wrap .snake {
+  margin-top: 4px;
+}
+
+.snake-lb {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.snake-lb-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mut);
+  margin-bottom: 6px;
+}
+
+.tv-champ-bar {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.12), rgba(56, 189, 248, 0.1));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: clamp(0.75rem, 1.45vh, 1.05rem);
+  color: #fef08a;
+}
+
+.champ-box {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+.champ-head {
+  display: grid;
+  gap: 2px;
+}
+.champ-sub {
+  font-size: 0.78rem;
+  color: var(--mut);
+}
+
+.champ-reward {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(251, 191, 36, 0.6);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(245, 158, 11, 0.08));
+}
+.champ-reward.monthly {
+  border-color: rgba(125, 211, 252, 0.75);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(251, 191, 36, 0.16));
+}
+.champ-reward-txt {
+  display: grid;
+  gap: 2px;
+  font-size: 0.84rem;
+}
+.champ-reward-txt small {
+  color: var(--mut);
+  font-size: 0.77rem;
+}
+.champ-reward button {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.champ-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+.champ-card {
+  display: grid;
+  gap: 3px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.champ-card.weekly {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.12), transparent);
+}
+.champ-card.monthly {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: linear-gradient(145deg, rgba(56, 189, 248, 0.13), rgba(251, 191, 36, 0.06));
+}
+.champ-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--mut);
+}
+.champ-card b {
+  font-size: 0.96rem;
+}
+.champ-card small {
+  font-size: 0.76rem;
+  color: var(--mut);
+}
+
+.champ-race {
+  display: grid;
+  gap: 6px;
+}
+.champ-race-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.champ-race-tabs button {
+  flex: 1 1 130px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  border-radius: 9px;
+}
+.champ-race-tabs button.on {
+  border-color: rgba(251, 191, 36, 0.65);
+  color: #fde047;
+}
+.champ-race-list li {
+  font-size: 0.85rem;
+  padding: 5px 9px;
+}
+
+/* Exkluzív Arany / Gyémánt bajnoki oldalkeret */
+:root[data-champion="weekly"]:not([data-potato="1"]) .panel.now {
+  border-color: rgba(251, 191, 36, 0.62);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.28), 0 0 36px -6px rgba(251, 191, 36, 0.36);
+}
+:root[data-champion="monthly"]:not([data-potato="1"]) .panel.now {
+  border-color: rgba(125, 211, 252, 0.72);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35), 0 0 42px -4px rgba(56, 189, 248, 0.42);
+}
+:root[data-champion="weekly"]:not([data-potato="1"]) .hdr,
+:root[data-champion="monthly"]:not([data-potato="1"]) .hdr {
+  border-bottom: 1px solid rgba(251, 191, 36, 0.25);
+}

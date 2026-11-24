@@ -53,6 +53,7 @@ import { isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements } from './
 import { isRadioAnnouncement, parseCustomRadioFromAnnouncements, type RadioTrack } from './lib/radio'
 import { buildMusicWindows, type MusicWindow } from './lib/musicSync'
 import { useMusicSync } from './lib/useMusicSync'
+import { useChampions } from './lib/useChampions'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
@@ -579,6 +580,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     customRadio,
     enabled: musicEnabled,
   })
+  const { myTier: champTier } = useChampions(data?.id, z?.date ?? '', true)
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
   const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
@@ -979,7 +981,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         days: Math.floor(until / 86400), hours: Math.floor((until % 86400) / 3600), mins: Math.floor((until % 3600) / 60),
         note: `Ennyi van még hátra a pihenésből! Tanítás újra: ${dayName(pv.date, { weekday: 'long' })}, ${fmtHM(first.start_time)}` }
     : e0 ? { icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined
-  const restBox = (tv || layoutMode === 'classic') && s.phase === 'closed' && data.settings.rest_mode !== false && <Suspense fallback={null}><RestMode tv={tv} reason={s.reason} day={z.date} ev={restEv} /></Suspense>
+  const restBox = (tv || layoutMode === 'classic') && s.phase === 'closed' && data.settings.rest_mode !== false && <Suspense fallback={null}><RestMode tv={tv} schoolId={data.id} reason={s.reason} day={z.date} ev={restEv} sound={!!data.settings.sound_enabled && audioOn} /></Suspense>
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
   const brandLogoContent = (
     <>
@@ -1257,6 +1259,14 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               {layoutMode === 'tabbed' ? '🧩 Sima nézet' : '📑 Menüs nézet'}
             </button>
             <button onClick={() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('theme', t); setTheme(t) }}>Téma</button>
+            {champTier && (
+              <span
+                className={`champ-badge hdr ${champTier}`}
+                title={champTier === 'monthly' ? 'Aktív Havi Nagy Győztes jutalomkeret' : 'Aktív Heti Nagy Győztes jutalomkeret'}
+              >
+                {champTier === 'monthly' ? '💎 Havi Bajnok' : '🏆 Heti Bajnok'}
+              </span>
+            )}
             <button
               type="button"
               className={`vip-hdr-btn${vip.status.active ? ' on' : ''}`}

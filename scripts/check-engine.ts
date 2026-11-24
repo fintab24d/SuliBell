@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { computeState, instantOf, isLessonCancelled, nextSchoolDay, pickSchedule, schoolDaysBetween, zoned, type Lesson, type Schedule } from '../src/lib/engine.ts'
 import { buildMusicWindows, computeMusicTimeline, type SyncTrack, type SyncWish } from '../src/lib/musicSync.ts'
+import { computeChampions, getChampionBounds, type ChampionScoreRow } from '../src/lib/champions.ts'
 
 const A = [['08:00','08:45'],['08:55','09:40'],['09:50','10:35'],['10:45','11:30'],['11:40','12:25'],['12:35','13:20'],['13:30','14:15'],['14:25','15:10']]
 const lessons: Lesson[] = A.map(([s, e], i) => ({ id: `l${i + 1}`, label: `${i + 1}. óra`, start_time: s, end_time: e, position: i + 1 }))
@@ -138,6 +139,60 @@ ok('musicSync: törölt kívánság helyén filler szól, későbbi slotok nem t
   assert.equal(tl3Removed.current?.kind, 'radio')
   assert.equal(tl3Removed.current?.track.id, tl3Active.current?.track.id)
   assert.equal(tl3Removed.current?.start, tl3Active.current?.start)
+})
+
+ok('champions: ISO hét és hónap határok + hátralévő napok', () => {
+  // 2026-11-24 kedd (hétfő: 2026-11-23, előző hét: 2026-11-16..2026-11-22, előző hónap: október)
+  const b = getChampionBounds('2026-11-24')
+  assert.equal(b.curWeekStart, '2026-11-23')
+  assert.equal(b.prevWeekStart, '2026-11-16')
+  assert.equal(b.prevWeekEnd, '2026-11-22')
+  assert.equal(b.daysLeftInWeek, 5)
+  assert.equal(b.prevMonthStart, '2026-10-01')
+  assert.equal(b.prevMonthEnd, '2026-10-31')
+  assert.equal(b.daysLeftInMonth, 6)
+  // Január -> előző év december
+  const bJan = getChampionBounds('2026-01-05')
+  assert.equal(bJan.prevMonthStart, '2025-12-01')
+  assert.equal(bJan.prevMonthEnd, '2025-12-31')
+})
+
+ok('champions: heti és havi győztesek szétválasztása', () => {
+  const rows: ChampionScoreRow[] = [
+    // Október (havi): P1 nyer 2x, P2 1x
+    { day: '2026-10-05', mode: 'snake', playerId: 'p1', name: '10.A Anna', score: 300, at: 10 },
+    { day: '2026-10-06', mode: 'snake', playerId: 'p1', name: '10.A Anna', score: 400, at: 20 },
+    { day: '2026-10-07', mode: 'reflex', playerId: 'p2', name: '11.D Bence', score: 500, at: 30 },
+    // Előző hét (11.16–11.22): P2 nyer 2x, P1 1x
+    { day: '2026-11-17', mode: 'snake', playerId: 'p2', name: '11.D Bence', score: 450, at: 40 },
+    { day: '2026-11-18', mode: 'quiz', playerId: 'p2', name: '11.D Bence', score: 250, at: 50 },
+    { day: '2026-11-19', mode: 'reflex', playerId: 'p1', name: '10.A Anna', score: 600, at: 60 },
+    // Aktuális hét (11.23–): P3 vezet
+    { day: '2026-11-23', mode: 'snake', playerId: 'p3', name: '9.A Csaba', score: 700, at: 70 },
+  ]
+  const st = computeChampions(rows, '2026-11-24')
+  assert.equal(st.monthlyChampion?.playerId, 'p1')
+  assert.equal(st.monthlyChampion?.wins, 2)
+  assert.equal(st.weeklyChampion?.playerId, 'p2')
+  assert.equal(st.weeklyChampion?.wins, 2)
+  assert.equal(st.currentWeekTop[0]?.playerId, 'p3')
+})
+
+ok('champions: napi több játékmód győzelem összegzése + holtverseny összpont alapján', () => {
+  const rows: ChampionScoreRow[] = [
+    // Előző hét: P1 ugyanazon a napon nyer snake + quiz-ben (2 győzelem, össz 500 p)
+    { day: '2026-11-16', mode: 'snake', playerId: 'p1', name: 'A1', score: 200, at: 10 },
+    { day: '2026-11-16', mode: 'quiz', playerId: 'p1', name: 'A1', score: 300, at: 20 },
+    // P2 nyer 2 különböző napon reflexben (2 győzelem, össz 800 p -> P2 nyer holtversenynél!)
+    { day: '2026-11-17', mode: 'reflex', playerId: 'p2', name: 'B2', score: 400, at: 30 },
+    { day: '2026-11-18', mode: 'reflex', playerId: 'p2', name: 'B2', score: 400, at: 40 },
+    // Második helyezett adott napon nem kap győzelmet
+    { day: '2026-11-16', mode: 'snake', playerId: 'p3', name: 'C3', score: 150, at: 5 },
+  ]
+  const st = computeChampions(rows, '2026-11-24')
+  assert.equal(st.weeklyChampion?.playerId, 'p2')
+  assert.equal(st.weeklyChampion?.wins, 2)
+  assert.equal(st.weeklyChampion?.totalScore, 800)
 })
 
 console.log(`TZ=${process.env.TZ ?? '(rendszer)'}: ${n} teszt OK`)
