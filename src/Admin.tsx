@@ -9,13 +9,14 @@ import { DEFAULT_MAINT, isMaintAnnouncement, useMaintenance } from './lib/mainte
 import { isPartnersAnnouncement, parsePartnersFromAnnouncements, savePartnersToDb, type PartnerSite } from './lib/partners'
 import { isKofiAnnouncement, parseKofiFromAnnouncements, saveKofiToDb, formatDonationAmount, grantDiscordVipRole } from './lib/kofi'
 import { loadVisitStats, useOnlinePresence, type VisitStatRow } from './lib/visits'
-import { checkProfanity, isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements, saveBannedWordsToDb } from './lib/moderation'
+import { checkProfanity, fetchYouTubeTitle, isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements, saveBannedWordsToDb } from './lib/moderation'
 import { useAdminBroadcaster } from './lib/useSchool'
 import Members from './Members'
 import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
-import { CORE_RADIO_TRACKS, DEFAULT_RADIO_TRACKS, ROTATING_RADIO_TRACKS, XMAS_RADIO_TRACKS, getDailyRadioPlaylist } from './lib/radio'
+import { CORE_RADIO_TRACKS, DEFAULT_RADIO_TRACKS, ROTATING_RADIO_TRACKS, XMAS_RADIO_TRACKS, getDailyRadioPlaylist, isRadioAnnouncement, isTrackInRadio, parseCustomRadioFromAnnouncements, saveCustomRadioTracksToDb, type RadioTrack } from './lib/radio'
 import { DISCORD_INVITE_URL, postToDiscord } from './lib/discord'
+import { parseYouTubeId } from './lib/video'
 
 interface Full {
   id: string; name: string
@@ -95,6 +96,9 @@ function Panel() {
   const [subs, setSubs] = useState<number | null>(null)
   const [perms, setPerms] = useState<string[] | null | undefined>(undefined)   // null = teljes jogú; undefined = még töltődik
   const [dbWishes, setDbWishes] = useState<SongWish[]>([])
+  const [archivedWishes, setArchivedWishes] = useState<SongWish[]>([])
+  const [radioForm, setRadioForm] = useState({ url: '', title: '' })
+  const [radioBusy, setRadioBusy] = useState(false)
   const { songs: jbSongs, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
   const { board: arenaBoard, removeLeaderEntry, clearLeaderboard } = useArenaLeaderboard(d?.id, todayStr)
   const [previewWishId, setPreviewWishId] = useState<string | null>(null)
@@ -142,11 +146,38 @@ function Panel() {
       if (error || !Array.isArray(data)) return
       const delIds = new Set<string>()
       const active: any[] = []
+      const archived: SongWish[] = []
+      const seenArchivedYt = new Set<string>()
       for (const r of data) {
-        if (r.deleted) delIds.add(String(r.song_id))
-        else if (r.kind !== 'video') active.push(r)
+        if (r.deleted) {
+          delIds.add(String(r.song_id))
+          const yid = r.yt_id ? String(r.yt_id).trim() : ''
+          const ttl = String(r.title ?? '').trim()
+          if (
+            r.kind !== 'video' &&
+            /^[\w-]{11}$/.test(yid) &&
+            ttl &&
+            ttl !== '(törölve)' &&
+            ttl !== '(lejátszva)' &&
+            !seenArchivedYt.has(yid) &&
+            archived.length < 40
+          ) {
+            seenArchivedYt.add(yid)
+            archived.push({
+              id: String(r.song_id),
+              day: String(r.day),
+              kind: 'music' as const,
+              title: ttl,
+              by: String(r.requester ?? ''),
+              ytId: yid,
+              votes: Number(r.votes) || 1,
+              at: Date.parse(r.created_at) || Date.now(),
+            })
+          }
+        } else if (r.kind !== 'video') active.push(r)
       }
       setDeletedWishIds(delIds)
+      setArchivedWishes(archived)
       setDbWishes(active.map((r: any) => ({
         id: String(r.song_id),
         day: String(r.day),
@@ -182,6 +213,7 @@ function Panel() {
     <button onClick={() => supabase.auth.signOut()}>Kilépés</button></main>
 
   const can = (area: string) => perms === undefined || perms === null || (area !== 'full' && perms.includes(area))
+  const isMusicDeleteOnly = Array.isArray(perms) && perms.length > 0 && perms.every(p => p === 'music_mod')
   const run = async (p: Res) => { const { error } = await p; setMsg(error ? 'Hiba: ' + error.message : 'Mentve'); await load() }
   const setS = (patch: object) => run(supabase.from('settings').update(patch).eq('school_id', d.id))
   const cur = d.schedules.find(s => s.id === (sel || d.schedules[0]?.id))
@@ -327,7 +359,7 @@ function Panel() {
     <header>
       <h1>Admin – {d.name}</h1>
       <div className="row" style={{ margin: 0 }}>
-        <a className="btn" href="/teszt" target="_blank" rel="noreferrer" title="Privát tesztoldal megnyitása, amit mások nem látnak">🧪 Teszt oldal (/teszt)</a>
+        {!isMusicDeleteOnly && <a className="btn" href="/teszt" target="_blank" rel="noreferrer" title="Privát tesztoldal megnyitása, amit mások nem látnak">🧪 Teszt oldal (/teszt)</a>}
         <button onClick={() => supabase.auth.signOut()}>Kilépés</button>
       </div>
     </header>
@@ -335,7 +367,7 @@ function Panel() {
     {perms && <p>Korlátozott jogosultságod van: csak a megengedett részeket látod és szerkesztheted.</p>}
     {can('ai') && <AdminAi schoolId={d.id} onDone={load} />}
 
-    {(() => {
+    {!isMusicDeleteOnly && (() => {
       const byDay = new Map<string, { webViews: number; webUniq: number; tvViews: number }>()
       let totalViews = 0
       let weekViews = 0
@@ -796,9 +828,9 @@ function Panel() {
     {can('announcements') && <section>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h2>Közlemények (főoldal és TV)</h2>
-        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%').not('text', 'like', '__KOFI__:%').not('text', 'like', '__BANNED_WORDS__:%'))}>↺ Összes közlemény törlése</button>}
+        {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && !isRadioAnnouncement(n.text)).length > 0 && <button type="button" onClick={() => confirm('Biztosan törlöd az összes közleményt?') && run(supabase.from('announcements').delete().eq('school_id', d.id).not('text', 'like', '__MAINT__:%').not('text', 'like', '__PARTNERS__:%').not('text', 'like', '__KOFI__:%').not('text', 'like', '__BANNED_WORDS__:%').not('text', 'like', '__RADIO__:%'))}>↺ Összes közlemény törlése</button>}
       </div>
-      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
+      {(d.announcements ?? []).filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && !isRadioAnnouncement(n.text)).map(n => <div className="row" key={n.id}>{n.text}{n.active_until ? ` (eddig: ${n.active_until})` : ''}
         <button onClick={() => setAn({ text: n.text, until: n.active_until ?? '' })}>Szerkesztés</button>
         <button onClick={() => run(supabase.from('announcements').delete().eq('id', n.id))}>Törlés</button></div>)}
       <div className="row"><input style={{ minWidth: '18rem' }} placeholder="Közlemény szövege" value={an.text} onChange={e => setAn({ ...an, text: e.target.value })} />
@@ -964,11 +996,104 @@ function Panel() {
       <div className="row">{wres.map((r, i) => <button key={i} onClick={() => { setS({ weather_city: r.name, weather_lat: r.latitude, weather_lon: r.longitude }); setWres([]); setWq('') }}>{r.name}{r.admin1 ? `, ${r.admin1}` : ''} ({r.country})</button>)}</div>
     </section>}
 
-    {can('videos') && (() => {
+    {(can('videos') || can('music_mod')) && (() => {
+      const canManageRadio = can('videos')
       const mergedWishes: SongWish[] = [...jbSongs]
       for (const w of [...dbWishes, ...loadAllLocalSongs()]) {
         if (!deletedWishIds.has(w.id) && !mergedWishes.some(x => x.id === w.id)) mergedWishes.push(w)
       }
+      const customRadioTracks = parseCustomRadioFromAnnouncements(d.announcements)
+      const saveCustomRadio = async (next: RadioTrack[], okMsg: string) => {
+        const res: any = await saveCustomRadioTracksToDb(d.id, next)
+        if (res?.error) {
+          setMsg('Hiba: ' + res.error.message)
+          return false
+        }
+        setMsg(okMsg)
+        await load()
+        return true
+      }
+      const addWishToRadio = async (w: SongWish) => {
+        if (!w.ytId) return
+        if (isTrackInRadio(w.ytId, customRadioTracks)) {
+          setMsg(`Már szerepel a SuliRádió listájában: ${w.title}`)
+          return
+        }
+        const nextTrack: RadioTrack = {
+          id: `r-custom-${w.ytId}`,
+          title: w.title,
+          ytId: w.ytId,
+          tier: 'custom',
+          addedBy: w.by || undefined,
+          addedAt: Date.now(),
+        }
+        await saveCustomRadio(
+          [...customRadioTracks, nextTrack],
+          `Felvéve a SuliRádió listájába: ${w.title}`
+        )
+      }
+      const addManualRadioTrack = async (e?: FormEvent) => {
+        e?.preventDefault()
+        const ytId = parseYouTubeId(radioForm.url)
+        if (!ytId) {
+          setMsg('Érvénytelen YouTube-link! Adj meg egy érvényes YouTube URL-t.')
+          return
+        }
+        if (isTrackInRadio(ytId, customRadioTracks)) {
+          setMsg('Ez a dal már szerepel a SuliRádió listájában!')
+          return
+        }
+        let cleanTitle = radioForm.title.trim().slice(0, 100)
+        if (!cleanTitle) {
+          setRadioBusy(true)
+          try {
+            const res = await fetchYouTubeTitle(ytId)
+            if (res.ok && res.title) {
+              cleanTitle = res.title
+            } else {
+              setMsg((res.error ? `${res.error} ` : '') + 'Kérlek, add meg a zene címét kézzel!')
+              return
+            }
+          } finally {
+            setRadioBusy(false)
+          }
+        }
+        const nextTrack: RadioTrack = {
+          id: `r-custom-${ytId}`,
+          title: cleanTitle,
+          ytId,
+          tier: 'custom',
+          addedAt: Date.now(),
+        }
+        const ok = await saveCustomRadio(
+          [...customRadioTracks, nextTrack],
+          `Hozzáadva a SuliRádióhoz: ${cleanTitle}`
+        )
+        if (ok) setRadioForm({ url: '', title: '' })
+      }
+      const activeYtIds = new Set(mergedWishes.map(w => w.ytId).filter(Boolean))
+      const pastWishes = archivedWishes.filter(w => w.ytId && !activeYtIds.has(w.ytId))
+
+      const renderPreviewPlayer = (keyId: string, titleText: string, ytId: string) =>
+        previewWishId === keyId ? (
+          <div style={{ marginTop: 8, padding: 10, background: 'var(--card)', borderRadius: 10, border: '1px solid var(--line)', maxWidth: 500 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <b>🎵 Admin Zene előnézet: {titleText}</b>
+              <button type="button" onClick={() => setPreviewWishId(null)}>✕ Bezárás</button>
+            </div>
+            <iframe
+              width="100%"
+              height="240"
+              src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&controls=1&rel=0`}
+              title={titleText}
+              allow="autoplay; encrypted-media; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              referrerPolicy="strict-origin-when-cross-origin"
+              style={{ borderRadius: 8, border: 0 }}
+            />
+          </div>
+        ) : null
+
       return (
         <section>
           <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -997,21 +1122,31 @@ function Panel() {
               </button>
             )}
           </div>
-          <div className="row">
-            <label>
-              <input
-                type="checkbox"
-                checked={d.settings.break_videos !== false}
-                onChange={e => setS({ break_videos: e.target.checked })}
-              />{' '}
-              Szüneti zenelejátszás engedélyezése a szünetekben
-            </label>
-          </div>
+          {can('settings') && (
+            <div className="row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={d.settings.break_videos !== false}
+                  onChange={e => setS({ break_videos: e.target.checked })}
+                />{' '}
+                Szüneti zenelejátszó engedélyezése a szünetekben
+              </label>
+            </div>
+          )}
           <p style={{ color: 'var(--mut)', fontSize: '0.9rem' }}>
             🔒 <b>Előnézet védelem</b>: A főoldalon a diákok számára a belehallgatás le van tiltva. A beküldött számokba kizárólag az admin tud belehallgatni az alábbi listában az ellenőrzéshez.
           </p>
           <p>
-            A zenéket a diákok YouTube-linkkel küldhetik be (a cím automatikusan töltődik be, a számok érkezési sorrendben szólnak; ha nincs beküldött kívánság, a beépített SuliRádió Auto-DJ szól). Ha valaki iskolába nem illő számot küldött be, itt belehallgatással ellenőrizheted és egyenként kitörölheted (azonnal eltűnik minden kijelzőről).
+            {canManageRadio ? (
+              <>
+                A zenéket a diákok YouTube-linkkel küldhetik be (a cím automatikusan töltődik be, a számok érkezési sorrendben szólnak; ha nincs beküldött kívánság, a SuliRádió Auto-DJ szól). Ha egy beküldött szám megtetszik, a <b>📻 + SuliRádióba</b> gombbal egy kattintással felveheted az állandó SuliRádió listába is!
+              </>
+            ) : (
+              <>
+                Itt ellenőrizheted belehallgatással a diákok által beküldött szüneti zenéket, és ha egy szám nem illik az iskolába, egyenként vagy egyszerre kiveheted a listából (azonnal eltűnik minden kijelzőről).
+              </>
+            )}
           </p>
 
           {mergedWishes.length === 0 ? (
@@ -1021,6 +1156,7 @@ function Panel() {
               {mergedWishes.map(w => {
                 const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : undefined
                 const isPreviewing = previewWishId === w.id
+                const inRadio = isTrackInRadio(w.ytId, customRadioTracks)
                 return (
                   <div key={w.id} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8, marginBottom: 8 }}>
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1034,7 +1170,7 @@ function Panel() {
                           </>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         {w.ytId && (
                           <button
                             type="button"
@@ -1043,6 +1179,26 @@ function Panel() {
                           >
                             {isPreviewing ? '⏹ Előnézet bezárása' : '🎧 Zene belehallgatás'}
                           </button>
+                        )}
+                        {canManageRadio && w.ytId && (
+                          inRadio ? (
+                            <button
+                              type="button"
+                              disabled
+                              style={{ opacity: 0.9, color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.45)' }}
+                              title="Ez a szám már szerepel a SuliRádió listájában"
+                            >
+                              ✅ SuliRádióban
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void addWishToRadio(w)}
+                              title="Felvétel a SuliRádió állandó listájába"
+                            >
+                              📻 + SuliRádióba
+                            </button>
+                          )
                         )}
                         <button
                           type="button"
@@ -1063,41 +1219,173 @@ function Panel() {
                         </button>
                       </div>
                     </div>
-                    {isPreviewing && w.ytId && (
-                      <div style={{ marginTop: 8, padding: 10, background: 'var(--card)', borderRadius: 10, border: '1px solid var(--line)', maxWidth: 500 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <b>🎵 Admin Zene előnézet: {w.title}</b>
-                          <button type="button" onClick={() => setPreviewWishId(null)}>✕ Bezárás</button>
-                        </div>
-                        <iframe
-                          width="100%"
-                          height="240"
-                          src={`https://www.youtube-nocookie.com/embed/${w.ytId}?autoplay=1&controls=1&rel=0`}
-                          title={w.title}
-                          allow="autoplay; encrypted-media; picture-in-picture"
-                          sandbox="allow-scripts allow-same-origin allow-presentation"
-                          referrerPolicy="strict-origin-when-cross-origin"
-                          style={{ borderRadius: 8, border: 0 }}
-                        />
-                      </div>
-                    )}
+                    {w.ytId && renderPreviewPlayer(w.id, w.title, w.ytId)}
                   </div>
                 )
               })}
             </>
           )}
 
-          {(() => {
-            const todayRadio = getDailyRadioPlaylist(todayStr)
-            const allBuiltIn = [...DEFAULT_RADIO_TRACKS, ...XMAS_RADIO_TRACKS]
+          {canManageRadio && pastWishes.length > 0 && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                📜 Korábban beküldött diák-zenék ({pastWishes.length} db — felvehetők a SuliRádióba)
+              </summary>
+              <div style={{ maxHeight: 320, overflowY: 'auto', marginTop: 8, paddingRight: 4, display: 'grid', gap: 8 }}>
+                {pastWishes.map(w => {
+                  const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : undefined
+                  const isPreviewing = previewWishId === w.id
+                  const inRadio = isTrackInRadio(w.ytId, customRadioTracks)
+                  return (
+                    <div key={`past-${w.id}-${w.ytId}`} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8 }}>
+                      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <b>🎵 {w.title}</b>
+                          {w.by ? ` — küldte: ${w.by}` : ''}
+                          {' '}• <small>{w.day}</small>
+                          {mediaLink && (
+                            <>
+                              {' '}• <a href={mediaLink} target="_blank" rel="noopener noreferrer">🔗 Link</a>
+                            </>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {w.ytId && (
+                            <button
+                              type="button"
+                              className={isPreviewing ? 'on' : ''}
+                              onClick={() => setPreviewWishId(isPreviewing ? null : w.id)}
+                            >
+                              {isPreviewing ? '⏹ Előnézet bezárása' : '🎧 Zene belehallgatás'}
+                            </button>
+                          )}
+                          {w.ytId && (
+                            inRadio ? (
+                              <button
+                                type="button"
+                                disabled
+                                style={{ opacity: 0.9, color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.45)' }}
+                              >
+                                ✅ SuliRádióban
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void addWishToRadio(w)}
+                                title="Felvétel a SuliRádió állandó listájába"
+                              >
+                                📻 + SuliRádióba
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                      {w.ytId && renderPreviewPlayer(w.id, w.title, w.ytId)}
+                    </div>
+                  )
+                })}
+              </div>
+            </details>
+          )}
+
+          {canManageRadio && (() => {
+            const todayRadio = getDailyRadioPlaylist(todayStr, false, customRadioTracks)
+            const allCatalog = [...customRadioTracks, ...DEFAULT_RADIO_TRACKS, ...XMAS_RADIO_TRACKS]
             return (
               <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
                 <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem' }}>
-                  📻 SuliRádió (Auto-DJ) — Mai műsorlista ({todayRadio.length} / {DEFAULT_RADIO_TRACKS.length} beépített szám)
+                  📻 SuliRádió (Auto-DJ) — Mai műsorlista ({todayRadio.length} aktív dal: {DEFAULT_RADIO_TRACKS.length} beépített + {customRadioTracks.length} saját)
                 </h3>
-                <p style={{ color: 'var(--mut)', fontSize: '0.88rem', margin: '0 0 8px' }}>
-                  Beépített, csak olvasható tartalék lista: ha épp nincs beküldött diák-kívánság, reggel 07:45-től, a szünetekben és tanítás után 15:00-ig innen szól a zene. A {CORE_RADIO_TRACKS.length} állandó alap-szám mellett naponta 4 szám frissül a {ROTATING_RADIO_TRACKS.length} rotálódó dal közül.
+                <p style={{ color: 'var(--mut)', fontSize: '0.88rem', margin: '0 0 10px' }}>
+                  Automatikus zenei rotáció: ha épp nincs beküldött diák-kívánság, reggel 07:45-től, a szünetekben és tanítás után 15:00-ig innen szól a zene. A {CORE_RADIO_TRACKS.length} állandó alap-szám és a {ROTATING_RADIO_TRACKS.length} rotálódó slágerből naponta megjelenő {todayRadio.filter(t => t.tier === 'daily').length} dal mellett a saját listába felvett számok (akár diákbeküldésből kiválasztva, akár linkkel) automatikusan bekerülnek a műsorba.
                 </p>
+
+                <div style={{ marginBottom: 12, padding: 10, borderRadius: 10, border: '1px solid var(--line)', background: 'color-mix(in srgb, var(--card) 70%, transparent)' }}>
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <h4 style={{ margin: 0, fontSize: '0.96rem' }}>
+                      ✨ Admin által felvett SuliRádió dalok ({customRadioTracks.length} db)
+                    </h4>
+                    {customRadioTracks.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          confirm('Biztosan eltávolítod az összes saját felvett dalt a SuliRádióból?') &&
+                          void saveCustomRadio([], 'Saját SuliRádió dalok ürítve.')
+                        }
+                      >
+                        ↺ Saját dalok ürítése
+                      </button>
+                    )}
+                  </div>
+
+                  {customRadioTracks.length === 0 ? (
+                    <p style={{ margin: '4px 0 8px', color: 'var(--mut)', fontSize: '0.88rem' }}>
+                      <i>Még nincs saját dal felvéve. Válassz a fenti diák-beküldéseknél a <b>📻 + SuliRádióba</b> gombbal, vagy adj hozzá alább YouTube-linket!</i>
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                      {customRadioTracks.map((tr, i) => {
+                        const isPreviewing = previewWishId === tr.id
+                        return (
+                          <div key={tr.id} style={{ borderBottom: '1px solid color-mix(in srgb, var(--line) 55%, transparent)', paddingBottom: 6 }}>
+                            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem' }}>
+                              <span>
+                                <b>{i + 1}.</b> {tr.title}{' '}
+                                <small style={{ color: '#4ade80' }}>
+                                  (✨ {tr.addedBy ? `Diákajánlás: ${tr.addedBy}` : 'Admin által hozzáadva'})
+                                </small>
+                              </span>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <a href={`https://youtu.be/${tr.ytId}`} target="_blank" rel="noopener noreferrer">
+                                  🔗 YouTube
+                                </a>
+                                <button
+                                  type="button"
+                                  className={isPreviewing ? 'on' : ''}
+                                  onClick={() => setPreviewWishId(isPreviewing ? null : tr.id)}
+                                >
+                                  {isPreviewing ? '⏹ Bezárás' : '🎧 Belehallgatás'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void saveCustomRadio(
+                                      customRadioTracks.filter(x => x.ytId !== tr.ytId),
+                                      `Eltávolítva a SuliRádióból: ${tr.title}`
+                                    )
+                                  }
+                                >
+                                  🗑️ Eltávolítás
+                                </button>
+                              </div>
+                            </div>
+                            {renderPreviewPlayer(tr.id, tr.title, tr.ytId)}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <form className="row" onSubmit={e => void addManualRadioTrack(e)} style={{ marginTop: 6 }}>
+                    <input
+                      style={{ minWidth: '15rem', flex: 1 }}
+                      placeholder="YouTube-link hozzáadása a SuliRádióhoz (https://...)"
+                      value={radioForm.url}
+                      onChange={e => setRadioForm(f => ({ ...f, url: e.target.value }))}
+                      disabled={radioBusy}
+                    />
+                    <input
+                      style={{ minWidth: '14rem' }}
+                      placeholder="Cím (opcionális – üresen automatikus)"
+                      value={radioForm.title}
+                      onChange={e => setRadioForm(f => ({ ...f, title: e.target.value }))}
+                      disabled={radioBusy}
+                    />
+                    <button type="submit" disabled={radioBusy || !radioForm.url.trim()}>
+                      {radioBusy ? '⏳ Betöltés…' : '+ Hozzáadás a SuliRádióhoz'}
+                    </button>
+                  </form>
+                </div>
 
                 <details style={{ marginBottom: 8 }}>
                   <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
@@ -1108,8 +1396,12 @@ function Panel() {
                       <div key={tr.id} className="row" style={{ justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', borderBottom: '1px solid color-mix(in srgb, var(--line) 55%, transparent)', paddingBottom: 4 }}>
                         <span>
                           <b>{i + 1}.</b> {tr.title}{' '}
-                          <small style={{ color: tr.tier === 'core' ? 'var(--next)' : 'var(--mut)' }}>
-                            ({tr.tier === 'core' ? '⭐ Állandó' : '🔄 Mai rotáció'})
+                          <small style={{ color: tr.tier === 'custom' ? '#4ade80' : tr.tier === 'core' ? 'var(--next)' : 'var(--mut)' }}>
+                            ({tr.tier === 'custom'
+                              ? `✨ Saját${tr.addedBy ? ` • ${tr.addedBy}` : ''}`
+                              : tr.tier === 'core'
+                                ? '⭐ Állandó'
+                                : '🔄 Mai rotáció'})
                           </small>
                         </span>
                         <a href={`https://youtu.be/${tr.ytId}`} target="_blank" rel="noopener noreferrer">
@@ -1122,15 +1414,21 @@ function Panel() {
 
                 <details>
                   <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
-                    📚 Teljes beépített katalógus ({DEFAULT_RADIO_TRACKS.length} + {XMAS_RADIO_TRACKS.length} ünnepi dal)
+                    📚 Teljes katalógus ({DEFAULT_RADIO_TRACKS.length} beépített + {XMAS_RADIO_TRACKS.length} ünnepi + {customRadioTracks.length} saját)
                   </summary>
                   <div style={{ maxHeight: 260, overflowY: 'auto', marginTop: 8, paddingRight: 4, display: 'grid', gap: 6 }}>
-                    {allBuiltIn.map((tr, i) => (
+                    {allCatalog.map((tr, i) => (
                       <div key={tr.id} className="row" style={{ justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', borderBottom: '1px solid color-mix(in srgb, var(--line) 55%, transparent)', paddingBottom: 4 }}>
                         <span>
                           <b>{i + 1}.</b> {tr.title}{' '}
-                          <small style={{ color: 'var(--mut)' }}>
-                            ({tr.tier === 'core' ? '⭐ Állandó' : tr.tier === 'xmas' ? '🎄 Ünnepi' : '🔄 Rotáló'})
+                          <small style={{ color: tr.tier === 'custom' ? '#4ade80' : 'var(--mut)' }}>
+                            ({tr.tier === 'custom'
+                              ? `✨ Saját${tr.addedBy ? ` • ${tr.addedBy}` : ''}`
+                              : tr.tier === 'core'
+                                ? '⭐ Állandó'
+                                : tr.tier === 'xmas'
+                                  ? '🎄 Ünnepi'
+                                  : '🔄 Rotáló'})
                           </small>
                         </span>
                         <a href={`https://youtu.be/${tr.ytId}`} target="_blank" rel="noopener noreferrer">

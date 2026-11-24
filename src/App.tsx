@@ -50,6 +50,7 @@ import { isPartnersAnnouncement, parsePartnersFromAnnouncements } from './lib/pa
 import { isKofiAnnouncement, parseKofiFromAnnouncements, formatDonationAmount } from './lib/kofi'
 import { trackPageVisit, useOnlinePresence } from './lib/visits'
 import { isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements } from './lib/moderation'
+import { isRadioAnnouncement, parseCustomRadioFromAnnouncements, type RadioTrack } from './lib/radio'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
@@ -168,7 +169,8 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     parseBannedWordsFromAnnouncements(effData.announcements)
     const partners = parsePartnersFromAnnouncements(effData.announcements)
     const kofi = parseKofiFromAnnouncements(effData.announcements)
-    return { effData, ov, schedule, activeLessons, cancelledLessons, cancelledIds, closed, week, upcoming, partners, kofi }
+    const customRadio = parseCustomRadioFromAnnouncements(effData.announcements)
+    return { effData, ov, schedule, activeLessons, cancelledLessons, cancelledIds, closed, week, upcoming, partners, kofi, customRadio }
   }, [data, dayDate, dayWeekday, tv, getMyEntry, sb])
 
   return useMemo(() => {
@@ -178,7 +180,7 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     const z = sb && sb.simSecs !== null ? { ...rawZ, secs: sb.simSecs } : rawZ
     const st = computeState(z.secs, dayPrep.activeLessons, dayPrep.closed, !dayPrep.schedule, dayPrep.cancelledLessons)
     const ov: Record<string, string> = dayPrep.ov
-    if (true as boolean) return { data: dayPrep.effData, offline, z, schedule: dayPrep.schedule, state: st, now, cancelledIds: dayPrep.cancelledIds, ovMap: dayPrep.ov, week: dayPrep.week, upcoming: dayPrep.upcoming, partners: dayPrep.partners, kofi: dayPrep.kofi }
+    if (true as boolean) return { data: dayPrep.effData, offline, z, schedule: dayPrep.schedule, state: st, now, cancelledIds: dayPrep.cancelledIds, ovMap: dayPrep.ov, week: dayPrep.week, upcoming: dayPrep.upcoming, partners: dayPrep.partners, kofi: dayPrep.kofi, customRadio: dayPrep.customRadio }
     const baseSchedule = scheduleFor(z.date, data.schedules, ov)
     const allLessons: Lesson[] = onlyMyLessons([...(baseSchedule?.lessons ?? [])].sort((a, b) => a.position - b.position), z.weekday, tv ? undefined : getMyEntry)
     const schedule = baseSchedule ? { ...baseSchedule, lessons: allLessons } : baseSchedule
@@ -438,10 +440,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const [potato, setPotato] = useState(() => { try { return localStorage.getItem('potato') === '1' } catch { return false } })
   useEffect(() => { if (potato) document.documentElement.dataset.potato = '1'; else delete document.documentElement.dataset.potato }, [potato])
   const togglePotato = () => { const v = !potato; try { localStorage.setItem('potato', v ? '1' : '0') } catch { /* nem baj */ } setPotato(v) }
-  const { data, offline, z, schedule, state, now, cancelledIds, ovMap, week: weekFromBell, upcoming: upcomingFromBell, partners: partnersFromBell, kofi: kofiFromBell } = useBell(tv, getEntry, sandbox ? sb : null, potato) as any
+  const { data, offline, z, schedule, state, now, cancelledIds, ovMap, week: weekFromBell, upcoming: upcomingFromBell, partners: partnersFromBell, kofi: kofiFromBell, customRadio: customRadioFromBell } = useBell(tv, getEntry, sandbox ? sb : null, potato) as any
   const upcoming: { day: string; reason: string }[] = upcomingFromBell ?? []
   const partners: ReturnType<typeof parsePartnersFromAnnouncements> = partnersFromBell ?? []
   const kofi: ReturnType<typeof parseKofiFromAnnouncements> = kofiFromBell ?? { url: '', donors: [] }
+  const customRadio: RadioTrack[] = customRadioFromBell ?? []
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
   const style = 'neon'
   useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
@@ -648,7 +651,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
 
   // ---- Közlemények (a TV-n 10 mp-enként váltakoznak) ----
   const notes = ((data.announcements ?? []) as { id: string; text: string; active_until: string | null }[])
-    .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
+    .filter(n => !isMaintAnnouncement(n.text) && !isPartnersAnnouncement(n.text) && !isKofiAnnouncement(n.text) && !isBannedWordsAnnouncement(n.text) && !isRadioAnnouncement(n.text) && (!n.active_until || n.active_until >= z.date))
     .concat(discordNotes.map(dn => ({ id: dn.id, text: dn.text, active_until: null })))
 
 
@@ -926,7 +929,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const isAfterSchoolMusic = s.phase === 'after' && z.secs < 15 * 3600
   const musicBreakKey = isMorningMusic ? `${z.date}-before` : isAfterSchoolMusic ? `${z.date}-after` : (s.next?.id ?? key)
   const vid = !isWeekendDay && (s.phase === 'break' || isMorningMusic || isAfterSchoolMusic) && data.settings.break_videos !== false && (
-    <BreakVideo wishes={effectiveWishes} breakKey={musicBreakKey} day={z.date} christmas={isXmasSkin} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} onFinished={finishSong} />
+    <BreakVideo wishes={effectiveWishes} breakKey={musicBreakKey} day={z.date} christmas={isXmasSkin} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} extraRadioTracks={customRadio} onFinished={finishSong} />
   )
   const e0 = events[0]
   const restEv = pv && first && until > 0
@@ -1634,6 +1637,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               sound={!!data.settings.sound_enabled && audioOn}
               userMuted={muted}
               christmas={isXmasSkin}
+              extraRadioTracks={customRadio}
               sandboxDemo={sandbox ? { forceBreakMedia: sb.forceBreakMedia } : undefined}
             />
           </Suspense>

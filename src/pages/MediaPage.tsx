@@ -2,6 +2,7 @@ import { memo } from 'react'
 import BreakVideo from '../BreakVideo'
 import Jukebox, { isJukeboxWeekend, useJukebox, type SongWish } from '../Jukebox'
 import type { Phase } from '../lib/engine'
+import type { RadioTrack } from '../lib/radio'
 
 export interface MediaPageProps {
   schoolId?: string
@@ -14,6 +15,7 @@ export interface MediaPageProps {
   sound: boolean
   userMuted: boolean
   christmas: boolean
+  extraRadioTracks?: RadioTrack[]
   sandboxDemo?: { forceBreakMedia: boolean }
 }
 
@@ -28,6 +30,7 @@ const MediaPage = memo(function MediaPage({
   sound,
   userMuted,
   christmas,
+  extraRadioTracks,
   sandboxDemo,
 }: MediaPageProps) {
   const { songs: jbWishes, finishSong } = useJukebox(schoolId, day, false)
@@ -62,6 +65,7 @@ const MediaPage = memo(function MediaPage({
             christmas={christmas}
             soundOn={sound}
             userMuted={userMuted}
+            extraRadioTracks={extraRadioTracks}
             onFinished={finishSong}
           />
         ) : (

@@ -1,11 +1,14 @@
+import { supabase } from './supabase'
+
 /**
- * Beépített szüneti „SuliRádió” (Auto-DJ) zenerotáció — magyar Petőfi Rádió és Sláger FM kedvencekkel:
+ * Beépített és admin által bővíthető szüneti „SuliRádió” (Auto-DJ) zenerotáció:
  * - 10 állandó alap-sláger (minden nap szerepel a műsorban)
  * - 26 rotálódó sláger, amelyből naponta 10 aktív és minden nap 4 friss dal cserélődik be
  * - ünnepi időszakban extra karácsonyi slágerek
+ * - admin által (akár diák-beküldésből) felvett állandó saját dalok
  */
 
-export type RadioTier = 'core' | 'daily' | 'xmas'
+export type RadioTier = 'core' | 'daily' | 'xmas' | 'custom'
 
 export interface RadioTrack {
   id: string
@@ -13,6 +16,124 @@ export interface RadioTrack {
   ytId: string
   artist?: string
   tier?: RadioTier
+  addedBy?: string
+  addedAt?: number
+}
+
+export const RADIO_PREFIX = '__RADIO__:'
+const LOCAL_KEY = 'csengeto-radio-custom-v1'
+let cachedCustomTracks: RadioTrack[] | null = null
+
+export function isRadioAnnouncement(text?: string | null): boolean {
+  return typeof text === 'string' && text.startsWith(RADIO_PREFIX)
+}
+
+function normalizeCustomTracks(raw: unknown): RadioTrack[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: RadioTrack[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const it = item as Record<string, unknown>
+    const ytId = typeof it.ytId === 'string' ? it.ytId.trim() : ''
+    const title = typeof it.title === 'string' ? it.title.trim().slice(0, 100) : ''
+    if (!/^[\w-]{11}$/.test(ytId) || !title || seen.has(ytId)) continue
+    seen.add(ytId)
+    const addedBy =
+      typeof it.addedBy === 'string' && it.addedBy.trim()
+        ? it.addedBy.trim().slice(0, 40)
+        : undefined
+    const addedAt =
+      typeof it.addedAt === 'number' && Number.isFinite(it.addedAt) && it.addedAt > 0
+        ? it.addedAt
+        : undefined
+    out.push({
+      id: typeof it.id === 'string' && it.id.trim() ? it.id.trim() : `r-custom-${ytId}`,
+      title,
+      ytId,
+      tier: 'custom',
+      ...(addedBy ? { addedBy } : {}),
+      ...(addedAt ? { addedAt } : {}),
+    })
+  }
+  return out
+}
+
+export function getCustomRadioTracks(): RadioTrack[] {
+  if (cachedCustomTracks !== null) return cachedCustomTracks
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]')
+    cachedCustomTracks = normalizeCustomTracks(raw)
+    return cachedCustomTracks
+  } catch {
+    cachedCustomTracks = []
+    return []
+  }
+}
+
+export function parseCustomRadioFromAnnouncements(
+  announcements?: { id?: string; text: string; active_until?: string | null }[] | null
+): RadioTrack[] {
+  if (Array.isArray(announcements)) {
+    const row = announcements.find(a => isRadioAnnouncement(a?.text))
+    if (row) {
+      try {
+        const list = normalizeCustomTracks(JSON.parse(row.text.slice(RADIO_PREFIX.length)))
+        cachedCustomTracks = list
+        try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)) } catch { /* ignore */ }
+        return list
+      } catch {
+        cachedCustomTracks = []
+        return []
+      }
+    }
+    cachedCustomTracks = []
+    try { localStorage.setItem(LOCAL_KEY, '[]') } catch { /* ignore */ }
+    return []
+  }
+  return getCustomRadioTracks()
+}
+
+export async function saveCustomRadioTracksToDb(schoolId: string, tracks: RadioTrack[]) {
+  const clean = normalizeCustomTracks(tracks)
+  cachedCustomTracks = clean
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(clean)) } catch { /* ignore */ }
+  const payload = RADIO_PREFIX + JSON.stringify(clean)
+
+  const { data: existing } = await supabase
+    .from('announcements')
+    .select('id')
+    .eq('school_id', schoolId)
+    .like('text', `${RADIO_PREFIX}%`)
+
+  if (existing && existing.length > 0) {
+    const firstId = existing[0].id
+    if (existing.length > 1) {
+      await supabase
+        .from('announcements')
+        .delete()
+        .in('id', existing.slice(1).map((r: any) => r.id))
+    }
+    if (clean.length === 0) {
+      return supabase.from('announcements').delete().eq('id', firstId)
+    }
+    return supabase.from('announcements').update({ text: payload, active_until: null }).eq('id', firstId)
+  } else if (clean.length > 0) {
+    return supabase.from('announcements').insert({ school_id: schoolId, text: payload, active_until: null })
+  }
+  return { error: null }
+}
+
+export function isTrackInRadio(
+  ytId: string | undefined,
+  customTracks: RadioTrack[] = getCustomRadioTracks()
+): boolean {
+  if (!ytId) return false
+  return (
+    DEFAULT_RADIO_TRACKS.some(t => t.ytId === ytId) ||
+    XMAS_RADIO_TRACKS.some(t => t.ytId === ytId) ||
+    customTracks.some(t => t.ytId === ytId)
+  )
 }
 
 /** Állandó kedvencek: minden tanítási napon szerepelnek a SuliRádió műsorában (10 sláger). */
@@ -94,9 +215,14 @@ function dayNumber(day: string): number {
  * Összeállítja az adott nap determinisztikus SuliRádió műsorlistáját:
  * - mind a 10 állandó alap-sláger szerepel benne,
  * - a 26 rotálódó slágerből csúszóablakkal 10 aktív (naponta 4 friss dal lép be),
+ * - az admin által felvett állandó saját dalok is automatikusan bekerülnek,
  * - majd a nap alapján determinisztikusan összekeverve.
  */
-export function getDailyRadioPlaylist(day: string, christmas = false): RadioTrack[] {
+export function getDailyRadioPlaylist(
+  day: string,
+  christmas = false,
+  customTracks: RadioTrack[] = getCustomRadioTracks()
+): RadioTrack[] {
   const dIdx = dayNumber(day)
   const rotLen = ROTATING_RADIO_TRACKS.length
   const pickedRotating: RadioTrack[] = []
@@ -108,6 +234,14 @@ export function getDailyRadioPlaylist(day: string, christmas = false): RadioTrac
   const base = christmas
     ? [...XMAS_RADIO_TRACKS, ...CORE_RADIO_TRACKS, ...pickedRotating]
     : [...CORE_RADIO_TRACKS, ...pickedRotating]
+
+  const seenYt = new Set(base.map(t => t.ytId))
+  for (const ct of normalizeCustomTracks(customTracks)) {
+    if (!seenYt.has(ct.ytId)) {
+      seenYt.add(ct.ytId)
+      base.push(ct)
+    }
+  }
 
   // Determinisztikus Fisher–Yates keverés az adott napra (LCG PRNG)
   const shuffled = [...base]
@@ -126,8 +260,14 @@ export function getDailyRadioPlaylist(day: string, christmas = false): RadioTrac
  * Determinisztikusan választ egy rádiószámot a nap és a szünet kulcsa alapján,
  * hogy minden kijelzőn és telefonon ugyanaz a zene induljon el ugyanabban a szünetben.
  */
-export function pickRadioTrack(day: string, breakKey: string, offset = 0, christmas = false): RadioTrack {
-  const pool = getDailyRadioPlaylist(day, christmas)
+export function pickRadioTrack(
+  day: string,
+  breakKey: string,
+  offset = 0,
+  christmas = false,
+  customTracks: RadioTrack[] = getCustomRadioTracks()
+): RadioTrack {
+  const pool = getDailyRadioPlaylist(day, christmas, customTracks)
   const baseIdx = fnv1a(`${day}-${breakKey}`) % pool.length
   const step = Math.max(0, Math.floor(offset))
   return pool[(baseIdx + step) % pool.length] ?? CORE_RADIO_TRACKS[0]

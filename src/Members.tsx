@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 
 const AREAS: [string, string][] = [['ai', '✨ AI Asszisztens használata'], ['menu', 'Étlap'], ['changes', 'Mai változások'], ['announcements', 'Közlemények'], ['calendar', 'Naptár (ünnepnapok, visszaszámlálók, különleges napok)'],
-  ['schedules', 'Csengetési rendek'], ['polls', 'Szavazás'], ['videos', 'Szüneti Zenegép'], ['push', 'Értesítések küldése'], ['settings', 'Beállítások (logó, hang, időjárás, kiemelt közlemény, verzió)']]
+  ['schedules', 'Csengetési rendek'], ['polls', 'Szavazás'], ['videos', 'Szüneti Zenegép (teljes: SuliRádió + Aréna + moderálás)'], ['music_mod', '🎵 Csak zenék kivétele (Zenegép törlés)'], ['push', 'Értesítések küldése'], ['settings', 'Beállítások (logó, hang, időjárás, kiemelt közlemény, verzió)']]
 type M = { user_id: string; email: string; perms: string[] | null }
 
 /** Adminok és jogosultságaik (csak teljes jogú admin látja). Egy admin csak a megadott területeket szerkesztheti. */
@@ -20,14 +20,22 @@ export default function Members({ sid }: { sid: string }) {
 
   const save = async (email: string, perms: string[] | null) => {
     const { error } = await supabase.rpc('set_member', { sid, p_email: email, p_perms: perms })
-    setMsg(error ? 'Hiba: ' + error.message : 'Mentve'); await load()
+    setMsg(
+      error
+        ? error.message.includes('Ismeretlen terület')
+          ? `Hiba: ${error.message} — Futtasd le egyszer a supabase/update25.sql fájlt a Supabase SQL Editorban!`
+          : 'Hiba: ' + error.message
+        : 'Mentve'
+    )
+    await load()
   }
   const toggle = (arr: string[], k: string) => arr.includes(k) ? arr.filter(x => x !== k) : [...arr, k]
 
   const picker = (full: boolean, perms: string[], onFull: (v: boolean) => void, onPerms: (p: string[]) => void) => <div className="permbox">
     <label><input type="checkbox" checked={full} onChange={e => onFull(e.target.checked)} /> <b>Teljes jogú</b> (mindent szerkeszthet, adminokat kezelhet)</label>
     {!full && <div className="permgrid">{AREAS.map(([k, n]) => <label key={k}><input type="checkbox" checked={perms.includes(k)} onChange={() => onPerms(toggle(perms, k))} /> {n}</label>)}
-      <button type="button" onClick={() => onPerms(['menu'])}>Csak étlap</button></div>}
+      <button type="button" onClick={() => onPerms(['menu'])}>Csak étlap</button>
+      <button type="button" onClick={() => onPerms(['music_mod'])}>Csak zenék kivétele</button></div>}
   </div>
 
   return <section><h2>Adminok és jogosultságok</h2>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { SongWish } from './Jukebox'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
-import { pickRadioTrack } from './lib/radio'
+import { pickRadioTrack, type RadioTrack } from './lib/radio'
 
 const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
   const d = ((i * 7 + 3) % 13) / 10
@@ -222,7 +222,11 @@ export function MusicVisualizer({
             <h3 className="viz-title" title={title}>{title}</h3>
             <div className="viz-sub">
               {radioMode ? (
-                <span>SuliRádió • Automatikus szüneti zene (ha beküldesz egy számot, az szól következőnek!)</span>
+                by ? (
+                  <span>SuliRádió • Diákajánlás: <b>{by}</b> (ha beküldesz egy számot, az szól következőnek!)</span>
+                ) : (
+                  <span>SuliRádió • Automatikus szüneti zene (ha beküldesz egy számot, az szól következőnek!)</span>
+                )
               ) : by ? (
                 <span>Küldi: <b>{by}</b></span>
               ) : (
@@ -326,6 +330,7 @@ export default function BreakVideo({
   tv = false,
   soundOn: _soundOn,
   userMuted = false,
+  extraRadioTracks,
   onFinished,
 }: {
   wishes?: SongWish[]
@@ -335,6 +340,7 @@ export default function BreakVideo({
   tv?: boolean
   soundOn?: boolean
   userMuted?: boolean
+  extraRadioTracks?: RadioTrack[]
   onFinished?: (songId: string) => void
 }) {
   const [radioStep, setRadioStep] = useState(0)
@@ -360,12 +366,13 @@ export default function BreakVideo({
     )
   }
 
-  const track = pickRadioTrack(day || 'today', breakKey, radioStep, christmas)
+  const track = pickRadioTrack(day || 'today', breakKey, radioStep, christmas, extraRadioTracks)
 
   return (
     <section className="panel full vid music-panel">
       <MusicVisualizer
         title={track.title}
+        by={track.addedBy}
         ytId={track.ytId}
         radioMode
         initialMuted={userMuted}
