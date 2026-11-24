@@ -51,6 +51,8 @@ import { isKofiAnnouncement, parseKofiFromAnnouncements, formatDonationAmount } 
 import { trackPageVisit, useOnlinePresence } from './lib/visits'
 import { isBannedWordsAnnouncement, parseBannedWordsFromAnnouncements } from './lib/moderation'
 import { isRadioAnnouncement, parseCustomRadioFromAnnouncements, type RadioTrack } from './lib/radio'
+import { buildMusicWindows, type MusicWindow } from './lib/musicSync'
+import { useMusicSync } from './lib/useMusicSync'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
@@ -170,17 +172,21 @@ function useBell(tv: boolean, getMyEntry?: (weekday: number, pos?: number) => My
     const partners = parsePartnersFromAnnouncements(effData.announcements)
     const kofi = parseKofiFromAnnouncements(effData.announcements)
     const customRadio = parseCustomRadioFromAnnouncements(effData.announcements)
-    return { effData, ov, schedule, activeLessons, cancelledLessons, cancelledIds, closed, week, upcoming, partners, kofi, customRadio }
+    const centralAllLessons = [...(baseSchedule?.lessons ?? [])].sort((a, b) => a.position - b.position)
+    const maxPosAll = centralAllLessons.length ? Math.max(...centralAllLessons.map(l => l.position)) : 0
+    const centralActiveLessons = centralAllLessons.filter(l => !isLessonCancelled(l, dayChanges, false, maxPosAll))
+    const musicWindows = closed ? [] : buildMusicWindows(centralActiveLessons)
+    return { effData, ov, schedule, activeLessons, cancelledLessons, cancelledIds, closed, week, upcoming, partners, kofi, customRadio, musicWindows }
   }, [data, dayDate, dayWeekday, tv, getMyEntry, sb])
 
   return useMemo(() => {
     const now = new Date(nowSec * 1000)
-    if (!data || !dayPrep || !rawZ) return { data, offline, cancelledIds: new Set<string>() }
+    if (!data || !dayPrep || !rawZ) return { data, offline, cancelledIds: new Set<string>(), musicWindows: [] as MusicWindow[] }
 
     const z = sb && sb.simSecs !== null ? { ...rawZ, secs: sb.simSecs } : rawZ
     const st = computeState(z.secs, dayPrep.activeLessons, dayPrep.closed, !dayPrep.schedule, dayPrep.cancelledLessons)
     const ov: Record<string, string> = dayPrep.ov
-    if (true as boolean) return { data: dayPrep.effData, offline, z, schedule: dayPrep.schedule, state: st, now, cancelledIds: dayPrep.cancelledIds, ovMap: dayPrep.ov, week: dayPrep.week, upcoming: dayPrep.upcoming, partners: dayPrep.partners, kofi: dayPrep.kofi, customRadio: dayPrep.customRadio }
+    if (true as boolean) return { data: dayPrep.effData, offline, z, schedule: dayPrep.schedule, state: st, now, cancelledIds: dayPrep.cancelledIds, ovMap: dayPrep.ov, week: dayPrep.week, upcoming: dayPrep.upcoming, partners: dayPrep.partners, kofi: dayPrep.kofi, customRadio: dayPrep.customRadio, musicWindows: dayPrep.musicWindows }
     const baseSchedule = scheduleFor(z.date, data.schedules, ov)
     const allLessons: Lesson[] = onlyMyLessons([...(baseSchedule?.lessons ?? [])].sort((a, b) => a.position - b.position), z.weekday, tv ? undefined : getMyEntry)
     const schedule = baseSchedule ? { ...baseSchedule, lessons: allLessons } : baseSchedule
@@ -440,11 +446,12 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const [potato, setPotato] = useState(() => { try { return localStorage.getItem('potato') === '1' } catch { return false } })
   useEffect(() => { if (potato) document.documentElement.dataset.potato = '1'; else delete document.documentElement.dataset.potato }, [potato])
   const togglePotato = () => { const v = !potato; try { localStorage.setItem('potato', v ? '1' : '0') } catch { /* nem baj */ } setPotato(v) }
-  const { data, offline, z, schedule, state, now, cancelledIds, ovMap, week: weekFromBell, upcoming: upcomingFromBell, partners: partnersFromBell, kofi: kofiFromBell, customRadio: customRadioFromBell } = useBell(tv, getEntry, sandbox ? sb : null, potato) as any
+  const { data, offline, z, schedule, state, now, cancelledIds, ovMap, week: weekFromBell, upcoming: upcomingFromBell, partners: partnersFromBell, kofi: kofiFromBell, customRadio: customRadioFromBell, musicWindows: musicWindowsFromBell } = useBell(tv, getEntry, sandbox ? sb : null, potato) as any
   const upcoming: { day: string; reason: string }[] = upcomingFromBell ?? []
   const partners: ReturnType<typeof parsePartnersFromAnnouncements> = partnersFromBell ?? []
   const kofi: ReturnType<typeof parseKofiFromAnnouncements> = kofiFromBell ?? { url: '', donors: [] }
   const customRadio: RadioTrack[] = customRadioFromBell ?? []
+  const musicWindows: MusicWindow[] = musicWindowsFromBell ?? []
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? '')
   const style = 'neon'
   useEffect(() => { document.documentElement.dataset.style = 'neon'; try { localStorage.setItem('style', 'neon') } catch { /* nem baj */ } }, [])
@@ -531,7 +538,47 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     !!data?.settings.sound_enabled && audioOn,
     isXmasSkin
   )
-  const { songs: jbWishes, finishSong } = useJukebox(needAll ? data?.id : undefined, z?.date ?? '', false)
+  const { songs: jbWishes, ghosts: jbGhosts } = useJukebox(needAll ? data?.id : undefined, z?.date ?? '', false)
+  const sbDemoDay = z?.date ?? ''
+  const effectiveWishes = useMemo<SongWish[]>(() => {
+    if (sandbox && sb.forceBreakMedia && sbDemoDay) {
+      return [
+        {
+          id: 'sb-demo',
+          day: sbDemoDay,
+          kind: 'music',
+          title: 'Cartoon – On & On (Szüneti Zene Mix)',
+          by: 'Admin Tesztlabor',
+          ytId: 'K4DyBUG242c',
+          votes: 99,
+          at: Date.now(),
+        },
+        ...jbWishes,
+      ]
+    }
+    return jbWishes
+  }, [sandbox, sb.forceBreakMedia, sbDemoDay, jbWishes])
+  const isWeekendDay = !!z && (z.weekday === 6 || z.weekday === 7)
+  const isMorningMusic = !!state && state.phase === 'before' && !!z && z.secs >= 7 * 3600 + 45 * 60
+  const isAfterSchoolMusic = !!state && state.phase === 'after' && !!z && z.secs < 15 * 3600
+  const musicEnabled =
+    !!data &&
+    !!z &&
+    !!state &&
+    !isWeekendDay &&
+    (state.phase === 'break' || isMorningMusic || isAfterSchoolMusic) &&
+    data.settings.break_videos !== false
+  const musicSync = useMusicSync({
+    day: z?.date ?? '',
+    tz: data?.settings.timezone ?? 'Europe/Budapest',
+    secs: z?.secs ?? 0,
+    windows: musicWindows,
+    wishes: effectiveWishes,
+    ghosts: jbGhosts,
+    christmas: isXmasSkin,
+    customRadio,
+    enabled: musicEnabled,
+  })
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
   const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
@@ -920,16 +967,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     </div>
   )
 
-  const effectiveWishes: SongWish[] = sandbox && sb.forceBreakMedia ? [{ id: 'sb-demo', day: z.date, kind: 'music', title: 'Cartoon – On & On (Szüneti Zene Mix)', by: 'Admin Tesztlabor', ytId: 'K4DyBUG242c', votes: 99, at: Date.now() }, ...jbWishes] : jbWishes
   const curBreakKey = s.phase === 'break' ? `${z.date}-${s.next?.id ?? key}` : undefined
   const curJukeboxBreakKey = `${z.date}-${s.phase}-${s.current?.id ?? s.next?.id ?? '0'}`
   const breakTotalSec = s.phase === 'break' ? s.total : undefined
-  const isWeekendDay = z.weekday === 6 || z.weekday === 7
-  const isMorningMusic = s.phase === 'before' && z.secs >= 7 * 3600 + 45 * 60
-  const isAfterSchoolMusic = s.phase === 'after' && z.secs < 15 * 3600
-  const musicBreakKey = isMorningMusic ? `${z.date}-before` : isAfterSchoolMusic ? `${z.date}-after` : (s.next?.id ?? key)
-  const vid = !isWeekendDay && (s.phase === 'break' || isMorningMusic || isAfterSchoolMusic) && data.settings.break_videos !== false && (
-    <BreakVideo wishes={effectiveWishes} breakKey={musicBreakKey} day={z.date} christmas={isXmasSkin} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} extraRadioTracks={customRadio} onFinished={finishSong} />
+  const vid = musicEnabled && (
+    <BreakVideo sync={musicSync} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} />
   )
   const e0 = events[0]
   const restEv = pv && first && until > 0
@@ -1091,7 +1133,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     {!vid && lunchBox}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
                     <Suspense fallback={null}><Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv /></Suspense>
-                    <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
+                    <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv playedIds={musicSync.startedWishIds} nowPlayingId={musicSync.nowPlayingWishId} />
                     {tvInfoCard}
                   </div>
                 </>
@@ -1104,7 +1146,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
                     {offCard}
                     <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} tv christmas={isXmasSkin} />
                     <Suspense fallback={null}><Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} tv /></Suspense>
-                    <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv />
+                    <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} tv playedIds={musicSync.startedWishIds} nowPlayingId={musicSync.nowPlayingWishId} />
                     {tvInfoCard}
                   </div>
                 </>
@@ -1346,7 +1388,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
               {kofiBox}
               <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} christmas={isXmasSkin} />
 
-              <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} christmas={isXmasSkin} />
+              <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} christmas={isXmasSkin} playedIds={musicSync.startedWishIds} nowPlayingId={musicSync.nowPlayingWishId} />
 
               <Suspense fallback={null}>
                 <Arena schoolId={data.id} day={z.date} phase={s.phase} breakKey={curBreakKey} breakTotalSec={breakTotalSec} sound={!!data.settings.sound_enabled && audioOn} />
@@ -1629,10 +1671,11 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <MediaPage
               schoolId={data.id}
               day={z.date}
+              tz={data.settings.timezone}
               phase={s.phase}
               secs={z.secs}
               breakKey={curJukeboxBreakKey}
-              videoBreakKey={musicBreakKey}
+              musicWindows={musicWindows}
               breakMusicEnabled={data.settings.break_videos !== false}
               sound={!!data.settings.sound_enabled && audioOn}
               userMuted={muted}

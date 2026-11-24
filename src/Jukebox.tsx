@@ -145,7 +145,7 @@ function saveSubmittedSet(day: string, set: Set<string>) {
 function sortSongs(list: SongWish[]): SongWish[] {
   return [...list]
     .sort((a, b) => a.at - b.at)
-    .slice(0, 20)
+    .slice(0, 60)
 }
 
 function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>): SongWish[] {
@@ -178,6 +178,7 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
 
 export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean, breakKey?: string) {
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
+  const [ghosts, setGhosts] = useState<SongWish[]>([])
   const [submitted, setSubmitted] = useState<Set<string>>(() => loadSubmittedSet(day))
   const [discordChannels, setDiscordChannels] = useState<{ music: string }>({
     music: '#🎵-zenekérés-ötletek',
@@ -193,6 +194,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
     pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
+    setGhosts([])
     setSubmitted(loadSubmittedSet(day))
     const onStorage = (e: StorageEvent) => {
       if (e.key === SUB_PREFIX + day) setSubmitted(loadSubmittedSet(day))
@@ -211,13 +213,20 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
   const applyDeleteLocal = useCallback((songId: string, targetDay?: string) => {
     const d = targetDay || day
+    const localList = loadLocalSongs(d)
+    const found =
+      (d === day ? songsRef.current.find(s => s.id === songId) : undefined) ??
+      localList.find(s => s.id === songId)
     const del = loadDeletedSet(d)
     del.add(songId)
     saveDeletedSet(d, del)
-    const existing = loadLocalSongs(d).filter(s => s.id !== songId)
+    const existing = localList.filter(s => s.id !== songId)
     saveLocalSongs(d, existing)
     if (d === day) {
       setSongs(prev => prev.filter(s => s.id !== songId))
+      if (found?.ytId) {
+        setGhosts(prev => (prev.some(g => g.id === found.id) ? prev : [...prev, found]))
+      }
     }
   }, [day])
 
@@ -273,6 +282,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
       const del = loadDeletedSet(day)
       const dbActive: SongWish[] = []
+      const dbGhosts: SongWish[] = []
       const dbIds = new Set<string>()
 
       for (const r of data) {
@@ -281,6 +291,20 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         dbIds.add(sid)
         if (r.deleted) {
           del.add(sid)
+          const ytId = r.yt_id ? String(r.yt_id).trim() : ''
+          const ttl = String(r.title ?? '').trim()
+          if (ytId && ttl && ttl !== '(törölve)' && ttl !== '(lejátszva)') {
+            dbGhosts.push({
+              id: sid,
+              day,
+              kind: 'music',
+              title: ttl,
+              by: String(r.requester ?? ''),
+              ytId,
+              votes: Number(r.votes) || 1,
+              at: Date.parse(r.created_at) || Date.now(),
+            })
+          }
           continue
         }
         if (del.has(sid)) continue
@@ -296,6 +320,17 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         })
       }
       saveDeletedSet(day, del)
+
+      setGhosts(prev => {
+        const next: SongWish[] = [...dbGhosts]
+        for (const old of prev) {
+          if (!old.ytId || next.some(x => x.id === old.id)) continue
+          if (old.id.startsWith('dc-') || !dbIds.has(old.id)) {
+            next.push(old)
+          }
+        }
+        return next
+      })
 
       setSongs(prev => {
         let next: SongWish[] = []
@@ -327,13 +362,13 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       }
       if (!res.songs.length) return
       const del = loadDeletedSet(day)
+      const dcGhosts: SongWish[] = []
       setSongs(prev => {
         let next = prev.filter(s => !del.has(s.id))
         for (const ds of res.songs) {
-          if (del.has(ds.id)) continue
           // Napváltáskor a korábbi napokról beküldött elemek törlődnek/nem jelennek meg a mai napon!
           if (ds.day !== day) continue
-          next = mergeSong(next, {
+          const item: SongWish = {
             id: ds.id,
             day,
             kind: 'music',
@@ -342,11 +377,25 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
             ytId: ds.ytId,
             votes: ds.votes,
             at: ds.at,
-          }, del)
+          }
+          if (del.has(ds.id)) {
+            if (ds.ytId) dcGhosts.push(item)
+            continue
+          }
+          next = mergeSong(next, item, del)
         }
         saveLocalSongs(day, next)
         return next
       })
+      if (dcGhosts.length > 0) {
+        setGhosts(prev => {
+          const next = [...prev]
+          for (const g of dcGhosts) {
+            if (!next.some(x => x.id === g.id)) next.push(g)
+          }
+          return next
+        })
+      }
     }
 
     const syncAll = async () => {
@@ -670,7 +719,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, channels: discordChannels, hasSubmittedInBreak, addSong, removeSong, finishSong, clearAllSongs }
+  return { songs, ghosts, channels: discordChannels, hasSubmittedInBreak, addSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default memo(function Jukebox({
@@ -680,6 +729,8 @@ export default memo(function Jukebox({
   tv,
   sound,
   christmas,
+  playedIds,
+  nowPlayingId,
 }: {
   schoolId?: string
   day: string
@@ -687,8 +738,11 @@ export default memo(function Jukebox({
   tv?: boolean
   sound?: boolean
   christmas?: boolean
+  playedIds?: Set<string>
+  nowPlayingId?: string
 }) {
   const { songs, channels, hasSubmittedInBreak, addSong } = useJukebox(schoolId, day, sound, breakKey)
+  const queue = songs.filter(s => !playedIds?.has(s.id) || s.id === nowPlayingId)
   const weekend = isJukeboxWeekend(day)
   const [by, setBy] = useState(() => {
     try { return localStorage.getItem('csengeto-arena-name') ?? '' } catch { return '' }
@@ -807,8 +861,8 @@ export default memo(function Jukebox({
 
   // TV nézet: kompakt Következő számok kártya (hétvégén elrejtve)
   if (tv) {
-    if (weekend || songs.length === 0) return null
-    const top3 = songs.slice(0, 3)
+    if (weekend || queue.length === 0) return null
+    const top3 = queue.slice(0, 3)
     return (
       <section className="panel jukebox-tv">
         <div className="tag" style={{ marginBottom: 4 }}>
@@ -823,7 +877,7 @@ export default memo(function Jukebox({
                 {s.by && <small>küldi: {s.by}</small>}
               </div>
               <span className="jb-votes">
-                {i === 0 ? '▶ Következő' : `#${i + 1}`}
+                {s.id === nowPlayingId ? '▶ Most szól' : i === 0 ? '▶ Következő' : `#${i + 1}`}
               </span>
             </li>
           ))}
@@ -970,7 +1024,7 @@ export default memo(function Jukebox({
         </form>
       )}
 
-      {songs.length === 0 ? (
+      {queue.length === 0 ? (
         <div className="jb-empty">
           <span>
             📻 Még nincs mai diák-kívánság — reggel 07:45-től, a szünetekben és tanítás után 15:00-ig a <b>SuliRádió</b> gondoskodik a zenéről! Küldj be egy YouTube-linket, hogy a te zenéd szóljon következőnek!
@@ -978,7 +1032,7 @@ export default memo(function Jukebox({
         </div>
       ) : (
         <ol className="jb-list">
-          {songs.slice(0, 8).map((s, i) => {
+          {queue.slice(0, 8).map((s, i) => {
             const ytWatchUrl = s.ytId
               ? `https://youtu.be/${s.ytId}`
               : `https://www.youtube.com/results?search_query=${encodeURIComponent(s.title)}`
@@ -1009,7 +1063,7 @@ export default memo(function Jukebox({
                           fontWeight: 600,
                         }}
                       >
-                        {i === 0 ? '▶ Következő a sorban' : `⏳ #${i + 1} a sorban`}
+                        {s.id === nowPlayingId ? '▶ Most szól' : i === 0 ? '▶ Következő a sorban' : `⏳ #${i + 1} a sorban`}
                       </span>
                       <a
                         href={ytWatchUrl}

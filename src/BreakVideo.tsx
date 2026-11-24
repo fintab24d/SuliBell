@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import type { SongWish } from './Jukebox'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
-import { pickRadioTrack, type RadioTrack } from './lib/radio'
+import { serverNowMs } from './lib/serverTime'
+import type { MusicSyncResult } from './lib/useMusicSync'
 
 const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
   const d = ((i * 7 + 3) % 13) / 10
@@ -22,9 +22,9 @@ export function MusicVisualizer({
   radioMode = false,
   initialMuted = false,
   compact = false,
+  slotStartMs,
+  slotEndMs,
   onClose,
-  onFinished,
-  onNextRadio,
 }: {
   title: string
   by?: string
@@ -32,9 +32,9 @@ export function MusicVisualizer({
   radioMode?: boolean
   initialMuted?: boolean
   compact?: boolean
+  slotStartMs?: number
+  slotEndMs?: number
   onClose?: () => void
-  onFinished?: () => void
-  onNextRadio?: () => void
 }) {
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(initialMuted)
@@ -42,7 +42,10 @@ export function MusicVisualizer({
   const volumeRef = useRef(50)
   volumeRef.current = volume
   const [reloadNonce, setReloadNonce] = useState(0)
+  const [waitingNext, setWaitingNext] = useState(false)
+  const [waitRemSec, setWaitRemSec] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const lastSeekAtRef = useRef(0)
 
   const sendYtCmd = useCallback((func: string, args: unknown[] = []) => {
     const win = iframeRef.current?.contentWindow
@@ -71,13 +74,27 @@ export function MusicVisualizer({
     setTimeout(forceUnmuteAndPlay, 1600)
   }, [muted, forceUnmuteAndPlay])
 
-  // Lejátszási idő követése és befejezés (YouTube "infoDelivery" / "onStateChange" események)
+  // Lejátszási idő követése és drift-korrekció a központi szerveridő alapján
   const [time, setTime] = useState(0)
   const lyrics = useLyrics(title)
-  const finishedFiredRef = useRef(false)
+
   useEffect(() => {
-    finishedFiredRef.current = false
-  }, [ytId])
+    setWaitingNext(false)
+    lastSeekAtRef.current = 0
+  }, [ytId, slotStartMs])
+
+  useEffect(() => {
+    if (!waitingNext || slotEndMs === undefined) {
+      setWaitRemSec(0)
+      return
+    }
+    const tick = () => {
+      setWaitRemSec(Math.max(0, Math.ceil((slotEndMs - serverNowMs()) / 1000)))
+    }
+    tick()
+    const id = window.setInterval(tick, 500)
+    return () => window.clearInterval(id)
+  }, [waitingNext, slotEndMs])
 
   useEffect(() => {
     if (!ytId) return
@@ -87,25 +104,35 @@ export function MusicVisualizer({
       try {
         const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
         const t = d?.info?.currentTime
-        if (typeof t === 'number') setTime(t)
+        if (typeof t === 'number') {
+          setTime(t)
+          if (slotStartMs !== undefined) {
+            const expected = (serverNowMs() - slotStartMs) / 1000
+            const nowMs = Date.now()
+            if (expected >= 0 && Math.abs(t - expected) > 2.5 && nowMs - lastSeekAtRef.current >= 4000) {
+              lastSeekAtRef.current = nowMs
+              sendYtCmd('seekTo', [expected, true])
+            }
+          }
+        }
 
         const state = d?.info?.playerState ?? (d?.event === 'onStateChange' ? d?.info : undefined)
-        if (state === 0 && !finishedFiredRef.current) {
-          finishedFiredRef.current = true
-          onFinished?.()
+        if (state === 0 && (slotEndMs === undefined || serverNowMs() < slotEndMs - 500)) {
+          setWaitingNext(true)
         }
       } catch { /* nem JSON */ }
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
-  }, [ytId, onFinished])
+  }, [ytId, slotStartMs, slotEndMs, sendYtCmd])
+
   const lyricIdx = currentLyricIndex(lyrics, time)
   const lyricNow = lyricIdx >= 0 ? lyrics[lyricIdx].text : ''
   const lyricNext = lyrics[lyricIdx + 1]?.text ?? ''
 
   // Ha a böngésző az első kattintásig visszafogná a hangot, az oldal bárhol történő első érintésére felhangosítjuk
   useEffect(() => {
-    if (muted || !playing) return
+    if (muted || !playing || waitingNext) return
     const unlock = () => {
       forceUnmuteAndPlay()
     }
@@ -115,20 +142,11 @@ export function MusicVisualizer({
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
     }
-  }, [muted, playing, forceUnmuteAndPlay])
+  }, [muted, playing, waitingNext, forceUnmuteAndPlay])
 
   const togglePlay = () => {
     const next = !playing
     setPlaying(next)
-    if (ytId) {
-      if (next) {
-        sendYtCmd('unMute')
-        sendYtCmd('setVolume', [volume])
-        sendYtCmd('playVideo')
-      } else {
-        sendYtCmd('pauseVideo')
-      }
-    }
   }
 
   const toggleMute = () => {
@@ -140,11 +158,6 @@ export function MusicVisualizer({
       } else {
         setPlaying(true)
         setReloadNonce(n => n + 1)
-        setTimeout(() => {
-          sendYtCmd('unMute')
-          sendYtCmd('setVolume', [volume])
-          sendYtCmd('playVideo')
-        }, 200)
       }
     }
   }
@@ -164,22 +177,29 @@ export function MusicVisualizer({
     }
   }
 
+  // Indítási másodperc: kizárólag váltáskor / újracsatoláskor számolódik újra
+  const startSec = useMemo(() => {
+    if (!playing || slotStartMs === undefined) return 0
+    return Math.max(0, Math.floor((serverNowMs() - slotStartMs) / 1000))
+  }, [ytId, reloadNonce, playing, slotStartMs])
+
   const origin = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
+  const startParam = startSec > 0 ? `&start=${startSec}` : ''
   const ytSrc = ytId
-    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&rel=0&playsinline=1&enablejsapi=1&origin=${origin}`
+    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&rel=0&playsinline=1&enablejsapi=1${startParam}&origin=${origin}`
     : undefined
 
   const thumbUrl = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : undefined
-  const active = playing && !muted
+  const active = playing && !muted && !waitingNext
 
   return (
-    <div className={`music-viz ${compact ? 'compact' : ''} ${playing ? 'is-playing' : 'is-paused'}`}>
+    <div className={`music-viz ${compact ? 'compact' : ''} ${playing && !waitingNext ? 'is-playing' : 'is-paused'}`}>
       {/* Háttérben futó 240x200px-es audio motor a visualizer réteg mögött (YouTube >=200x200px előírás miatt) */}
       <div className="bg-audio-engine" aria-hidden="true">
-        {ytSrc && playing && (
+        {ytSrc && playing && !waitingNext && (
           <iframe
             ref={iframeRef}
-            key={`${ytId}-${reloadNonce}`}
+            key={`${ytId}-${slotStartMs ?? 0}-${reloadNonce}`}
             src={ytSrc}
             title={title}
             allow="autoplay; encrypted-media; picture-in-picture"
@@ -196,7 +216,7 @@ export function MusicVisualizer({
           <div className="viz-disc-wrap">
             <div className="viz-ring r1" />
             <div className="viz-ring r2" />
-            <div className={`viz-disc ${playing ? 'spin' : ''}`}>
+            <div className={`viz-disc ${playing && !waitingNext ? 'spin' : ''}`}>
               {thumbUrl ? (
                 <img src={thumbUrl} alt="" className="viz-thumb" loading="lazy" />
               ) : (
@@ -211,7 +231,11 @@ export function MusicVisualizer({
             <div className="viz-status-row">
               <span className="viz-badge">
                 <span className="eq" aria-hidden="true"><i /><i /><i /></span>
-                {playing ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'MOST SZÓL A HÁTTÉRBEN') : 'SZÜNETELTETVE'}
+                {waitingNext
+                  ? `⏳ Következő szám hamarosan…${waitRemSec > 0 ? ` (${waitRemSec} mp)` : ''}`
+                  : playing
+                    ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'KÖZPONTI ÉLŐ LEJÁTSZÁS')
+                    : 'SZÜNETELTETVE (HELYI)'}
               </span>
               {radioMode ? (
                 <span className="pill viz-radio-pill">📻 SULIRÁDIÓ • AUTO-DJ</span>
@@ -225,7 +249,7 @@ export function MusicVisualizer({
                 by ? (
                   <span>SuliRádió • Diákajánlás: <b>{by}</b> (ha beküldesz egy számot, az szól következőnek!)</span>
                 ) : (
-                  <span>SuliRádió • Automatikus szüneti zene (ha beküldesz egy számot, az szól következőnek!)</span>
+                  <span>SuliRádió • Központi szüneti műsor (mindenkinél egyszerre szól)</span>
                 )
               ) : by ? (
                 <span>Küldi: <b>{by}</b></span>
@@ -236,7 +260,7 @@ export function MusicVisualizer({
 
             <div className="viz-controls">
               <button type="button" className="viz-btn" onClick={togglePlay}>
-                {playing ? '⏸ Szünet' : '▶ Lejátszás'}
+                {playing ? '⏸ Szünet' : '▶ Csatlakozás élőhöz'}
               </button>
               <button
                 type="button"
@@ -262,21 +286,12 @@ export function MusicVisualizer({
                   onClick={() => {
                     setMuted(false)
                     setPlaying(true)
+                    setWaitingNext(false)
                     setReloadNonce(n => n + 1)
                   }}
                   title="Ha a böngésző letiltotta az automatikus hangot, kattints ide a hangos újraindításhoz"
                 >
-                  🔄 Hang frissítése
-                </button>
-              )}
-              {onNextRadio && (
-                <button
-                  type="button"
-                  className="viz-btn"
-                  onClick={onNextRadio}
-                  title="Ugrás a következő rádiószámra"
-                >
-                  ⏭ Következő
+                  🔄 Szinkron / Hang
                 </button>
               )}
               {onClose && (
@@ -289,7 +304,7 @@ export function MusicVisualizer({
         </div>
 
         {/* Időzített dalszöveg (csak ha elérhető) */}
-        {lyrics.length > 0 && (
+        {lyrics.length > 0 && !waitingNext && (
           <div className="viz-lyrics" aria-live="polite">
             <p key={`n${lyricIdx}`} className="now">{lyricNow || '♪'}</p>
             {lyricNext && <p className="next">{lyricNext}</p>}
@@ -297,7 +312,7 @@ export function MusicVisualizer({
         )}
 
         {/* Neon Spektrum Hullám Visualizer */}
-        <div className={`viz-bars ${active ? 'live' : playing ? 'soft' : 'idle'}`} aria-hidden="true">
+        <div className={`viz-bars ${active ? 'live' : playing && !waitingNext ? 'soft' : 'idle'}`} aria-hidden="true">
           {VIZ_BARS.map((b, idx) => (
             <span
               key={idx}
@@ -318,66 +333,35 @@ export function MusicVisualizer({
 }
 
 /**
- * Szünetben szóló zenelejátszó:
- * A diákok által beküldött zenék érkezési sorrendben szólnak a Neon Visualizerrel;
- * ha épp nincs beküldött szám, automatikusan elindul a beépített SuliRádió (Auto-DJ) rotáció.
+ * Szünetben szóló központi zenelejátszó:
+ * Szerveridőhöz szinkronizált idővonalon játssza le a diák-kívánságokat és a SuliRádiót,
+ * így minden kijelzőn és telefonon ugyanaz a dal, ugyanannál a másodpercnél szól.
  */
 export default function BreakVideo({
-  wishes = [],
-  breakKey,
-  day = '',
-  christmas = false,
-  tv = false,
+  sync,
+  tv: _tv = false,
   soundOn: _soundOn,
   userMuted = false,
-  extraRadioTracks,
-  onFinished,
 }: {
-  wishes?: SongWish[]
-  breakKey: string
-  day?: string
-  christmas?: boolean
+  sync: MusicSyncResult
   tv?: boolean
   soundOn?: boolean
   userMuted?: boolean
-  extraRadioTracks?: RadioTrack[]
-  onFinished?: (songId: string) => void
 }) {
-  const [radioStep, setRadioStep] = useState(0)
-  useEffect(() => {
-    setRadioStep(0)
-  }, [breakKey])
-
-  const playableWishes = wishes.filter(w => !!w.ytId)
-
-  if (playableWishes.length > 0) {
-    const chosen = playableWishes[0]
-
-    return (
-      <section className="panel full vid music-panel">
-        <MusicVisualizer
-          title={chosen.title}
-          by={chosen.by}
-          ytId={chosen.ytId}
-          initialMuted={userMuted}
-          onFinished={() => onFinished?.(chosen.id)}
-        />
-      </section>
-    )
-  }
-
-  const track = pickRadioTrack(day || 'today', breakKey, radioStep, christmas, extraRadioTracks)
+  if (!sync.current) return null
+  const { kind, track } = sync.current
+  const radioMode = kind !== 'wish'
 
   return (
     <section className="panel full vid music-panel">
       <MusicVisualizer
         title={track.title}
-        by={track.addedBy}
+        by={track.by}
         ytId={track.ytId}
-        radioMode
+        radioMode={radioMode}
         initialMuted={userMuted}
-        onFinished={() => setRadioStep(n => n + 1)}
-        onNextRadio={tv ? undefined : () => setRadioStep(n => n + 1)}
+        slotStartMs={sync.slotStartMs}
+        slotEndMs={sync.slotEndMs}
       />
     </section>
   )

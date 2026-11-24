@@ -18,6 +18,7 @@ export interface RadioTrack {
   tier?: RadioTier
   addedBy?: string
   addedAt?: number
+  dur?: number
 }
 
 export const RADIO_PREFIX = '__RADIO__:'
@@ -47,6 +48,10 @@ function normalizeCustomTracks(raw: unknown): RadioTrack[] {
       typeof it.addedAt === 'number' && Number.isFinite(it.addedAt) && it.addedAt > 0
         ? it.addedAt
         : undefined
+    const dur =
+      typeof it.dur === 'number' && Number.isFinite(it.dur) && it.dur >= 30 && it.dur <= 900
+        ? Math.round(it.dur)
+        : undefined
     out.push({
       id: typeof it.id === 'string' && it.id.trim() ? it.id.trim() : `r-custom-${ytId}`,
       title,
@@ -54,6 +59,7 @@ function normalizeCustomTracks(raw: unknown): RadioTrack[] {
       tier: 'custom',
       ...(addedBy ? { addedBy } : {}),
       ...(addedAt ? { addedAt } : {}),
+      ...(dur !== undefined ? { dur } : {}),
     })
   }
   return out
@@ -138,46 +144,46 @@ export function isTrackInRadio(
 
 /** Állandó kedvencek: minden tanítási napon szerepelnek a SuliRádió műsorában (10 sláger). */
 export const CORE_RADIO_TRACKS: RadioTrack[] = [
-  { id: 'r-olyan-o', title: 'Bagossy Brothers Company – Olyan Ő', ytId: 'lEU011dGjbk', artist: 'Bagossy Brothers Company', tier: 'core' },
-  { id: 'r-nem-tudja', title: 'Follow The Flow – Nem tudja senki', ytId: 'lLZ-sHGcgjo', artist: 'Follow The Flow', tier: 'core' },
-  { id: 'r-valami-van', title: 'Halott Pénz – Valami van a levegőben', ytId: 'ArTbyFQpQ_8', artist: 'Halott Pénz', tier: 'core' },
-  { id: 'r-rakpart', title: 'Wellhello – Rakpart', ytId: 'KoViCHyvZLk', artist: 'Wellhello', tier: 'core' },
-  { id: 'r-aprilis', title: 'Rúzsa Magdi – Április', ytId: 'cu7ft2Z2v3c', artist: 'Rúzsa Magdi', tier: 'core' },
-  { id: 'r-3korty', title: 'Azahriah – 3korty (Clean Version)', ytId: 'rPDhFKvTO7o', artist: 'Azahriah', tier: 'core' },
-  { id: 'r-meselek', title: '4S Street – Mesélek a bornak', ytId: '0ElyzQ5TeCA', artist: '4S Street', tier: 'core' },
-  { id: 'r-kismadar', title: 'Republic – Szállj el kismadár', ytId: '2LkUu85JLAc', artist: 'Republic', tier: 'core' },
-  { id: 'r-santamaria', title: 'Neoton Família – Santa Maria', ytId: 'DjRD1qmUkCw', artist: 'Neoton Família', tier: 'core' },
-  { id: 'r-blinding', title: 'The Weeknd – Blinding Lights', ytId: 'fHI8X4OXluQ', artist: 'The Weeknd', tier: 'core' },
+  { id: 'r-olyan-o', title: 'Bagossy Brothers Company – Olyan Ő', ytId: 'lEU011dGjbk', artist: 'Bagossy Brothers Company', tier: 'core', dur: 231 },
+  { id: 'r-nem-tudja', title: 'Follow The Flow – Nem tudja senki', ytId: 'lLZ-sHGcgjo', artist: 'Follow The Flow', tier: 'core', dur: 219 },
+  { id: 'r-valami-van', title: 'Halott Pénz – Valami van a levegőben', ytId: 'ArTbyFQpQ_8', artist: 'Halott Pénz', tier: 'core', dur: 212 },
+  { id: 'r-rakpart', title: 'Wellhello – Rakpart', ytId: 'KoViCHyvZLk', artist: 'Wellhello', tier: 'core', dur: 228 },
+  { id: 'r-aprilis', title: 'Rúzsa Magdi – Április', ytId: 'cu7ft2Z2v3c', artist: 'Rúzsa Magdi', tier: 'core', dur: 202 },
+  { id: 'r-3korty', title: 'Azahriah – 3korty (Clean Version)', ytId: 'rPDhFKvTO7o', artist: 'Azahriah', tier: 'core', dur: 196 },
+  { id: 'r-meselek', title: '4S Street – Mesélek a bornak', ytId: '0ElyzQ5TeCA', artist: '4S Street', tier: 'core', dur: 217 },
+  { id: 'r-kismadar', title: 'Republic – Szállj el kismadár', ytId: '2LkUu85JLAc', artist: 'Republic', tier: 'core', dur: 298 },
+  { id: 'r-santamaria', title: 'Neoton Família – Santa Maria', ytId: 'DjRD1qmUkCw', artist: 'Neoton Família', tier: 'core', dur: 272 },
+  { id: 'r-blinding', title: 'The Weeknd – Blinding Lights', ytId: 'fHI8X4OXluQ', artist: 'The Weeknd', tier: 'core', dur: 203 },
 ]
 
 /** Naponta részben cserélődő SuliRádió-katalógus (26 sláger — naponta 10 aktív, napi 4 új dallal). */
 export const ROTATING_RADIO_TRACKS: RadioTrack[] = [
-  { id: 'r-visszajovok', title: 'Bagossy Brothers Company – Visszajövök', ytId: 'Qjmj9aNqgG8', artist: 'Bagossy Brothers Company', tier: 'daily' },
-  { id: 'r-maradok-tavol', title: 'Follow The Flow – Maradok távol', ytId: 'gcCiQXlNJh4', artist: 'Follow The Flow', tier: 'daily' },
-  { id: 'r-darabokra', title: 'Halott Pénz – Darabokra törted a szívem', ytId: 'yNnFGRXayS0', artist: 'Halott Pénz', tier: 'daily' },
-  { id: 'r-elnunk-kellett', title: 'Halott Pénz – Élnünk kellett volna', ytId: 'xRGNzR34FKU', artist: 'Halott Pénz', tier: 'daily' },
-  { id: 'r-ilyenek', title: 'Ákos – Ilyenek voltunk', ytId: 'URbYei513Y0', artist: 'Ákos', tier: 'daily' },
-  { id: 'r-kek-hullam', title: 'Carson Coma – Kék Hullám Kemping', ytId: 'GN5FNPdfBmk', artist: 'Carson Coma', tier: 'daily' },
-  { id: 'r-eso', title: 'Margaret Island – Eső', ytId: 'TNEJm6EoGCY', artist: 'Margaret Island', tier: 'daily' },
-  { id: 'r-legnagyobb-hos', title: 'Honeybeast – A legnagyobb hős', ytId: '0ShzHUq_ejI', artist: 'Honeybeast', tier: 'daily' },
-  { id: 'r-kedvesem', title: 'ByeAlex – Kedvesem', ytId: 'cBOmcnHMJ3E', artist: 'ByeAlex', tier: 'daily' },
-  { id: 'r-lelekdonor', title: 'Caramel – Lélekdonor', ytId: 'Ed-KHp9MJ9o', artist: 'Caramel', tier: 'daily' },
-  { id: 'r-kiralylany', title: 'Hooligans – Királylány', ytId: '89ikVC_Pbdo', artist: 'Hooligans', tier: 'daily' },
-  { id: 'r-ahol-osszeer', title: 'Blahalouisiana – Ahol összeér', ytId: 'VExlAf6Rzyw', artist: 'Blahalouisiana', tier: 'daily' },
-  { id: 'r-valahol-itt', title: 'Bagossy Brothers Company – Valahol itt', ytId: 'BkPRZgk1LDs', artist: 'Bagossy Brothers Company', tier: 'daily' },
-  { id: 'r-a-kor', title: 'Edda Művek – A kör', ytId: 'xtOlSfGIkjc', artist: 'Edda Művek', tier: 'daily' },
-  { id: 'r-jeg-dupla', title: 'Charlie – Jég dupla whiskyvel', ytId: 'B5Deno4mqpA', artist: 'Charlie', tier: 'daily' },
-  { id: 'r-most-mulik', title: 'Quimby – Most múlik pontosan', ytId: 'bbF7VVsKYIw', artist: 'Quimby', tier: 'daily' },
-  { id: 'r-videki-sanzon', title: 'Magna Cum Laude – Vidéki sanzon', ytId: '0ybB92b_iM0', artist: 'Magna Cum Laude', tier: 'daily' },
-  { id: 'r-gabriel', title: 'Rúzsa Magdi – Gábriel', ytId: 'PvVVvi16ejU', artist: 'Rúzsa Magdi', tier: 'daily' },
-  { id: 'r-lehetek', title: 'Vad Fruttik – Lehetek én is', ytId: 'SY4_HO1pNyA', artist: 'Vad Fruttik', tier: 'daily' },
-  { id: 'r-zene-nelkul', title: 'Máté Péter – Zene nélkül mit érek én', ytId: 'kJUL_hwA5mY', artist: 'Máté Péter', tier: 'daily' },
-  { id: 'r-hajolj-bele', title: 'Péterfy Bori & Love Band – Hajolj bele a hajamba', ytId: '9Qf6vmELIhI', artist: 'Péterfy Bori & Love Band', tier: 'daily' },
-  { id: 'r-bodotta', title: 'Honeybeast – Bódottá', ytId: 'nsbPs5_V9os', artist: 'Honeybeast', tier: 'daily' },
-  { id: 'r-egyszer', title: 'Rúzsa Magdi – Egyszer', ytId: 'WiK4zt5UVMI', artist: 'Rúzsa Magdi', tier: 'daily' },
-  { id: 'r-viva-la-vida', title: 'Coldplay – Viva La Vida', ytId: 'dvgZkm1xWPE', artist: 'Coldplay', tier: 'daily' },
-  { id: 'r-levitating', title: 'Dua Lipa – Levitating', ytId: 'TUVcZfQe-Kw', artist: 'Dua Lipa', tier: 'daily' },
-  { id: 'r-dont-stop', title: "Queen – Don't Stop Me Now", ytId: 'HgzGwKwLmgM', artist: 'Queen', tier: 'daily' },
+  { id: 'r-visszajovok', title: 'Bagossy Brothers Company – Visszajövök', ytId: 'Qjmj9aNqgG8', artist: 'Bagossy Brothers Company', tier: 'daily', dur: 267 },
+  { id: 'r-maradok-tavol', title: 'Follow The Flow – Maradok távol', ytId: 'gcCiQXlNJh4', artist: 'Follow The Flow', tier: 'daily', dur: 186 },
+  { id: 'r-darabokra', title: 'Halott Pénz – Darabokra törted a szívem', ytId: 'yNnFGRXayS0', artist: 'Halott Pénz', tier: 'daily', dur: 207 },
+  { id: 'r-elnunk-kellett', title: 'Halott Pénz – Élnünk kellett volna', ytId: 'xRGNzR34FKU', artist: 'Halott Pénz', tier: 'daily', dur: 311 },
+  { id: 'r-ilyenek', title: 'Ákos – Ilyenek voltunk', ytId: 'URbYei513Y0', artist: 'Ákos', tier: 'daily', dur: 201 },
+  { id: 'r-kek-hullam', title: 'Carson Coma – Kék Hullám Kemping', ytId: 'GN5FNPdfBmk', artist: 'Carson Coma', tier: 'daily', dur: 194 },
+  { id: 'r-eso', title: 'Margaret Island – Eső', ytId: 'TNEJm6EoGCY', artist: 'Margaret Island', tier: 'daily', dur: 211 },
+  { id: 'r-legnagyobb-hos', title: 'Honeybeast – A legnagyobb hős', ytId: '0ShzHUq_ejI', artist: 'Honeybeast', tier: 'daily', dur: 217 },
+  { id: 'r-kedvesem', title: 'ByeAlex – Kedvesem', ytId: 'cBOmcnHMJ3E', artist: 'ByeAlex', tier: 'daily', dur: 204 },
+  { id: 'r-lelekdonor', title: 'Caramel – Lélekdonor', ytId: 'Ed-KHp9MJ9o', artist: 'Caramel', tier: 'daily', dur: 259 },
+  { id: 'r-kiralylany', title: 'Hooligans – Királylány', ytId: '89ikVC_Pbdo', artist: 'Hooligans', tier: 'daily', dur: 215 },
+  { id: 'r-ahol-osszeer', title: 'Blahalouisiana – Ahol összeér', ytId: 'VExlAf6Rzyw', artist: 'Blahalouisiana', tier: 'daily', dur: 174 },
+  { id: 'r-valahol-itt', title: 'Bagossy Brothers Company – Valahol itt', ytId: 'BkPRZgk1LDs', artist: 'Bagossy Brothers Company', tier: 'daily', dur: 238 },
+  { id: 'r-a-kor', title: 'Edda Művek – A kör', ytId: 'xtOlSfGIkjc', artist: 'Edda Művek', tier: 'daily', dur: 275 },
+  { id: 'r-jeg-dupla', title: 'Charlie – Jég dupla whiskyvel', ytId: 'B5Deno4mqpA', artist: 'Charlie', tier: 'daily', dur: 275 },
+  { id: 'r-most-mulik', title: 'Quimby – Most múlik pontosan', ytId: 'bbF7VVsKYIw', artist: 'Quimby', tier: 'daily', dur: 206 },
+  { id: 'r-videki-sanzon', title: 'Magna Cum Laude – Vidéki sanzon', ytId: '0ybB92b_iM0', artist: 'Magna Cum Laude', tier: 'daily', dur: 362 },
+  { id: 'r-gabriel', title: 'Rúzsa Magdi – Gábriel', ytId: 'PvVVvi16ejU', artist: 'Rúzsa Magdi', tier: 'daily', dur: 238 },
+  { id: 'r-lehetek', title: 'Vad Fruttik – Lehetek én is', ytId: 'SY4_HO1pNyA', artist: 'Vad Fruttik', tier: 'daily', dur: 240 },
+  { id: 'r-zene-nelkul', title: 'Máté Péter – Zene nélkül mit érek én', ytId: 'kJUL_hwA5mY', artist: 'Máté Péter', tier: 'daily', dur: 174 },
+  { id: 'r-hajolj-bele', title: 'Péterfy Bori & Love Band – Hajolj bele a hajamba', ytId: '9Qf6vmELIhI', artist: 'Péterfy Bori & Love Band', tier: 'daily', dur: 165 },
+  { id: 'r-bodotta', title: 'Honeybeast – Bódottá', ytId: 'nsbPs5_V9os', artist: 'Honeybeast', tier: 'daily', dur: 219 },
+  { id: 'r-egyszer', title: 'Rúzsa Magdi – Egyszer', ytId: 'WiK4zt5UVMI', artist: 'Rúzsa Magdi', tier: 'daily', dur: 231 },
+  { id: 'r-viva-la-vida', title: 'Coldplay – Viva La Vida', ytId: 'dvgZkm1xWPE', artist: 'Coldplay', tier: 'daily', dur: 242 },
+  { id: 'r-levitating', title: 'Dua Lipa – Levitating', ytId: 'TUVcZfQe-Kw', artist: 'Dua Lipa', tier: 'daily', dur: 230 },
+  { id: 'r-dont-stop', title: "Queen – Don't Stop Me Now", ytId: 'HgzGwKwLmgM', artist: 'Queen', tier: 'daily', dur: 215 },
 ]
 
 /** Teljes beépített SuliRádió katalógus (36 ellenőrzött sláger). */
@@ -185,9 +191,9 @@ export const DEFAULT_RADIO_TRACKS: RadioTrack[] = [...CORE_RADIO_TRACKS, ...ROTA
 
 /** Ünnepi / téli szüneti extra dalok a SuliRádió rotációjához (3 dal). */
 export const XMAS_RADIO_TRACKS: RadioTrack[] = [
-  { id: 'r-wham', title: 'Wham! – Last Christmas', ytId: 'E8gmARGvPlI', artist: 'Wham!', tier: 'xmas' },
-  { id: 'r-mariah', title: 'Mariah Carey – All I Want For Christmas Is You', ytId: 'yXQViqx6GMY', artist: 'Mariah Carey', tier: 'xmas' },
-  { id: 'r-shakin', title: 'Shakin’ Stevens – Merry Christmas Everyone', ytId: 'N-PyWfVkjZc', artist: 'Shakin’ Stevens', tier: 'xmas' },
+  { id: 'r-wham', title: 'Wham! – Last Christmas', ytId: 'E8gmARGvPlI', artist: 'Wham!', tier: 'xmas', dur: 278 },
+  { id: 'r-mariah', title: 'Mariah Carey – All I Want For Christmas Is You', ytId: 'yXQViqx6GMY', artist: 'Mariah Carey', tier: 'xmas', dur: 235 },
+  { id: 'r-shakin', title: 'Shakin’ Stevens – Merry Christmas Everyone', ytId: 'N-PyWfVkjZc', artist: 'Shakin’ Stevens', tier: 'xmas', dur: 221 },
 ]
 
 const DAILY_ROTATING_COUNT = 10
