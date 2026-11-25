@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as PE } from 'react'
 import { botTarget, H, newCatch, stepCatch, W, type C } from './lib/catch'
-import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
 import SnakeGame from './SnakeGame'
 import { useArenaLeaderboard } from './Arena'
 import { getChampionBadge, useChampions } from './lib/useChampions'
+import { focusPlayerProfile, usePlayerProfile } from './lib/usePlayerProfile'
 
 
 export type Game = 'snake' | 'halloween' | 'christmas' | 'easter' | 'none'
@@ -19,7 +19,7 @@ const TH = {
 } as const
 
 /** Ünnepi fogó-játék (Halloween, Karácsony, Húsvét). Egér / ujj / nyilak mozgatják a szereplőt; a TV-n és amíg senki nem játszik, a gép játszik. */
-function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 'easter' }) {
+function Catch({ tv, theme, schoolId }: { tv: boolean; theme: 'halloween' | 'christmas' | 'easter'; schoolId?: string }) {
   const T = TH[theme]
   const cv = useRef<HTMLCanvasElement>(null)
   const c = useRef<C>(newCatch())
@@ -30,27 +30,18 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
   const [best, setBest] = useState(() => { try { return +(localStorage.getItem(bk) ?? 0) } catch { return 0 } })
   const keys = useRef({ l: false, r: false })
   const wait = useRef(0)
-  const [playerName, setPlayerName] = useState(() => {
-    try {
-      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
-      return isAnonymousName(v) ? '' : v
-    } catch { return '' }
-  })
+  const profile = usePlayerProfile(schoolId)
+  const playerName = profile.valid ? profile.cleanName : ''
   const [nameErr, setNameErr] = useState('')
 
-  const savePlayerName = (v: string) => {
-    setPlayerName(v)
-    if (nameErr) {
-      const val = validatePlayerName(v, true)
-      if (val.valid) setNameErr('')
-    }
-    try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
-  }
+  useEffect(() => {
+    if (profile.valid && nameErr) setNameErr('')
+  }, [profile.valid, nameErr])
 
   const start = () => {
-    const val = validatePlayerName(playerName, true)
-    if (!val.valid) {
-      setNameErr(val.error || 'A játékhoz add meg a neved!')
+    if (!profile.valid) {
+      setNameErr(profile.validationError || 'A játékhoz előbb add meg a neved a Játékosprofil kártyán!')
+      focusPlayerProfile()
       return
     }
     setNameErr('')
@@ -131,27 +122,16 @@ function Catch({ tv, theme }: { tv: boolean; theme: 'halloween' | 'christmas' | 
       {tv && <div className="tvplay">📱 Játssz te is! Menj fel a <b>{location.host}</b> oldalra, vagy nyisd meg az alkalmazást.</div>}
       {!tv && mode !== 'play' && <div className="snakeover">
         {mode === 'over' && <b>Vége! {hud.score} pont</b>}
-        <div style={{ margin: '8px 0' }}>
-          <input
-            type="text"
-            placeholder="Osztály + név (pl. 10.A Dani) *"
-            value={playerName}
-            onChange={e => savePlayerName(e.target.value)}
-            maxLength={20}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: nameErr ? '1px solid #ff3b5c' : '1px solid rgba(255,255,255,0.25)',
-              background: 'rgba(0,0,0,0.5)',
-              color: '#fff',
-              textAlign: 'center',
-              fontSize: '0.9rem',
-              width: '80%',
-              maxWidth: 240,
-            }}
-          />
-          {nameErr && <small style={{ color: '#ff3b5c', display: 'block', marginTop: 4 }}>⚠️ {nameErr}</small>}
-        </div>
+        {!profile.valid && (
+          <div style={{ margin: '6px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <small style={{ color: '#ffb02e' }}>
+              🔒 {nameErr || 'A játékhoz előbb állítsd be a neved a Játékosprofil kártyán!'}
+            </small>
+            <button type="button" className="profile-chip-cta" onClick={() => focusPlayerProfile()}>
+              👤 Név megadása
+            </button>
+          </div>
+        )}
         <button className="cta" onClick={start}>{mode === 'over' ? 'Újra' : '▶ Játssz te is'}</button>
         <small>{T.hint}. Egér / ujj vagy nyilak</small></div>}
     </div>
@@ -223,6 +203,7 @@ export default function RestMode({
         {game === 'snake' && (
           <SnakeGame
             tv={tv}
+            schoolId={schoolId}
             championTier={myTier}
             sound={sound}
             onGameOver={(score, _apples, _diff, playerName) => {
@@ -231,7 +212,7 @@ export default function RestMode({
             }}
           />
         )}
-        {(game === 'halloween' || game === 'christmas' || game === 'easter') && <Catch tv={tv} theme={game} />}
+        {(game === 'halloween' || game === 'christmas' || game === 'easter') && <Catch tv={tv} theme={game} schoolId={schoolId} />}
       </div>
     </section>
   )

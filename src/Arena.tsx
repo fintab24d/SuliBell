@@ -2,9 +2,11 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { voterId } from './Poll'
-import { PLAYER_NAME_KEY, checkProfanity, isAnonymousName, validatePlayerName } from './lib/moderation'
+import { checkProfanity, isAnonymousName, validatePlayerName } from './lib/moderation'
 import SnakeGame from './SnakeGame'
 import { getChampionBadge, useChampions } from './lib/useChampions'
+import { normalizePlayerNameKey } from './lib/playerProfile'
+import { focusPlayerProfile, usePlayerProfile } from './lib/usePlayerProfile'
 
 export type ArenaMode = 'reflex' | 'quiz' | 'snake'
 
@@ -207,16 +209,24 @@ function saveLocalLb(day: string, list: LeaderEntry[]) {
 }
 
 function mergeLeaderboard(existing: LeaderEntry[], incoming: LeaderEntry): LeaderEntry[] {
-  const map = new Map<string, LeaderEntry>()
+  const byId = new Map<string, LeaderEntry>()
   for (const item of [...existing, incoming]) {
     if (!item || !item.name || isAnonymousName(item.name) || !checkProfanity(item.name).clean || item.score <= 0) continue
-    const key = `${item.playerId || item.name}-${item.mode}`
-    const prev = map.get(key)
-    if (!prev || item.score > prev.score) {
-      map.set(key, item)
+    const key = `${item.playerId || normalizePlayerNameKey(item.name)}-${item.mode}`
+    const prev = byId.get(key)
+    if (!prev || item.score > prev.score || (item.score === prev.score && item.at >= prev.at)) {
+      byId.set(key, item)
     }
   }
-  return Array.from(map.values())
+  const byName = new Map<string, LeaderEntry>()
+  for (const item of byId.values()) {
+    const nKey = `${normalizePlayerNameKey(item.name)}-${item.mode}`
+    const prev = byName.get(nKey)
+    if (!prev || item.score > prev.score || (item.score === prev.score && item.at < prev.at)) {
+      byName.set(nKey, item)
+    }
+  }
+  return Array.from(byName.values())
     .sort((a, b) => b.score - a.score || a.at - b.at)
     .slice(0, 24)
 }
@@ -527,16 +537,9 @@ export default memo(function Arena({
   const { champions, myTier, frameEnabled, toggleFrame, justWon, refresh: refreshChampions } = useChampions(schoolId, day)
   const [tab, setTab] = useState<ArenaMode>('reflex')
   const [raceTab, setRaceTab] = useState<'week' | 'month'>('week')
-  const [name, setName] = useState(() => {
-    try {
-      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
-      return isAnonymousName(v) ? '' : v
-    } catch {
-      return ''
-    }
-  })
+  const profile = usePlayerProfile(schoolId)
+  const name = profile.valid ? profile.cleanName : ''
   const [nameError, setNameError] = useState('')
-  const nameInputRef = useRef<HTMLInputElement>(null)
   const [openDuringLesson, setOpenDuringLesson] = useState(false)
 
   const [breakPlays, setBreakPlays] = useState<Record<string, number>>(() => loadBreakPlays(day))
@@ -590,14 +593,11 @@ export default memo(function Arena({
     setQIdx(0)
   }, [day])
 
-  const saveName = (v: string) => {
-    setName(v)
-    if (nameError) {
-      const val = validatePlayerName(v, true)
-      if (val.valid) setNameError('')
+  useEffect(() => {
+    if (profile.valid && nameError) {
+      setNameError('')
     }
-    try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
-  }
+  }, [profile.valid, nameError])
 
   // Reflex játék időzítő és célpont-generálás
   useEffect(() => {
@@ -652,10 +652,9 @@ export default memo(function Arena({
       )
       return
     }
-    const val = validatePlayerName(name, true)
-    if (!val.valid) {
-      setNameError(val.error || 'A játékhoz add meg a neved vagy osztályod!')
-      nameInputRef.current?.focus()
+    if (!profile.valid) {
+      setNameError(profile.validationError || 'A játékhoz add meg a neved a Játékosprofil kártyán!')
+      focusPlayerProfile()
       return
     }
     markBreakPlayed('reflex')
@@ -723,10 +722,9 @@ export default memo(function Arena({
       )
       return
     }
-    const val = validatePlayerName(name, true)
-    if (!val.valid) {
-      setNameError(val.error || 'A kvízhez add meg a neved vagy osztályod!')
-      nameInputRef.current?.focus()
+    if (!profile.valid) {
+      setNameError(profile.validationError || 'A kvízhez add meg a neved a Játékosprofil kártyán!')
+      focusPlayerProfile()
       return
     }
     markBreakPlayed('quiz')
@@ -868,16 +866,25 @@ export default memo(function Arena({
                 </button>
               </div>
               <div className="arena-name-wrap">
-                <input
-                  ref={nameInputRef}
-                  type="text"
-                  className={`arena-name ${nameError ? 'err' : ''}`}
-                  placeholder="Osztály + név (pl. 10.A Dani) *"
-                  maxLength={22}
-                  value={name}
-                  onChange={e => saveName(e.target.value)}
-                  aria-label="Játékosnév (kötelező)"
-                />
+                {profile.valid ? (
+                  <button
+                    type="button"
+                    className="profile-chip"
+                    onClick={() => focusPlayerProfile()}
+                    title="Játékosprofil szerkesztése"
+                  >
+                    <span>👤 {name}</span>
+                    <small>✏️</small>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="profile-chip-cta"
+                    onClick={() => focusPlayerProfile()}
+                  >
+                    👤 Név beállítása
+                  </button>
+                )}
               </div>
             </div>
 
@@ -915,10 +922,15 @@ export default memo(function Arena({
                     <div className="arena-over">
                       {rState === 'over' && <h3>🎉 Vége! Pontszámod: {rScore}</h3>}
                       <p>Kapd el a felvillanó ⚡ (+10) és ⭐ (+25) csempéket, de kerüld a 💣 bombát!</p>
-                      {!validatePlayerName(name, true).valid && (
-                        <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
-                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (9–13 + A, D, CG, P vagy E, pl. 10.A) a játék indításához!'}
-                        </p>
+                      {!profile.valid && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, margin: '4px 0' }}>
+                          <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: 0 }}>
+                            🔒 {profile.validationError || 'Add meg a neved a Játékosprofil kártyán a játék indításához!'}
+                          </p>
+                          <button type="button" className="profile-chip-cta" onClick={() => focusPlayerProfile()}>
+                            👤 Név megadása
+                          </button>
+                        </div>
                       )}
                       {reflexLocked ? (
                         <p style={{ color: '#facc15', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
@@ -981,10 +993,15 @@ export default memo(function Arena({
                     <div className="arena-over static">
                       {qState === 'over' && <h3>🎉 Szép munka! Pontszámod: {qScore}</h3>}
                       <p>Mindenki ugyanazt a napi feladatsort kapja! Helyes válasz: <b>+5 mp</b>, hibás válasz: <b>−10 mp</b>.</p>
-                      {!validatePlayerName(name, true).valid && (
-                        <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: '4px 0' }}>
-                          🔒 {validatePlayerName(name, true).error || 'Add meg az osztályod (9–13 + A, D, CG, P vagy E, pl. 10.A) a kvíz indításához!'}
-                        </p>
+                      {!profile.valid && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, margin: '4px 0' }}>
+                          <p style={{ color: '#ffb02e', fontSize: '0.85rem', margin: 0 }}>
+                            🔒 {profile.validationError || 'Add meg a neved a Játékosprofil kártyán a kvíz indításához!'}
+                          </p>
+                          <button type="button" className="profile-chip-cta" onClick={() => focusPlayerProfile()}>
+                            👤 Név megadása
+                          </button>
+                        </div>
                       )}
                       {quizLocked ? (
                         <p style={{ color: '#facc15', fontSize: '0.85rem', margin: '4px 0', fontWeight: 600 }}>
@@ -1038,9 +1055,7 @@ export default memo(function Arena({
                           ? '🎉 Tanítási szüneten kívül: korlátlan a játék!'
                           : null
                   }
-                  externalName={name}
-                  onExternalNameChange={saveName}
-                  hideNameInput
+                  schoolId={schoolId}
                   sound={sound}
                   onStartPlay={() => markBreakPlayed('snake')}
                   onGameOver={(pts) => {

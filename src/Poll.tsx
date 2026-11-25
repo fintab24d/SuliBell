@@ -5,13 +5,31 @@ import { APP_NAME } from './lib/brand'
 export type PollT = { id: string; question: string; options: string[] }
 const COL = ['var(--n-pink)', 'var(--n-cyan)', 'var(--n-amber)', 'var(--n-green)', 'var(--n-pink)', 'var(--n-cyan)']
 
-/** Névtelen szavazó-azonosító (csak ezen az eszközön él, hogy ne lehessen többször szavazni). */
+/** Névtelen szavazó-azonosító (központi profillal PIN-nel hordozható több eszköz között). */
 export const voterId = () => {
   try {
     let v = localStorage.getItem('voter')
     if (!v) { v = crypto.randomUUID(); localStorage.setItem('voter', v) }
     return v
   } catch { return 'anon-' + Math.random().toString(36).slice(2, 12) }
+}
+
+/** Átállítja a helyi játékos/szavazó azonosítót (PIN-es belépéshez). */
+export const setVoterId = (id: string) => {
+  if (!id) return
+  try {
+    localStorage.setItem('voter', id)
+  } catch { /* ignore */ }
+}
+
+/** Új névtelen azonosítót generál (kijelentkezéshez közös gépen). */
+export const resetVoterId = (): string => {
+  let next = 'anon-' + Math.random().toString(36).slice(2, 12)
+  try {
+    next = crypto.randomUUID()
+    localStorage.setItem('voter', next)
+  } catch { /* ignore */ }
+  return next
 }
 
 /** Az aktív szavazás és az állása (valós időben + 5 mp-enként + fókuszváltáskor frissül). */

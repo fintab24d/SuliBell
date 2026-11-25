@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import BreakVideo from '../BreakVideo'
 import Jukebox, { isJukeboxWeekend, useJukebox, type SongWish } from '../Jukebox'
+import { PlayerProfileCard } from '../PlayerProfileCard'
 import type { Phase } from '../lib/engine'
 import type { MusicWindow } from '../lib/musicSync'
 import type { RadioTrack } from '../lib/radio'
@@ -97,6 +98,7 @@ const MediaPage = memo(function MediaPage({
       </div>
 
       <div className="dash-col">
+        <PlayerProfileCard schoolId={schoolId} compact />
         <Jukebox
           schoolId={schoolId}
           day={day}

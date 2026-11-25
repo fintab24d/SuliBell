@@ -2,6 +2,7 @@ import { memo } from 'react'
 import Arena from '../Arena'
 import { PollCard, usePoll } from '../Poll'
 import RestMode from '../Rest'
+import { PlayerProfileCard } from '../PlayerProfileCard'
 import type { Phase } from '../lib/engine'
 
 export interface GamesPageProps {
@@ -35,6 +36,7 @@ const GamesPage = memo(function GamesPage({
       {showRest ? (
         <>
           <div className="dash-col">
+            <PlayerProfileCard schoolId={schoolId} compact />
             <RestMode tv={false} schoolId={schoolId} reason={reason} day={day} ev={restEv} sound={sound} />
             {poll && <PollCard poll={poll} counts={pollCounts} tv={false} />}
           </div>
@@ -52,6 +54,7 @@ const GamesPage = memo(function GamesPage({
       ) : (
         <>
           <div className="dash-col">
+            <PlayerProfileCard schoolId={schoolId} compact />
             <Arena
               schoolId={schoolId}
               day={day}

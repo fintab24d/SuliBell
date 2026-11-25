@@ -2,6 +2,7 @@
 // Kiszűri a trágár szavakat, 18+ / felnőtt tartalmakat, az admin által egyénileg tiltott szavakat, és tiltja a névtelen beküldést.
 
 import { supabase } from './supabase'
+import { cleanSongTitle } from './video'
 
 export const BANNED_WORDS_PREFIX = '__BANNED_WORDS__:'
 const CUSTOM_BANNED_KEY = 'csengeto-custom-banned-v1'
@@ -344,7 +345,7 @@ export async function fetchYouTubeTitle(ytId: string): Promise<{ ok: boolean; ti
     return { ok: false, error: safe.error }
   }
   if (safe.title && safe.title.trim()) {
-    return { ok: true, title: safe.title.trim().slice(0, 80) }
+    return { ok: true, title: cleanSongTitle(safe.title).slice(0, 80) }
   }
 
   const ctrl = new AbortController()
@@ -388,7 +389,7 @@ export async function fetchYouTubeTitle(ytId: string): Promise<{ ok: boolean; ti
       return errRes
     }
 
-    const cleanTitle = rawTitle.slice(0, 80)
+    const cleanTitle = cleanSongTitle(rawTitle).slice(0, 80)
     ytSafeCache.set(ytId, { ok: true, title: cleanTitle })
     return { ok: true, title: cleanTitle }
   } catch {
@@ -520,7 +521,8 @@ export async function validateMediaSubmission(params: {
   ytId?: string
   url?: string
 }): Promise<{ valid: boolean; error?: string; cleanTitle?: string; cleanBy?: string }> {
-  const cleanTitle = (params.title || '').trim().slice(0, 80)
+  const rawTitle = (params.title || '').trim().slice(0, 80)
+  const cleanTitle = cleanSongTitle(rawTitle).slice(0, 80)
 
   // 1. Név ellenőrzése (kötelező név, névtelen tiltva)
   const nameVal = validatePlayerName(params.by)
@@ -540,7 +542,7 @@ export async function validateMediaSubmission(params: {
     }
   }
 
-  const titleCheck = checkProfanity(cleanTitle)
+  const titleCheck = checkProfanity(rawTitle)
   if (!titleCheck.clean) {
     return {
       valid: false,

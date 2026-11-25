@@ -144,7 +144,21 @@ export function useChampions(schoolId: string | undefined, day: string, syncDom 
   const previewTier: ChampionTier | null =
     previewChamp === 'monthly' ? 'monthly' : previewChamp === 'weekly' ? 'weekly' : null
 
-  const myId = typeof window !== 'undefined' ? voterId() : ''
+  const [myId, setMyId] = useState(() => (typeof window !== 'undefined' ? voterId() : ''))
+
+  useEffect(() => {
+    const syncId = () => setMyId(voterId())
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key || e.key === 'voter') syncId()
+    }
+    window.addEventListener('sulibell-profile-changed', syncId)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('sulibell-profile-changed', syncId)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+
   const realTier: ChampionTier | null =
     champions.monthlyChampion?.playerId === myId
       ? 'monthly'

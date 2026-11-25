@@ -195,4 +195,39 @@ ok('champions: napi több játékmód győzelem összegzése + holtverseny össz
   assert.equal(st.weeklyChampion?.totalScore, 800)
 })
 
+const { normalizePlayerNameKey, isNameTakenByOther, sanitizePinInput, isValidPin } = await import('../src/lib/playerProfile.ts')
+if (normalizePlayerNameKey('  10.A   Dániel ') !== '10.a daniel') {
+  throw new Error('normalizePlayerNameKey hibás normalizálás')
+}
+if (!isNameTakenByOther('10.a   DÁNIEL', 'p2', [{ playerId: 'p1', name: '10.A Dániel' }])) {
+  throw new Error('isNameTakenByOther nem ismerte fel a foglalt nevet')
+}
+if (isNameTakenByOther('10.a Dániel', 'p1', [{ playerId: 'p1', name: '10.A Dániel' }])) {
+  throw new Error('isNameTakenByOther a saját nevet is foglaltnak jelölte')
+}
+if (isNameTakenByOther('10.B Márk', 'p2', [{ playerId: 'p1', name: '10.A Dániel' }])) {
+  throw new Error('isNameTakenByOther szabad nevet tiltott')
+}
+if (sanitizePinInput('12a345') !== '1234') {
+  throw new Error('sanitizePinInput hibás PIN szűrés')
+}
+if (!isValidPin('4821') || isValidPin('123')) {
+  throw new Error('isValidPin hibás validáció')
+}
+
+const { cleanSongTitle } = await import('../src/lib/video.ts')
+const titleCases: [string, string][] = [
+  ['Alan Walker - Faded (Official Music Video)', 'Alan Walker - Faded'],
+  ['DESH - Kukásautó [Official Lyric Video] (4K HD)', 'DESH - Kukásautó'],
+  ['Dua Lipa - Levitating (feat. DaBaby) | Official Video', 'Dua Lipa - Levitating (feat. DaBaby)'],
+  ['Azahriah - 3korty (Hivatalos Videoklip) [Dalszöveggel]', 'Azahriah - 3korty'],
+  ['Billie Eilish - Birds of a Feather (Official Audio)', 'Billie Eilish - Birds of a Feather'],
+]
+for (const [raw, expected] of titleCases) {
+  const actual = cleanSongTitle(raw)
+  if (actual !== expected) {
+    throw new Error(`cleanSongTitle("${raw}") = "${actual}", várt: "${expected}"`)
+  }
+}
+
 console.log(`TZ=${process.env.TZ ?? '(rendszer)'}: ${n} teszt OK`)

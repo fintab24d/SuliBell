@@ -1,11 +1,12 @@
 import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
-import { parseYouTubeId } from './lib/video'
+import { parseYouTubeId, cleanSongTitle } from './lib/video'
 import { voterId } from './Poll'
 import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
 import { weekdayOf } from './lib/engine'
 import { fetchYouTubeTitle, validateMediaSubmission } from './lib/moderation'
+import { focusPlayerProfile, usePlayerProfile } from './lib/usePlayerProfile'
 
 export type MediaKind = 'music'
 
@@ -23,6 +24,8 @@ export interface SongWish {
   ytId?: string
   votes: number
   at: number
+  approved?: boolean
+  approvedAt?: number
 }
 
 const QUICK_SONGS: { title: string; ytId: string }[] = [
@@ -178,6 +181,7 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
 
 export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean, breakKey?: string) {
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
+  const [pendingSongs, setPendingSongs] = useState<SongWish[]>([])
   const [ghosts, setGhosts] = useState<SongWish[]>([])
   const [submitted, setSubmitted] = useState<Set<string>>(() => loadSubmittedSet(day))
   const [discordChannels, setDiscordChannels] = useState<{ music: string }>({
@@ -189,11 +193,14 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   soundRef.current = sound
   const songsRef = useRef(songs)
   songsRef.current = songs
+  const pendingRef = useRef(pendingSongs)
+  pendingRef.current = pendingSongs
 
   useEffect(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
     pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
+    setPendingSongs([])
     setGhosts([])
     setSubmitted(loadSubmittedSet(day))
     const onStorage = (e: StorageEvent) => {
@@ -224,6 +231,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     saveLocalSongs(d, existing)
     if (d === day) {
       setSongs(prev => prev.filter(s => s.id !== songId))
+      setPendingSongs(prev => prev.filter(s => s.id !== songId))
       if (found?.ytId) {
         setGhosts(prev => (prev.some(g => g.id === found.id) ? prev : [...prev, found]))
       }
@@ -254,11 +262,12 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
             id: sid,
             day,
             kind: 'music',
-            title: String(r.title),
+            title: cleanSongTitle(String(r.title)),
             by: String(r.requester ?? ''),
             ytId: r.yt_id ? String(r.yt_id) : undefined,
             votes: Number(r.votes) || 1,
             at: Date.parse(r.created_at) || Date.now(),
+            approved: true,
           })
         }
         setSongs(prev => {
@@ -270,7 +279,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           const nowMs = Date.now()
           for (const old of prev) {
             if (del.has(old.id) || dbIds.has(old.id)) continue
-            if (old.id.startsWith('dc-') || nowMs - old.at < 8_000) {
+            if (old.id.startsWith('dc-') || (old.approved !== false && nowMs - old.at < 8_000)) {
               next = mergeSong(next, old, del)
             }
           }
@@ -282,6 +291,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
       const del = loadDeletedSet(day)
       const dbActive: SongWish[] = []
+      const dbPending: SongWish[] = []
       const dbGhosts: SongWish[] = []
       const dbIds = new Set<string>()
 
@@ -289,11 +299,12 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         if (r.kind === 'video') continue
         const sid = String(r.song_id)
         dbIds.add(sid)
+        const cleanedTitle = cleanSongTitle(String(r.title ?? ''))
         if (r.deleted) {
           del.add(sid)
           const ytId = r.yt_id ? String(r.yt_id).trim() : ''
-          const ttl = String(r.title ?? '').trim()
-          if (ytId && ttl && ttl !== '(törölve)' && ttl !== '(lejátszva)') {
+          const ttl = cleanedTitle.trim()
+          if (r.approved !== false && ytId && ttl && ttl !== '(törölve)' && ttl !== '(lejátszva)') {
             dbGhosts.push({
               id: sid,
               day,
@@ -302,22 +313,29 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
               by: String(r.requester ?? ''),
               ytId,
               votes: Number(r.votes) || 1,
-              at: Date.parse(r.created_at) || Date.now(),
+              at: Date.parse(r.approved_at || r.created_at) || Date.now(),
             })
           }
           continue
         }
         if (del.has(sid)) continue
-        dbActive.push({
+        const isApproved = r.approved !== false
+        const createdMs = Date.parse(r.created_at) || Date.now()
+        const approvedMs = r.approved_at ? Date.parse(r.approved_at) || createdMs : createdMs
+        const item: SongWish = {
           id: sid,
           day,
           kind: 'music',
-          title: String(r.title),
+          title: cleanedTitle,
           by: String(r.requester ?? ''),
           ytId: r.yt_id ? String(r.yt_id) : undefined,
           votes: Number(r.votes) || 1,
-          at: Date.parse(r.created_at) || Date.now(),
-        })
+          at: isApproved ? approvedMs : createdMs,
+          approved: isApproved,
+          approvedAt: r.approved_at ? approvedMs : undefined,
+        }
+        if (isApproved) dbActive.push(item)
+        else dbPending.push(item)
       }
       saveDeletedSet(day, del)
 
@@ -332,6 +350,17 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         return next
       })
 
+      setPendingSongs(prev => {
+        const next = [...dbPending]
+        const nowMs = Date.now()
+        for (const old of prev) {
+          if (del.has(old.id) || dbIds.has(old.id)) continue
+          const createdTs = recentCreatedAt.get(old.id) ?? old.at
+          if (nowMs - createdTs < 10_000) next.push(old)
+        }
+        return sortSongs(next)
+      })
+
       setSongs(prev => {
         let next: SongWish[] = []
         for (const item of dbActive) {
@@ -341,7 +370,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         for (const old of prev) {
           if (del.has(old.id) || dbIds.has(old.id)) continue
           const createdTs = recentCreatedAt.get(old.id) ?? old.at
-          if (old.id.startsWith('dc-') || nowMs - createdTs < 8_000) {
+          if (old.id.startsWith('dc-') || (old.approved !== false && nowMs - createdTs < 8_000)) {
             next = mergeSong(next, old, del)
           }
         }
@@ -372,11 +401,12 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
             id: ds.id,
             day,
             kind: 'music',
-            title: ds.title,
+            title: cleanSongTitle(ds.title),
             by: ds.by,
             ytId: ds.ytId,
             votes: ds.votes,
             at: ds.at,
+            approved: true,
           }
           if (del.has(ds.id)) {
             if (ds.ytId) dcGhosts.push(item)
@@ -446,6 +476,34 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         saveLocalSongs(itemDay, mergeSong(cur, incoming, del))
       }
     })
+    ch.on('broadcast', { event: 'pending' }, (msg: any) => {
+      const payload = msg?.payload
+      if (!alive || !payload?.song) return
+      const incoming = payload.song as SongWish
+      const itemDay = incoming.day || day
+      const del = loadDeletedSet(itemDay)
+      if (del.has(incoming.id) || itemDay !== day) return
+      recentCreatedAt.set(incoming.id, Date.now())
+      setPendingSongs(prev => mergeSong(prev, { ...incoming, approved: false }, del))
+    })
+    ch.on('broadcast', { event: 'approve' }, (msg: any) => {
+      const payload = msg?.payload
+      if (!alive || !payload?.id) return
+      const songId = String(payload.id)
+      const targetDay = payload.day ? String(payload.day) : day
+      if (targetDay === day) {
+        const found = pendingRef.current.find(s => s.id === songId)
+        if (found) {
+          setPendingSongs(prev => prev.filter(s => s.id !== songId))
+          setSongs(prev => {
+            const next = mergeSong(prev, { ...found, approved: true, at: Date.now() })
+            saveLocalSongs(day, next)
+            return next
+          })
+        }
+        void syncFromDb()
+      }
+    })
     ch.on('broadcast', { event: 'delete' }, (msg: any) => {
       const payload = msg?.payload
       if (!alive || !payload?.id) return
@@ -460,7 +518,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       current.forEach(s => del.add(s.id))
       saveDeletedSet(targetDay, del)
       saveLocalSongs(targetDay, [])
-      if (targetDay === day) setSongs([])
+      if (targetDay === day) {
+        setSongs([])
+        setPendingSongs([])
+      }
     })
     ch.on('broadcast', { event: 'sync_req' }, () => {
       if (!alive || songsRef.current.length === 0) return
@@ -502,6 +563,32 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           applyDeleteLocal(String(ev.data.id), ev.data.day ? String(ev.data.day) : day)
           return
         }
+        if (ev.data.type === 'pending' && ev.data.song) {
+          const incoming = ev.data.song as SongWish
+          const itemDay = incoming.day || day
+          const del = loadDeletedSet(itemDay)
+          if (!del.has(incoming.id) && itemDay === day) {
+            setPendingSongs(prev => mergeSong(prev, { ...incoming, approved: false }, del))
+          }
+          return
+        }
+        if (ev.data.type === 'approve' && ev.data.id) {
+          const songId = String(ev.data.id)
+          const targetDay = ev.data.day ? String(ev.data.day) : day
+          if (targetDay === day) {
+            const found = pendingRef.current.find(s => s.id === songId)
+            if (found) {
+              setPendingSongs(prev => prev.filter(s => s.id !== songId))
+              setSongs(prev => {
+                const next = mergeSong(prev, { ...found, approved: true, at: Date.now() })
+                saveLocalSongs(day, next)
+                return next
+              })
+            }
+            void syncFromDb()
+          }
+          return
+        }
         if (ev.data.type === 'clear_all') {
           const targetDay = ev.data.day ? String(ev.data.day) : day
           const current = loadLocalSongs(targetDay)
@@ -509,7 +596,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           current.forEach(s => del.add(s.id))
           saveDeletedSet(targetDay, del)
           saveLocalSongs(targetDay, [])
-          if (targetDay === day) setSongs([])
+          if (targetDay === day) {
+            setSongs([])
+            setPendingSongs([])
+          }
           return
         }
         if (ev.data.song) {
@@ -558,7 +648,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
   const addSong = useCallback((rawTitle: string, rawBy: string, rawUrl?: string, explicitYtId?: string): { ok: boolean; reason?: 'invalid' | 'duplicate' | 'break_limit' } => {
     if (isJukeboxWeekend(day)) return { ok: false, reason: 'invalid' }
-    const cleanTitle = rawTitle.trim().slice(0, 80)
+    const cleanTitle = cleanSongTitle(rawTitle).slice(0, 80)
     if (!cleanTitle) return { ok: false, reason: 'invalid' }
     const cleanBy = rawBy.trim().slice(0, 24)
     if (!cleanBy) return { ok: false, reason: 'invalid' }
@@ -578,7 +668,9 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       }
     }
 
-    const existing = songs.find(x => (!!ytId && x.ytId === ytId) || x.title.trim().toLowerCase() === cleanTitle.toLowerCase())
+    const existing = [...songs, ...pendingSongs].find(
+      x => (!!ytId && x.ytId === ytId) || x.title.trim().toLowerCase() === cleanTitle.toLowerCase()
+    )
     if (existing) {
       return { ok: false, reason: 'duplicate' }
     }
@@ -592,17 +684,14 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       ytId,
       votes: 1,
       at: Date.now(),
+      approved: false,
     }
 
     const del = loadDeletedSet(day)
     del.delete(created.id)
     saveDeletedSet(day, del)
 
-    setSongs(prev => {
-      const next = mergeSong(prev, created)
-      saveLocalSongs(day, next)
-      return next
-    })
+    setPendingSongs(prev => mergeSong(prev, created))
 
     if (breakKey) {
       setSubmitted(prev => {
@@ -615,7 +704,12 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     }
 
     if (soundRef.current) fxSound('pop', 0)
-    broadcastSong(created)
+    chanRef.current?.send({
+      type: 'broadcast',
+      event: 'pending',
+      payload: { song: created },
+    }).catch?.(() => {})
+    try { bcRef.current?.postMessage({ type: 'pending', song: created }) } catch { /* ignore */ }
 
     postToDiscord({
       kind: 'jukebox',
@@ -638,7 +732,36 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       }).then(() => {})
     }
     return { ok: true }
-  }, [schoolId, day, breakKey, songs, submitted, broadcastSong])
+  }, [schoolId, day, breakKey, songs, pendingSongs, submitted])
+
+  const approveSong = useCallback(async (songId: string, targetDay?: string): Promise<{ error?: string }> => {
+    const d = targetDay || day
+    if (schoolId) {
+      const { error: rpcErr } = await supabase.rpc('admin_approve_jukebox_song', {
+        p_school: schoolId,
+        p_day: d,
+        p_id: songId,
+      })
+      if (rpcErr) return { error: rpcErr.message }
+    }
+    const found = pendingRef.current.find(s => s.id === songId)
+    if (d === day && found) {
+      const approvedItem: SongWish = { ...found, approved: true, approvedAt: Date.now(), at: Date.now() }
+      setPendingSongs(prev => prev.filter(s => s.id !== songId))
+      setSongs(prev => {
+        const next = mergeSong(prev, approvedItem)
+        saveLocalSongs(day, next)
+        return next
+      })
+    }
+    chanRef.current?.send({
+      type: 'broadcast',
+      event: 'approve',
+      payload: { id: songId, day: d },
+    }).catch?.(() => {})
+    try { bcRef.current?.postMessage({ type: 'approve', id: songId, day: d }) } catch { /* ignore */ }
+    return {}
+  }, [schoolId, day])
 
   const removeSong = useCallback(async (songId: string, targetDay?: string): Promise<{ error?: string }> => {
     const d = targetDay || day
@@ -695,7 +818,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     current.forEach(s => del.add(s.id))
     saveDeletedSet(d, del)
     saveLocalSongs(d, [])
-    if (d === day) setSongs([])
+    if (d === day) {
+      setSongs([])
+      setPendingSongs([])
+    }
 
     chanRef.current?.send({
       type: 'broadcast',
@@ -719,7 +845,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, ghosts, channels: discordChannels, hasSubmittedInBreak, addSong, removeSong, finishSong, clearAllSongs }
+  return { songs, pendingSongs, ghosts, channels: discordChannels, hasSubmittedInBreak, addSong, approveSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default memo(function Jukebox({
@@ -741,18 +867,18 @@ export default memo(function Jukebox({
   playedIds?: Set<string>
   nowPlayingId?: string
 }) {
-  const { songs, channels, hasSubmittedInBreak, addSong } = useJukebox(schoolId, day, sound, breakKey)
+  const { songs, pendingSongs, channels, hasSubmittedInBreak, addSong } = useJukebox(schoolId, day, sound, breakKey)
   const queue = songs.filter(s => !playedIds?.has(s.id) || s.id === nowPlayingId)
   const weekend = isJukeboxWeekend(day)
-  const [by, setBy] = useState(() => {
-    try { return localStorage.getItem('csengeto-arena-name') ?? '' } catch { return '' }
-  })
+  const profile = usePlayerProfile(schoolId)
+  const by = profile.valid ? profile.cleanName : ''
   const [ytUrl, setYtUrl] = useState('')
   const [pickedYtId, setPickedYtId] = useState<string | undefined>(undefined)
   const [autoTitle, setAutoTitle] = useState('')
   const [fetchingTitle, setFetchingTitle] = useState(false)
   const [titleError, setTitleError] = useState('')
   const [err, setErr] = useState('')
+  const [justSubmitted, setJustSubmitted] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const alreadySubmittedBreak = hasSubmittedInBreak(by)
@@ -796,6 +922,11 @@ export default memo(function Jukebox({
     e.preventDefault()
     if (submitting) return
     setErr('')
+    if (!profile.valid) {
+      setErr('A zenekéréshez előbb állítsd be a neved a Játékosprofil kártyán!')
+      focusPlayerProfile()
+      return
+    }
     if (hasSubmittedInBreak(by)) {
       setErr('Ebben a szünetben már küldtél be zenét! Egy ember egy szünetben csak 1 kívánságot küldhet be.')
       return
@@ -836,7 +967,6 @@ export default memo(function Jukebox({
       }
 
       const cleanBy = check.cleanBy || by.trim()
-      try { localStorage.setItem('csengeto-arena-name', cleanBy) } catch { /* ignore */ }
 
       const res = addSong(check.cleanTitle || resolvedTitle, cleanBy, ytUrl, finalYtId)
       if (!res.ok) {
@@ -853,6 +983,7 @@ export default memo(function Jukebox({
       setPickedYtId(undefined)
       setAutoTitle('')
       setTitleError('')
+      setJustSubmitted(true)
       setShowForm(false)
     } finally {
       setSubmitting(false)
@@ -872,8 +1003,8 @@ export default memo(function Jukebox({
           {top3.map((s, i) => (
             <li key={s.id} className={i === 0 ? 'lead' : ''}>
               <span className="jb-rk">{i === 0 ? '▶' : `${i + 1}.`}</span>
-              <div className="jb-info">
-                <b>{s.title}</b>
+            <div className="jb-info">
+                <b>{cleanSongTitle(s.title)}</b>
                 {s.by && <small>küldi: {s.by}</small>}
               </div>
               <span className="jb-votes">
@@ -934,12 +1065,18 @@ export default memo(function Jukebox({
           <button
             type="button"
             className={showForm ? 'on' : 'cta'}
-            onClick={() => { setShowForm(v => !v); setErr('') }}
+            onClick={() => { setShowForm(v => !v); setErr(''); setJustSubmitted(false) }}
           >
             {showForm ? '✕ Bezárás' : '➕ Zene beküldése'}
           </button>
         </div>
       </div>
+
+      {justSubmitted && (
+        <div className="jb-ok-banner" role="status">
+          ✅ Beküldve! A zenéd admin jóváhagyásra vár — amint elfogadják, bekerül a szüneti műsorba.
+        </div>
+      )}
 
       {showForm && (
         <form className="jb-form" onSubmit={submit}>
@@ -995,18 +1132,32 @@ export default memo(function Jukebox({
               </div>
             )}
             <div className="jb-row2">
-              <input
-                type="text"
-                placeholder="Ki küldi? (pl. 10.B / Dani) *"
-                maxLength={24}
-                required
-                value={by}
-                onChange={e => { setBy(e.target.value); setErr('') }}
-              />
+              {profile.valid ? (
+                <div className="jb-sender-chip">
+                  <span>👤 Küldő: <b>{by}</b></span>
+                  <button
+                    type="button"
+                    className="jb-edit-profile"
+                    onClick={() => focusPlayerProfile()}
+                    title="Név módosítása a Játékosprofilban"
+                    aria-label="Név módosítása"
+                  >
+                    ✏️
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="profile-chip-cta"
+                  onClick={() => focusPlayerProfile()}
+                >
+                  👤 Add meg a neved a beküldéshez
+                </button>
+              )}
               <button
                 type="submit"
                 className="cta"
-                disabled={submitting || fetchingTitle || !detectedYtId || !by.trim() || alreadySubmittedBreak}
+                disabled={submitting || fetchingTitle || !detectedYtId || !profile.valid || alreadySubmittedBreak}
               >
                 {alreadySubmittedBreak ? '⏸️ Már küldtél be' : submitting ? '⏳ Küldés…' : '🚀 Beküldés'}
               </button>
@@ -1018,7 +1169,7 @@ export default memo(function Jukebox({
             )}
             {err && <small style={{ color: 'var(--warn)', fontWeight: 600 }}>{err}</small>}
             <small style={{ color: 'var(--mut)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-              🛡️ Szabályok: Elég bemásolnod a YouTube-linket — a szám címét automatikusan lekérjük és ellenőrizzük. A név megadása kötelező, és egy ember egy szünetben csak 1 számot küldhet be. A dalok érkezési sorrendben szólnak és lejátszás után automatikusan törlődnek; ha nincs beküldött zene, a 📻 SuliRádió szól!
+              🛡️ Szabályok: Elég bemásolnod a YouTube-linket — a szám címét automatikusan letisztítva kérjük le és ellenőrizzük. Egy ember egy szünetben csak 1 számot küldhet be. A beküldött zenék admin jóváhagyás után kerülnek be a szüneti sorba; ha nincs jóváhagyott kívánság, a 📻 SuliRádió szól!
             </small>
           </div>
         </form>
@@ -1027,7 +1178,7 @@ export default memo(function Jukebox({
       {queue.length === 0 ? (
         <div className="jb-empty">
           <span>
-            📻 Még nincs mai diák-kívánság — reggel 07:45-től, a szünetekben és tanítás után 15:00-ig a <b>SuliRádió</b> gondoskodik a zenéről! Küldj be egy YouTube-linket, hogy a te zenéd szóljon következőnek!
+            📻 Még nincs mai jóváhagyott diák-kívánság — reggel 07:45-től, a szünetekben és tanítás után 15:00-ig a <b>SuliRádió</b> gondoskodik a zenéről! Küldj be egy YouTube-linket, és admin elfogadás után megszólal!
           </span>
         </div>
       ) : (
@@ -1036,6 +1187,7 @@ export default memo(function Jukebox({
             const ytWatchUrl = s.ytId
               ? `https://youtu.be/${s.ytId}`
               : `https://www.youtube.com/results?search_query=${encodeURIComponent(s.title)}`
+            const displayTitle = cleanSongTitle(s.title)
             return (
               <li key={s.id} className={`jb-item ${i === 0 ? 'lead' : ''}`}>
                 <div className="jb-main">
@@ -1049,7 +1201,7 @@ export default memo(function Jukebox({
                     )}
                   </span>
                   <div className="jb-info">
-                    <b>{s.title}</b>
+                    <b>{displayTitle}</b>
                     <div className="jb-sub">
                       {s.by && <small>Küldi: {s.by}</small>}
                       <span
@@ -1081,6 +1233,26 @@ export default memo(function Jukebox({
             )
           })}
         </ol>
+      )}
+
+      {pendingSongs.length > 0 && (
+        <div className="jb-pending-box">
+          <div className="jb-pending-head">
+            <span>⏳ Jóváhagyásra vár ({pendingSongs.length})</span>
+            <small>Amint az admin elfogadja, bekerül a sorba</small>
+          </div>
+          <ul className="jb-pending-list">
+            {pendingSongs.slice(0, 6).map(s => (
+              <li key={s.id} className="jb-pending-item">
+                <span className="jb-pending-title">🎵 {cleanSongTitle(s.title)}</span>
+                <span className="jb-pending-meta">
+                  {s.by && <small>Küldi: {s.by}</small>}
+                  <span className="pill jb-pending-pill">⏳ Adminra vár</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   )

@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "check": "node --experimental-strip-types scripts/check-engine.ts"
+    "check": "node --experimental-strip-types scripts/check-engine.ts",
+    "sql": "node scripts/run-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

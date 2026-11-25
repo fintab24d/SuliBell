@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as PE } from 'react'
 import { botDir, drawSnakeBoard, newGame, step, type G, type P, type SnakeSkin } from './lib/snake'
-import { PLAYER_NAME_KEY, isAnonymousName, validatePlayerName } from './lib/moderation'
 import { getAdventUnlocked, loadAdventState, saveAdventState } from './lib/advent'
 import type { ChampionTier } from './lib/champions'
+import { focusPlayerProfile, usePlayerProfile } from './lib/usePlayerProfile'
 
 const COLS = 22
 const ROWS = 14
@@ -58,9 +58,7 @@ export interface SnakeGameProps {
   locked?: boolean
   lockMessage?: string
   playsHint?: string | null
-  externalName?: string
-  onExternalNameChange?: (name: string) => void
-  hideNameInput?: boolean
+  schoolId?: string
   sound?: boolean
   onStartPlay?: () => void
   onGameOver?: (score: number, apples: number, diff: SnakeDiff, name: string) => void
@@ -73,9 +71,7 @@ export default function SnakeGame({
   locked = false,
   lockMessage,
   playsHint,
-  externalName,
-  onExternalNameChange,
-  hideNameInput = false,
+  schoolId,
   sound: _sound,
   onStartPlay,
   onGameOver,
@@ -142,27 +138,15 @@ export default function SnakeGame({
   }
 
   const wait = useRef(0)
-  const [localName, setLocalName] = useState(() => {
-    try {
-      const v = localStorage.getItem(PLAYER_NAME_KEY) ?? ''
-      return isAnonymousName(v) ? '' : v
-    } catch {
-      return ''
-    }
-  })
-  const playerName = externalName !== undefined ? externalName : localName
+  const profile = usePlayerProfile(schoolId)
+  const playerName = profile.valid ? profile.cleanName : ''
   const playerNameRef = useRef(playerName)
   playerNameRef.current = playerName
   const [nameErr, setNameErr] = useState('')
 
-  const savePlayerName = (v: string) => {
-    if (onExternalNameChange) onExternalNameChange(v)
-    else {
-      setLocalName(v)
-      try { localStorage.setItem(PLAYER_NAME_KEY, v) } catch { /* ignore */ }
-    }
-    if (nameErr && validatePlayerName(v, true).valid) setNameErr('')
-  }
+  useEffect(() => {
+    if (profile.valid && nameErr) setNameErr('')
+  }, [profile.valid, nameErr])
 
   const changeDiff = (d: SnakeDiff) => {
     setDiff(d)
@@ -187,9 +171,9 @@ export default function SnakeGame({
       setNameErr(lockMessage || 'Ebben a szünetben már elérted a játékszám-korlátot.')
       return
     }
-    const val = validatePlayerName(playerName, true)
-    if (!val.valid) {
-      setNameErr(val.error || 'A játékhoz add meg a neved!')
+    if (!profile.valid) {
+      setNameErr(profile.validationError || 'A játékhoz add meg a neved a Játékosprofil kártyán!')
+      focusPlayerProfile()
       return
     }
     setNameErr('')
@@ -367,30 +351,17 @@ export default function SnakeGame({
                 Vége! {score} pont ({apples} 🍎 × {ptsPerApple}p)
               </b>
             )}
-            {!hideNameInput && (
-              <div style={{ margin: '8px 0' }}>
-                <input
-                  type="text"
-                  placeholder="Osztály + név (pl. 10.A Dani) *"
-                  value={playerName}
-                  onChange={e => savePlayerName(e.target.value)}
-                  maxLength={20}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 8,
-                    border: nameErr ? '1px solid #ff3b5c' : '1px solid rgba(255,255,255,0.25)',
-                    background: 'rgba(0,0,0,0.5)',
-                    color: '#fff',
-                    textAlign: 'center',
-                    fontSize: '0.9rem',
-                    width: '80%',
-                    maxWidth: 240,
-                  }}
-                />
-                {nameErr && <small style={{ color: '#ff3b5c', display: 'block', marginTop: 4 }}>⚠️ {nameErr}</small>}
+            {!profile.valid && (
+              <div style={{ margin: '6px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <small style={{ color: '#ffb02e' }}>
+                  🔒 {nameErr || 'A játékhoz előbb állítsd be a neved a Játékosprofil kártyán!'}
+                </small>
+                <button type="button" className="profile-chip-cta" onClick={() => focusPlayerProfile()}>
+                  👤 Név megadása
+                </button>
               </div>
             )}
-            {hideNameInput && nameErr && (
+            {profile.valid && nameErr && (
               <small style={{ color: '#ff3b5c', display: 'block', margin: '4px 0' }}>⚠️ {nameErr}</small>
             )}
             {playsHint && (

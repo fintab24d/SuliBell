@@ -54,6 +54,8 @@ import { isRadioAnnouncement, parseCustomRadioFromAnnouncements, type RadioTrack
 import { buildMusicWindows, type MusicWindow } from './lib/musicSync'
 import { useMusicSync } from './lib/useMusicSync'
 import { useChampions } from './lib/useChampions'
+import { FOCUS_PROFILE_EVENT, usePlayerProfile } from './lib/usePlayerProfile'
+import { PlayerProfileCard } from './PlayerProfileCard'
 import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } from './lib/discord'
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
@@ -581,6 +583,20 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     enabled: musicEnabled,
   })
   const { myTier: champTier } = useChampions(data?.id, z?.date ?? '', true)
+  const profile = usePlayerProfile(data?.id)
+  const [profileModalOpen, setProfileModalOpen] = useState(false)
+
+  useEffect(() => {
+    const onFocusProfile = (ev: Event) => {
+      queueMicrotask(() => {
+        if (!ev.defaultPrevented) {
+          setProfileModalOpen(true)
+        }
+      })
+    }
+    window.addEventListener(FOCUS_PROFILE_EVENT, onFocusProfile)
+    return () => window.removeEventListener(FOCUS_PROFILE_EVENT, onFocusProfile)
+  }, [])
   const { maint: liveMaint } = useMaintenance(sandbox ? undefined : data?.id, sandbox ? null : data?.announcements)
   const maint = sandbox
     ? { main: sb.maintMain, tv: sb.maintTv, text: sb.maintText, mainStartsAt: sb.maintMainStartsAt, tvStartsAt: sb.maintTvStartsAt }
@@ -1269,6 +1285,14 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             )}
             <button
               type="button"
+              className={`profile-hdr-btn${profile.valid ? ' on' : ''}`}
+              onClick={() => setProfileModalOpen(true)}
+              title={profile.valid ? `Játékosprofil: ${profile.cleanName} (kattints a módosításhoz)` : 'Központi játékosprofil beállítása'}
+            >
+              {profile.valid ? `👤 ${profile.cleanName}` : '👤 Név megadása'}
+            </button>
+            <button
+              type="button"
               className={`vip-hdr-btn${vip.status.active ? ' on' : ''}`}
               onClick={() => setVipModal({ open: true, tab: 'vip' })}
               title={vip.status.active ? 'VIP Extrák & Támogatók fala' : 'VIP kód feloldása & Támogatók fala'}
@@ -1397,6 +1421,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
             <div className="dash-col col-side">
               {kofiBox}
               <VibePanel counts={vibeCounts} onSend={sendVibe} cooldown={vibeCooldown} christmas={isXmasSkin} />
+              <PlayerProfileCard schoolId={data.id} compact />
 
               <Jukebox schoolId={data.id} day={z.date} breakKey={curJukeboxBreakKey} sound={!!data.settings.sound_enabled && audioOn} christmas={isXmasSkin} playedIds={musicSync.startedWishIds} nowPlayingId={musicSync.nowPlayingWishId} />
 
@@ -1754,6 +1779,21 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
           map={myMap}
           onSave={updateMyMap}
         />
+        {profileModalOpen && (
+          <div className="profile-modal-backdrop" onClick={() => setProfileModalOpen(false)}>
+            <div className="profile-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Játékosprofil">
+              <button
+                type="button"
+                className="profile-modal-close"
+                onClick={() => setProfileModalOpen(false)}
+                aria-label="Bezárás"
+              >
+                ✕
+              </button>
+              <PlayerProfileCard schoolId={data.id} modal onSaved={() => setProfileModalOpen(false)} />
+            </div>
+          </div>
+        )}
         {overlay}
       </main>
       <FlyingSleighTop enabled={showXmasAfterDec5} fastPreview={xmasPreviewActive} />
@@ -1765,7 +1805,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       <NewYearEffect date={z.date} secs={z.secs} tv={tv} enabled={fx && !potato} sound={!!data.settings.sound_enabled && audioOn} preview={nyePreviewActive} />
       {fx && <FinalCount phase={s.phase} remaining={Math.ceil(s.remaining)} />}
       {fx && <BellFlash bellKey={key} elapsed={s.elapsed} day={z.date} phase={s.phase} label={s.current?.label} />}
-      {!isUpdating && !overlay && !adventModal.open && !vipModal.open && !myModalOpen && (
+      {!isUpdating && !overlay && !adventModal.open && !vipModal.open && !myModalOpen && !profileModalOpen && (
         <ScrollCue layoutKey={`${layoutMode}:${activeTab}`} />
       )}
     </>

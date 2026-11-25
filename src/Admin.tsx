@@ -16,7 +16,7 @@ import AdminAi from './AdminAi'
 import { KIND, type Countdown } from './lib/kinds'
 import { CORE_RADIO_TRACKS, DEFAULT_RADIO_TRACKS, ROTATING_RADIO_TRACKS, XMAS_RADIO_TRACKS, getDailyRadioPlaylist, isRadioAnnouncement, isTrackInRadio, parseCustomRadioFromAnnouncements, saveCustomRadioTracksToDb, type RadioTrack } from './lib/radio'
 import { DISCORD_INVITE_URL, postToDiscord } from './lib/discord'
-import { parseYouTubeId } from './lib/video'
+import { cleanSongTitle, parseYouTubeId } from './lib/video'
 
 interface Full {
   id: string; name: string
@@ -99,8 +99,24 @@ function Panel() {
   const [archivedWishes, setArchivedWishes] = useState<SongWish[]>([])
   const [radioForm, setRadioForm] = useState({ url: '', title: '' })
   const [radioBusy, setRadioBusy] = useState(false)
-  const { songs: jbSongs, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
+  const { songs: jbSongs, pendingSongs: jbPending, approveSong, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
   const { board: arenaBoard, removeLeaderEntry, clearLeaderboard } = useArenaLeaderboard(d?.id, todayStr)
+  const [playerProfiles, setPlayerProfiles] = useState<{ player_id: string; player_name: string; has_pin: boolean; updated_at: string }[]>([])
+  const [profileFilter, setProfileFilter] = useState('')
+  const [profileBusy, setProfileBusy] = useState(false)
+  const loadProfiles = useCallback(async () => {
+    if (!d?.id) return
+    const { data, error } = await supabase
+      .from('player_profiles')
+      .select('player_id, player_name, has_pin, updated_at')
+      .eq('school_id', d.id)
+      .order('updated_at', { ascending: false })
+      .limit(200)
+    if (!error && Array.isArray(data)) {
+      setPlayerProfiles(data as any[])
+    }
+  }, [d?.id])
+  useEffect(() => { void loadProfiles() }, [loadProfiles])
   const [previewWishId, setPreviewWishId] = useState<string | null>(null)
   const [newBannedWord, setNewBannedWord] = useState('')
   const [testWordInput, setTestWordInput] = useState('')
@@ -167,7 +183,7 @@ function Panel() {
               id: String(r.song_id),
               day: String(r.day),
               kind: 'music' as const,
-              title: ttl,
+              title: cleanSongTitle(ttl),
               by: String(r.requester ?? ''),
               ytId: yid,
               votes: Number(r.votes) || 1,
@@ -178,18 +194,25 @@ function Panel() {
       }
       setDeletedWishIds(delIds)
       setArchivedWishes(archived)
-      setDbWishes(active.map((r: any) => ({
-        id: String(r.song_id),
-        day: String(r.day),
-        kind: 'music' as const,
-        title: String(r.title),
-        by: String(r.requester ?? ''),
-        ytId: r.yt_id ? String(r.yt_id) : undefined,
-        votes: Number(r.votes) || 1,
-        at: Date.parse(r.created_at) || Date.now(),
-      })))
+      setDbWishes(active.map((r: any) => {
+        const isApproved = r.approved !== false
+        const createdMs = Date.parse(r.created_at) || Date.now()
+        const approvedMs = r.approved_at ? Date.parse(r.approved_at) || createdMs : createdMs
+        return {
+          id: String(r.song_id),
+          day: String(r.day),
+          kind: 'music' as const,
+          title: cleanSongTitle(String(r.title)),
+          by: String(r.requester ?? ''),
+          ytId: r.yt_id ? String(r.yt_id) : undefined,
+          votes: Number(r.votes) || 1,
+          at: isApproved ? approvedMs : createdMs,
+          approved: isApproved,
+          approvedAt: r.approved_at ? approvedMs : undefined,
+        }
+      }))
     })
-  }, [d, jbSongs.length])
+  }, [d, jbSongs.length, jbPending.length])
   useEffect(() => {   // szavazások és állásuk
     if (!d) return
     supabase.from('polls').select('*').eq('school_id', d.id).order('created_at', { ascending: false }).limit(10).then(async ({ data, error }) => {
@@ -998,10 +1021,26 @@ function Panel() {
 
     {(can('videos') || can('music_mod')) && (() => {
       const canManageRadio = can('videos')
-      const mergedWishes: SongWish[] = [...jbSongs]
-      for (const w of [...dbWishes, ...loadAllLocalSongs()]) {
-        if (!deletedWishIds.has(w.id) && !mergedWishes.some(x => x.id === w.id)) mergedWishes.push(w)
+      const mergedMap = new Map<string, SongWish>()
+      for (const w of [...dbWishes, ...jbPending, ...jbSongs, ...loadAllLocalSongs()]) {
+        if (!w?.id || deletedWishIds.has(w.id)) continue
+        const cleanTitle = cleanSongTitle(w.title)
+        const prev = mergedMap.get(w.id)
+        if (!prev) {
+          mergedMap.set(w.id, { ...w, title: cleanTitle })
+        } else {
+          const isApproved = prev.approved === true || w.approved === true
+          mergedMap.set(w.id, {
+            ...prev,
+            ...w,
+            title: cleanTitle || prev.title,
+            approved: isApproved,
+          })
+        }
       }
+      const mergedWishes = Array.from(mergedMap.values()).sort((a, b) => a.at - b.at)
+      const pendingWishes = mergedWishes.filter(w => w.approved === false)
+      const approvedWishes = mergedWishes.filter(w => w.approved !== false)
       const customRadioTracks = parseCustomRadioFromAnnouncements(d.announcements)
       const saveCustomRadio = async (next: RadioTrack[], okMsg: string) => {
         const res: any = await saveCustomRadioTracksToDb(d.id, next)
@@ -1015,13 +1054,14 @@ function Panel() {
       }
       const addWishToRadio = async (w: SongWish) => {
         if (!w.ytId) return
+        const cleanTitle = cleanSongTitle(w.title)
         if (isTrackInRadio(w.ytId, customRadioTracks)) {
-          setMsg(`Már szerepel a SuliRádió listájában: ${w.title}`)
+          setMsg(`Már szerepel a SuliRádió listájában: ${cleanTitle}`)
           return
         }
         const nextTrack: RadioTrack = {
           id: `r-custom-${w.ytId}`,
-          title: w.title,
+          title: cleanTitle,
           ytId: w.ytId,
           tier: 'custom',
           addedBy: w.by || undefined,
@@ -1029,7 +1069,7 @@ function Panel() {
         }
         await saveCustomRadio(
           [...customRadioTracks, nextTrack],
-          `Felvéve a SuliRádió listájába: ${w.title}`
+          `Felvéve a SuliRádió listájába: ${cleanTitle}`
         )
       }
       const addManualRadioTrack = async (e?: FormEvent) => {
@@ -1043,13 +1083,13 @@ function Panel() {
           setMsg('Ez a dal már szerepel a SuliRádió listájában!')
           return
         }
-        let cleanTitle = radioForm.title.trim().slice(0, 100)
+        let cleanTitle = cleanSongTitle(radioForm.title.trim()).slice(0, 100)
         if (!cleanTitle) {
           setRadioBusy(true)
           try {
             const res = await fetchYouTubeTitle(ytId)
             if (res.ok && res.title) {
-              cleanTitle = res.title
+              cleanTitle = cleanSongTitle(res.title)
             } else {
               setMsg((res.error ? `${res.error} ` : '') + 'Kérlek, add meg a zene címét kézzel!')
               return
@@ -1073,6 +1113,38 @@ function Panel() {
       }
       const activeYtIds = new Set(mergedWishes.map(w => w.ytId).filter(Boolean))
       const pastWishes = archivedWishes.filter(w => w.ytId && !activeYtIds.has(w.ytId))
+
+      const approveWishItem = async (w: SongWish, alsoAddToRadio = false) => {
+        const res = await approveSong(w.id, w.day)
+        if (res?.error) {
+          setMsg(`Elfogadási hiba: ${res.error}`)
+          return
+        }
+        setDbWishes(prev => {
+          const exists = prev.some(x => x.id === w.id)
+          if (!exists) return [{ ...w, approved: true, approvedAt: Date.now(), at: Date.now() }, ...prev]
+          return prev.map(x => (x.id === w.id ? { ...x, approved: true, approvedAt: Date.now(), at: Date.now() } : x))
+        })
+        if (alsoAddToRadio && canManageRadio && w.ytId) {
+          await addWishToRadio(w)
+        } else {
+          setMsg(`Elfogadva a szüneti sorba: ${cleanSongTitle(w.title)}`)
+        }
+        notifyAllClients()
+      }
+
+      const rejectOrDeleteWish = async (w: SongWish) => {
+        const res = await removeSong(w.id, w.day)
+        if (res?.error) {
+          setMsg(`Törlési hiba: ${res.error}`)
+          return
+        }
+        setDeletedWishIds(prev => new Set(prev).add(w.id))
+        setDbWishes(prev => prev.filter(x => x.id !== w.id))
+        if (previewWishId === w.id) setPreviewWishId(null)
+        setMsg(`Törölve: ${cleanSongTitle(w.title)}`)
+        notifyAllClients()
+      }
 
       const renderPreviewPlayer = (keyId: string, titleText: string, ytId: string) =>
         previewWishId === keyId ? (
@@ -1140,28 +1212,101 @@ function Panel() {
           <p>
             {canManageRadio ? (
               <>
-                A zenéket a diákok YouTube-linkkel küldhetik be (a cím automatikusan töltődik be, a számok érkezési sorrendben szólnak; ha nincs beküldött kívánság, a SuliRádió Auto-DJ szól). Ha egy beküldött szám megtetszik, a <b>📻 + SuliRádióba</b> gombbal egy kattintással felveheted az állandó SuliRádió listába is!
+                A diákok által beküldött zenék először a <b>Jóváhagyásra váró</b> listába érkeznek: itt belehallgatás után a <b>✅ Elfogadás a sorba</b> (vagy egyben a <b>📻 Elfogadás + SuliRádióba</b>) gombbal engedheted adásba őket. Jóváhagyás nélkül egyik beküldött zene sem szólal meg a lejátszóban!
               </>
             ) : (
               <>
-                Itt ellenőrizheted belehallgatással a diákok által beküldött szüneti zenéket, és ha egy szám nem illik az iskolába, egyenként vagy egyszerre kiveheted a listából (azonnal eltűnik minden kijelzőről).
+                Itt ellenőrizheted belehallgatással a diákok által beküldött szüneti zenéket, elfogadhatod őket a szüneti sorba, vagy elutasíthatod / törölheted az iskolába nem illő számokat.
               </>
             )}
           </p>
 
-          {mergedWishes.length === 0 ? (
-            <p><i>Jelenleg nincs beküldött szüneti zene.</i></p>
+          <div style={{ marginBottom: 14, padding: 10, borderRadius: 10, border: pendingWishes.length > 0 ? '1px solid rgba(251, 191, 36, 0.5)' : '1px solid var(--line)', background: pendingWishes.length > 0 ? 'rgba(251, 191, 36, 0.06)' : 'transparent' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>
+              ⏳ Jóváhagyásra váró diák-zenék ({pendingWishes.length} db)
+            </h3>
+            {pendingWishes.length === 0 ? (
+              <p style={{ margin: 0, color: 'var(--mut)', fontSize: '0.9rem' }}>
+                <i>Nincs jóváhagyásra váró zene.</i>
+              </p>
+            ) : (
+              pendingWishes.map(w => {
+                const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : undefined
+                const isPreviewing = previewWishId === w.id
+                const displayTitle = cleanSongTitle(w.title)
+                return (
+                  <div key={`pend-${w.id}`} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8, marginBottom: 8 }}>
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <b>⏳ {displayTitle}</b>
+                        {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
+                        {' '}• <small>{w.day}</small>
+                        {mediaLink && (
+                          <>
+                            {' '}• <a href={mediaLink} target="_blank" rel="noopener noreferrer">🔗 Link megnyitása</a>
+                          </>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {w.ytId && (
+                          <button
+                            type="button"
+                            className={isPreviewing ? 'on' : ''}
+                            onClick={() => setPreviewWishId(isPreviewing ? null : w.id)}
+                          >
+                            {isPreviewing ? '⏹ Előnézet bezárása' : '🎧 Zene belehallgatás'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void approveWishItem(w, false)}
+                          style={{ borderColor: 'rgba(74, 222, 128, 0.5)', color: '#4ade80' }}
+                          title="Jóváhagyás a mai szüneti műsorba"
+                        >
+                          ✅ Elfogadás a sorba
+                        </button>
+                        {canManageRadio && w.ytId && (
+                          <button
+                            type="button"
+                            onClick={() => void approveWishItem(w, true)}
+                            title="Elfogadás a sorba és felvétel a SuliRádió állandó listájába"
+                          >
+                            📻 Elfogadás + SuliRádióba
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void rejectOrDeleteWish(w)}
+                          style={{ borderColor: 'rgba(255, 59, 92, 0.45)', color: '#ff6b81' }}
+                        >
+                          ❌ Elutasítás
+                        </button>
+                      </div>
+                    </div>
+                    {w.ytId && renderPreviewPlayer(w.id, displayTitle, w.ytId)}
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>
+            ✅ Elfogadott szüneti sor ({approvedWishes.length} db)
+          </h3>
+          {approvedWishes.length === 0 ? (
+            <p><i>Jelenleg nincs elfogadott szüneti zene a sorban.</i></p>
           ) : (
             <>
-              {mergedWishes.map(w => {
+              {approvedWishes.map(w => {
                 const mediaLink = w.ytId ? `https://youtu.be/${w.ytId}` : undefined
                 const isPreviewing = previewWishId === w.id
                 const inRadio = isTrackInRadio(w.ytId, customRadioTracks)
+                const displayTitle = cleanSongTitle(w.title)
                 return (
                   <div key={w.id} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 8, marginBottom: 8 }}>
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <b>🎵 Zene: {w.title}</b>
+                        <b>🎵 Zene: {displayTitle}</b>
                         {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
                         {' '}• <small>{w.day}</small>
                         {mediaLink && (
@@ -1202,24 +1347,13 @@ function Panel() {
                         )}
                         <button
                           type="button"
-                          onClick={async () => {
-                            const res = await removeSong(w.id, w.day)
-                            if (res?.error) {
-                              setMsg(`Törlési hiba: ${res.error}`)
-                              return
-                            }
-                            setDeletedWishIds(prev => new Set(prev).add(w.id))
-                            setDbWishes(prev => prev.filter(x => x.id !== w.id))
-                            if (previewWishId === w.id) setPreviewWishId(null)
-                            setMsg(`Törölve: ${w.title}`)
-                            notifyAllClients()
-                          }}
+                          onClick={() => void rejectOrDeleteWish(w)}
                         >
                           🗑️ Törlés
                         </button>
                       </div>
                     </div>
-                    {w.ytId && renderPreviewPlayer(w.id, w.title, w.ytId)}
+                    {w.ytId && renderPreviewPlayer(w.id, displayTitle, w.ytId)}
                   </div>
                 )
               })}
@@ -1504,6 +1638,142 @@ function Panel() {
             })}
           </div>
         )}
+      </section>
+    )}
+
+    {(can('videos') || can('settings')) && (
+      <section>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h2>👤 Játékosprofilok &amp; PIN-kódok kezelése</h2>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" onClick={() => void loadProfiles()} disabled={profileBusy}>
+              🔄 Frissítés
+            </button>
+            {can('settings') && (
+              <button
+                type="button"
+                disabled={profileBusy}
+                onClick={async () => {
+                  if (!confirm('Biztosan törlöd az ÖSSZES játékosprofilt, PIN-kódot és az összes napi/heti/havi aréna eredményt?')) return
+                  if (!confirm('Utolsó megerősítés: minden eddigi név és pontszám véglegesen törlődik az adatbázisból!')) return
+                  setProfileBusy(true)
+                  try {
+                    const { data, error } = await supabase.rpc('admin_reset_all_arena_and_profiles', { p_school: d.id })
+                    if (error || (data as any)?.ok === false) {
+                      setMsg('Hiba a nullázáskor: ' + (error?.message || (data as any)?.error || 'ismeretlen'))
+                      return
+                    }
+                    await clearLeaderboard()
+                    await loadProfiles()
+                    setMsg('Minden játékosprofil és toplista sikeresen nullázva.')
+                  } finally {
+                    setProfileBusy(false)
+                  }
+                }}
+              >
+                🧹 Összes toplista &amp; profil nullázása
+              </button>
+            )}
+          </div>
+        </div>
+        <p>
+          Ha egy diák elfelejtette a 4 jegyű PIN-kódját, itt nullázhatod (utána ugyanazzal a névvel új PIN-t tud beállítani), vagy szükség esetén törölheted is a profilját pontszámaival együtt.
+        </p>
+
+        <div className="row" style={{ marginBottom: 10 }}>
+          <input
+            type="text"
+            placeholder="Keresés név vagy osztály alapján (pl. 10.A)..."
+            value={profileFilter}
+            onChange={e => setProfileFilter(e.target.value)}
+            style={{ maxWidth: 320 }}
+          />
+        </div>
+
+        {(() => {
+          const q = profileFilter.trim().toLowerCase()
+          const filtered = q
+            ? playerProfiles.filter(p => p.player_name.toLowerCase().includes(q))
+            : playerProfiles
+          if (filtered.length === 0) {
+            return <p><i>{playerProfiles.length === 0 ? 'Jelenleg még nincs mentett játékosprofil.' : 'Nincs a keresésnek megfelelő profil.'}</i></p>
+          }
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {filtered.map(p => (
+                <div
+                  className="row"
+                  key={p.player_id}
+                  style={{
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: '1px solid var(--line)',
+                    paddingBottom: 6,
+                    gap: 8,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <b>{p.player_name}</b>
+                    {' '}• <span>{p.has_pin ? '🔒 PIN aktív' : '🔓 PIN nullázva'}</span>
+                    {' '}• <small>{new Date(p.updated_at).toLocaleDateString('hu-HU')}</small>
+                  </div>
+                  <div className="row" style={{ gap: 6 }}>
+                    {p.has_pin && (
+                      <button
+                        type="button"
+                        disabled={profileBusy}
+                        onClick={async () => {
+                          if (!confirm(`Nullázod "${p.player_name}" PIN-kódját? Utána új 4 jegyű PIN-t adhat meg belépéskor.`)) return
+                          setProfileBusy(true)
+                          try {
+                            const { data, error } = await supabase.rpc('admin_reset_player_pin', { p_school: d.id, p_player: p.player_id })
+                            if (error || (data as any)?.ok === false) {
+                              setMsg('Hiba a PIN nullázásakor: ' + (error?.message || (data as any)?.error || 'ismeretlen'))
+                              return
+                            }
+                            await loadProfiles()
+                            setMsg(`PIN nullázva: ${p.player_name}`)
+                          } finally {
+                            setProfileBusy(false)
+                          }
+                        }}
+                      >
+                        🔑 PIN nullázása
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={profileBusy}
+                      onClick={async () => {
+                        if (!confirm(`Biztosan törlöd "${p.player_name}" profilját ÉS az összes pontszámát a toplistákról?`)) return
+                        setProfileBusy(true)
+                        try {
+                          const { data, error } = await supabase.rpc('admin_delete_player_profile', {
+                            p_school: d.id,
+                            p_player: p.player_id,
+                            p_delete_scores: true,
+                          })
+                          if (error || (data as any)?.ok === false) {
+                            setMsg('Hiba a profil törlésekor: ' + (error?.message || (data as any)?.error || 'ismeretlen'))
+                            return
+                          }
+                          await removeLeaderEntry(p.player_id, undefined, p.player_name)
+                          await loadProfiles()
+                          setMsg(`Profil és pontszámok törölve: ${p.player_name}`)
+                        } finally {
+                          setProfileBusy(false)
+                        }
+                      }}
+                    >
+                      🗑️ Profil törlése
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
       </section>
     )}
 

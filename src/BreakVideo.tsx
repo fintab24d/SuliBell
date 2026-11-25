@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
 import { serverNowMs } from './lib/serverTime'
 import type { MusicSyncResult } from './lib/useMusicSync'
+import { cleanSongTitle } from './lib/video'
 
 const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
   const d = ((i * 7 + 3) % 13) / 10
@@ -75,8 +76,9 @@ export function MusicVisualizer({
   }, [muted, forceUnmuteAndPlay])
 
   // Lejátszási idő követése és drift-korrekció a központi szerveridő alapján
+  const displayTitle = useMemo(() => cleanSongTitle(title), [title])
   const [time, setTime] = useState(0)
-  const lyrics = useLyrics(title)
+  const lyrics = useLyrics(displayTitle)
 
   useEffect(() => {
     setWaitingNext(false)
@@ -127,8 +129,13 @@ export function MusicVisualizer({
   }, [ytId, slotStartMs, slotEndMs, sendYtCmd])
 
   const lyricIdx = currentLyricIndex(lyrics, time)
-  const lyricNow = lyricIdx >= 0 ? lyrics[lyricIdx].text : ''
+  const lyricPrev = lyricIdx > 0 ? lyrics[lyricIdx - 1]?.text ?? '' : ''
+  const lyricNow = lyricIdx >= 0 ? lyrics[lyricIdx]?.text ?? '' : ''
   const lyricNext = lyrics[lyricIdx + 1]?.text ?? ''
+  const lyricDurSec =
+    lyricIdx >= 0 && lyrics[lyricIdx + 1]
+      ? Math.max(1.2, Math.min(12, lyrics[lyricIdx + 1].t - lyrics[lyricIdx].t))
+      : 4
 
   // Ha a böngésző az első kattintásig visszafogná a hangot, az oldal bárhol történő első érintésére felhangosítjuk
   useEffect(() => {
@@ -197,11 +204,11 @@ export function MusicVisualizer({
       {/* Háttérben futó 240x200px-es audio motor a visualizer réteg mögött (YouTube >=200x200px előírás miatt) */}
       <div className="bg-audio-engine" aria-hidden="true">
         {ytSrc && playing && !waitingNext && (
-          <iframe
+            <iframe
             ref={iframeRef}
             key={`${ytId}-${slotStartMs ?? 0}-${reloadNonce}`}
             src={ytSrc}
-            title={title}
+            title={displayTitle}
             allow="autoplay; encrypted-media; picture-in-picture"
             referrerPolicy="strict-origin-when-cross-origin"
             onLoad={handleIframeLoad}
@@ -243,8 +250,8 @@ export function MusicVisualizer({
                 <span className="pill">🎵 DIÁKKÍVÁNSÁG</span>
               )}
             </div>
-            <h3 className="viz-title" title={title}>{title}</h3>
-            <div className="viz-sub">
+            <h3 key={`t-${ytId ?? displayTitle}`} className="viz-title" title={displayTitle}>{displayTitle}</h3>
+            <div key={`s-${ytId ?? displayTitle}-${by ?? ''}`} className="viz-sub">
               {radioMode ? (
                 by ? (
                   <span>SuliRádió • Diákajánlás: <b>{by}</b> (ha beküldesz egy számot, az szól következőnek!)</span>
@@ -306,8 +313,25 @@ export function MusicVisualizer({
         {/* Időzített dalszöveg (csak ha elérhető) */}
         {lyrics.length > 0 && !waitingNext && (
           <div className="viz-lyrics" aria-live="polite">
-            <p key={`n${lyricIdx}`} className="now">{lyricNow || '♪'}</p>
-            {lyricNext && <p className="next">{lyricNext}</p>}
+            {lyricPrev && <p key={`p-${lyricIdx}`} className="prev">{lyricPrev}</p>}
+            <p
+              key={`n-${lyricIdx}`}
+              className="now"
+              style={{ '--ldur': `${lyricDurSec.toFixed(2)}s` } as CSSProperties}
+            >
+              {(lyricNow || '♪').split(/\s+/).map((word, wi) => (
+                <span key={wi} className="lword" style={{ '--wi': wi } as CSSProperties}>
+                  {word}{' '}
+                </span>
+              ))}
+            </p>
+            {lyricNext && <p key={`x-${lyricIdx}`} className="next">{lyricNext}</p>}
+            <span
+              key={`bar-${lyricIdx}`}
+              className="viz-lyric-bar"
+              style={{ '--ldur': `${lyricDurSec.toFixed(2)}s` } as CSSProperties}
+              aria-hidden="true"
+            />
           </div>
         )}
 
