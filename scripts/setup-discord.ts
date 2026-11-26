@@ -354,7 +354,7 @@ async function main() {
     name: '👑-vip-zenekérés',
     type: 0,
     parent_id: vipCat.id,
-    topic: '👑 VIP Zenekérés — az ide beküldött zenék 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
+    topic: '👑 VIP Zenekérés — az ide beküldött zenék 👑 VIP jelvénnyel és soron kívüli elsőbbséggel kerülnek a szüneti műsorba (jóváhagyás után)!',
     permission_overwrites: vipPrivateOverwrites,
   })
 

@@ -143,7 +143,7 @@ Itt követjük és szervezzük átlátható kártyákon a weboldal és a Discord
    - 📋 **Tervezett** — ötletből elfogadott feladat
    - 🔨 **Folyamatban** — épp készülő fejlesztés
    - 🧪 **Tesztelés** — kiadás előtti ellenőrzés
-   - ✅ **Kész** — élesítve a \`sulibell.vercel.app\`-on
+   - ✅ **Kész** — élesítve a \`www.sulibell.com\`-on
    - 🐛 **Bugfix** / ✨ **Új funkció**
 4. A feladat állapota szerint frissítsd a címkét és írd le alatta a részleteket!`
 

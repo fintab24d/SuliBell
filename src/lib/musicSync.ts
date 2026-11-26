@@ -25,6 +25,7 @@ export interface SyncTrack {
   ytId: string
   by?: string
   dur?: number
+  vip?: boolean
 }
 
 export interface SyncWish extends SyncTrack {
@@ -96,7 +97,10 @@ export function computeMusicTimeline(params: {
     let cursor = w.start
     let guard = 0
     while (cursor < w.end && cursor <= nowSec && guard++ < 500) {
-      const idx = pending.findIndex(p => p.atSec <= cursor && w.end - cursor >= Math.min(MIN_WISH_START_SEC, slotLen(p)))
+      let idx = pending.findIndex(p => Boolean(p.vip) && p.atSec <= cursor && w.end - cursor >= Math.min(MIN_WISH_START_SEC, slotLen(p)))
+      if (idx < 0) {
+        idx = pending.findIndex(p => p.atSec <= cursor && w.end - cursor >= Math.min(MIN_WISH_START_SEC, slotLen(p)))
+      }
       let slot: Omit<MusicSlot, 'offset' | 'end'> & { len: number }
       if (idx >= 0) {
         const wish = pending.splice(idx, 1)[0]

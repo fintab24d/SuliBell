@@ -176,9 +176,9 @@ async function sendVipCodeDm(
             `Itt az egyedi weboldali VIP kódod (**${tierLabel}**):\n` +
             `# \`${vipCode}\`\n\n` +
             `**Így aktiválhatod 10 másodperc alatt:**\n` +
-            `1. Nyisd meg a SuliBell weboldalt.\n` +
+            `1. Nyisd meg a **[www.sulibell.com](https://www.sulibell.com)** oldalt.\n` +
             `2. Kattints a fejlécben a **🔑** ikonra.\n` +
-            `3. Másold be a fenti kódot, és élvezd az extra témákat, effekteket és csengőhangokat!\n\n` +
+            `3. Másold be a fenti kódot, és élvezd az extra témákat, csengőhangokat, a **2 zene/szünet** keretet és a **👑 VIP Zenegép elsőbbséget**!\n\n` +
             `*(A kódot legfeljebb **2 eszközön** — pl. telefonon és gépen — tudod beváltani.)*`,
           color: tier === 'top' ? 0xffd700 : 0x39ff7a,
           footer: { text: 'SuliBell • Automatikus VIP kód kézbesítés' },
@@ -414,7 +414,7 @@ async function runVipSetup(map: ChannelMap) {
           fields: [
             {
               name: '🎁 Mit ad a 💎 VIP Támogató rang?',
-              value: '• **Kiemelt arany név** és külön kategória a taglistában\n• Hozzáférés a privát **#💎-vip-társalgó** és **🔊 VIP Társalgó** szobákhoz\n• Hozzáférés a **#👑-vip-zenekérés** szobához, ahonnan a beküldött zenék **💎 VIP jelvénnyel és +2 bónusz szavazattal** kerülnek be a SuliBell zenegépébe!\n• Megjelenés a SuliBell főoldali **🏆 Támogatói Toplistáján**'
+              value: '• **Kiemelt arany név** és külön kategória a taglistában\n• Hozzáférés a privát **#💎-vip-társalgó** és **🔊 VIP Társalgó** szobákhoz\n• Hozzáférés a **#👑-vip-zenekérés** szobához — az ide beküldött zenék **👑 VIP jelvénnyel és soron kívüli elsőbbséggel** szólnak a SuliBell zenegépében (admin jóváhagyás után), és a weboldalon szünetenként **2 zenét** is kérhetsz!\n• Megjelenés a SuliBell főoldali **🏆 Támogatói Toplistáján**'
             },
             {
               name: '⚡ Hogyan kapod meg automatikusan a rangot?',
@@ -465,15 +465,15 @@ async function runVipSetup(map: ChannelMap) {
       name: '👑-vip-zenekérés',
       type: 0,
       parent_id: map.vipCat,
-      topic: '👑 VIP Zenekérés — az ide beküldött zenék 💎 VIP jelvénnyel és +2 bónusz szavazattal indulnak a weboldalon!',
+      topic: '👑 VIP Zenekérés — az ide beküldött zenék 👑 VIP jelvénnyel és soron kívüli elsőbbséggel szólalnak meg jóváhagyás után!',
       permission_overwrites: vipPrivateOverwrites
     }).catch(() => null)
     if (ch?.id) {
       map.vipMusic = ch.id
       await discordApi(`/channels/${ch.id}/messages`, 'POST', {
         embeds: [{
-          title: '👑 VIP Zenekérés (+2 Bónusz Szavazat!)',
-          description: 'Küldj be ide egy **YouTube**, **Spotify** vagy **SoundCloud** linket! A SuliBell automatikusan szinkronizálja a weboldalra **💎 VIP jelvénnyel** és **3 kezdő szavazattal (1 + 2 VIP bónusz)**, így a kérésed azonnal a kívánságlista élére ugrik!',
+          title: '👑 VIP Zenekérés (Elsőbbségi Lejátszás!)',
+          description: 'Küldj be ide egy **YouTube**, **Spotify** vagy **SoundCloud** linket! A SuliBell automatikusan szinkronizálja a weboldalra **👑 VIP KÍVÁNSÁG** jelvénnyel, és admin jóváhagyás után **soron kívül, a sima kérések előtt** szólal meg!',
           color: 0xfacc15
         }]
       }).catch(() => {})
@@ -906,7 +906,7 @@ async function runWelcomeAndJoinSetup(map: ChannelMap) {
         },
         {
           name: '🎵 Élő Zenekérés a Szünetekre',
-          value: `Írj be egy zenecímet vagy YouTube-linket a <#${map.music || ''}> szobába, és a **SuliBell Bot** automatikusan felteszi a weboldal szüneti kívánságlistájára! Ha reakciót nyomtok rá itt Discordon, azzal **szavazatot (🔥)** adtok neki az oldalon is!`,
+          value: `Írj be egy zenecímet vagy YouTube-linket a <#${map.music || ''}> szobába, és a **SuliBell Bot** továbbítja a weboldal zenegépébe (admin jóváhagyás után mindenkinél egyszerre szólal meg a szünetben)!`,
         },
         {
           name: '📢 Órarend-változások, Menza & Közlemények',
@@ -2434,7 +2434,8 @@ Deno.serve(async (req: Request) => {
             title: cleanTitle.slice(0, 60),
             by: src.isVip ? `${senderName} 💎` : `${senderName} 💬`,
             ytId,
-            votes: (src.isVip ? 3 : 1) + extraVotes,
+            votes: 1,
+            vip: src.isVip,
             at: createdMs,
           })
         }
@@ -2600,7 +2601,7 @@ Deno.serve(async (req: Request) => {
                 },
                 {
                   name: '🌐 Weboldal',
-                  value: '[sulibell.vercel.app](https://sulibell.vercel.app)',
+                  value: '[www.sulibell.com](https://www.sulibell.com)',
                   inline: true,
                 },
               ],

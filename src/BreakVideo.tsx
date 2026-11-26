@@ -20,6 +20,7 @@ export function MusicVisualizer({
   title,
   by,
   ytId,
+  vip = false,
   radioMode = false,
   initialMuted = false,
   compact = false,
@@ -30,6 +31,7 @@ export function MusicVisualizer({
   title: string
   by?: string
   ytId?: string
+  vip?: boolean
   radioMode?: boolean
   initialMuted?: boolean
   compact?: boolean
@@ -199,8 +201,10 @@ export function MusicVisualizer({
   const thumbUrl = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : undefined
   const active = playing && !muted && !waitingNext
 
+  const vipWish = vip && !radioMode
+
   return (
-    <div className={`music-viz ${compact ? 'compact' : ''} ${playing && !waitingNext ? 'is-playing' : 'is-paused'}`}>
+    <div className={`music-viz ${compact ? 'compact' : ''} ${playing && !waitingNext ? 'is-playing' : 'is-paused'} ${vipWish ? 'is-vip' : ''}`}>
       {/* Háttérben futó 240x200px-es audio motor a visualizer réteg mögött (YouTube >=200x200px előírás miatt) */}
       <div className="bg-audio-engine" aria-hidden="true">
         {ytSrc && playing && !waitingNext && (
@@ -246,6 +250,8 @@ export function MusicVisualizer({
               </span>
               {radioMode ? (
                 <span className="pill viz-radio-pill">📻 SULIRÁDIÓ • AUTO-DJ</span>
+              ) : vipWish ? (
+                <span className="pill viz-vip-pill">👑 VIP KÍVÁNSÁG</span>
               ) : (
                 <span className="pill">🎵 DIÁKKÍVÁNSÁG</span>
               )}
@@ -382,6 +388,7 @@ export default function BreakVideo({
         title={track.title}
         by={track.by}
         ytId={track.ytId}
+        vip={Boolean(track.vip)}
         radioMode={radioMode}
         initialMuted={userMuted}
         slotStartMs={sync.slotStartMs}

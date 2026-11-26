@@ -1,19 +1,19 @@
 # SuliBell 🔔
 > **Iskolai Valós Idejű Csengetési, Tájékoztatási és Közösségi Rendszer**  
-> *Hivatalos weboldal:* [sulibell.vercel.app](https://sulibell.vercel.app)  
+> *Hivatalos weboldal:* [www.sulibell.com](https://www.sulibell.com)  
 > *Copyright © 2026 Finta Benjámin (SuliBell). Minden jog fenntartva (All Rights Reserved).*
 
 A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi webalkalmazás, amely másodperc pontosan mutatja a tanítási órákat, szüneteket, órarendi változásokat, és élménnyé teszi az iskolai mindennapokat a diákok, a tanárok és az iskola vezetősége számára.
 
 > [!TIP]
 > **Iskolai PC-kről és laptopokról is elérhető!**  
-> Mivel a tanítási időszakban a mobiltelefonokat a diákoknak le kell adniuk, a SuliBell közvetlenül böngészőből futtatható az iskolai géptermek (informatikatermek) számítógépein és laptopokon is a **[sulibell.vercel.app](https://sulibell.vercel.app)** címen telepítés nélkül.
+> Mivel a tanítási időszakban a mobiltelefonokat a diákoknak le kell adniuk, a SuliBell közvetlenül böngészőből futtatható az iskolai géptermek (informatikatermek) számítógépein és laptopokon is a **[www.sulibell.com](https://www.sulibell.com)** címen telepítés nélkül.
 
 ---
 
 ## 🚀 Főbb Elérhetőségek és Nézetek
 
-- **Főoldal (`/`)**: 3 oszlopos Bento Dashboard élmény telefonon, tableten és asztali böngészőben ([sulibell.vercel.app](https://sulibell.vercel.app)).
+- **Főoldal (`/`)**: 3 oszlopos Bento Dashboard élmény telefonon, tableten és asztali böngészőben ([www.sulibell.com](https://www.sulibell.com)).
 - **Folyosói Kijelző / TV Mód (`/display`)**: Fix 100svh felbontású, görgetésmentes nézet folyosói és aulában elhelyezett TV-kijelzőkre, óriási számlappal és QR-kóddal a gyors megnyitáshoz.
 - **Adminisztrátori Felület (`/admin`)**: Jelszóval és szerepkörökkel (Tulajdonos, Főadmin, Admin) védett vezérlőpult a csengetési rendek, változások, menük, zenék, előnézet-kapcsolók és rendszerbeállítások kezelésére.
 - **Privát Admin Tesztlabor (`/teszt`)**: Valósághű szimulációs környezet az adminoknak időléptetéssel, hó/eső és változások kockázatmentes teszteléséhez (a látogatók nem látják).
@@ -81,7 +81,7 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
     - `#🐛-hibajelentés`, `#🔊-szüneti-társalgó`
   - `🔒 FEJLESZTŐI ZÓNA (DEV)`:
     - `#🚀-deploy-és-git`: Valós idejű GitHub commit és automatikus Vercel deploy értesítések commit üzenettel és szerzővel.
-    - `#🆕-frissítések`: Automatikus értesítés verzióváltáskor a weboldal újdonságaival és a [sulibell.vercel.app](https://sulibell.vercel.app) közvetlen hivatkozásával.
+    - `#🆕-frissítések`: Automatikus értesítés verzióváltáskor a weboldal újdonságaival és a [www.sulibell.com](https://www.sulibell.com) közvetlen hivatkozásával.
     - `#🤖-bot-napló`: Rendszernaplózás és tagváltozások.
 
 ### 🔄 Rendszerfrissítés / Karbantartási Képernyő
@@ -99,7 +99,7 @@ A **SuliBell** egy modern, valós idejű iskolai csengetési és közösségi we
 ## 🛠️ Technológiai Háttér
 
 - **Frontend keretrendszer:** React 18, TypeScript, Vite
-- **Hosztolás & Kiszolgálás:** Vercel ([sulibell.vercel.app](https://sulibell.vercel.app))
+- **Hosztolás & Kiszolgálás:** Vercel ([www.sulibell.com](https://www.sulibell.com))
 - **Adatbázis & Backend:** Supabase (PostgreSQL, Realtime WebSocket csatornák, Row-Level Security, Edge Functions)
 - **Stílus és Megjelenés:** Tiszta, optimalizált CSS3 (Glassmorphism, Neon glow, Tabular numbers, Responsive Bento Grid)
 - **Fizikai Effektek:** Kétrétegű HTML5 Canvas részecskemotor DOM-elemekhez rögzített ütközésvizsgálattal

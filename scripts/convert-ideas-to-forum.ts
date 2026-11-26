@@ -88,7 +88,7 @@ Ez a csatorna egy **Fórum**, ahol minden ötlet külön bejegyzésként jelenik
 
 ### 👍 Szavazás és támogatás:
 - Ha tetszik egy diáktársad ötlete, reagálj a bejegyzésre 👍 vagy 🔥 emojival!
-- A legtöbb szavazatot kapott ötleteket a fejlesztői csapat (**Lead Dev** & **Fejlesztők**) átnézi, és beépíti a következő weboldal-frissítésbe a [sulibell.vercel.app](https://sulibell.vercel.app) oldalon!
+- A legtöbb szavazatot kapott ötleteket a fejlesztői csapat (**Lead Dev** & **Fejlesztők**) átnézi, és beépíti a következő weboldal-frissítésbe a [www.sulibell.com](https://www.sulibell.com) oldalon!
 
 *Köszönjük, hogy segítesz jobbá tenni a sulit! 🚀*`
 

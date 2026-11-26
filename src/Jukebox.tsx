@@ -7,6 +7,7 @@ import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/disco
 import { weekdayOf } from './lib/engine'
 import { fetchYouTubeTitle, validateMediaSubmission } from './lib/moderation'
 import { focusPlayerProfile, usePlayerProfile } from './lib/usePlayerProfile'
+import { loadVipStatus } from './lib/vip'
 
 export type MediaKind = 'music'
 
@@ -26,6 +27,7 @@ export interface SongWish {
   at: number
   approved?: boolean
   approvedAt?: number
+  vip?: boolean
 }
 
 const QUICK_SONGS: { title: string; ytId: string }[] = [
@@ -130,24 +132,32 @@ export function loadAllLocalSongs(): SongWish[] {
   return all.sort((a, b) => b.at - a.at)
 }
 
-function loadSubmittedSet(day: string): Set<string> {
+function loadSubmittedList(day: string): string[] {
   try {
     const arr = JSON.parse(localStorage.getItem(SUB_PREFIX + day) ?? '[]')
-    return new Set(Array.isArray(arr) ? arr : [])
+    return Array.isArray(arr) ? arr.map(String) : []
   } catch {
-    return new Set()
+    return []
   }
 }
 
-function saveSubmittedSet(day: string, set: Set<string>) {
+function saveSubmittedList(day: string, list: string[]) {
   try {
-    localStorage.setItem(SUB_PREFIX + day, JSON.stringify(Array.from(set)))
+    localStorage.setItem(SUB_PREFIX + day, JSON.stringify(list))
   } catch { /* ignore */ }
+}
+
+function countSubmittedEntries(list: string[], bk: string, byName?: string): number {
+  const baseHits = list.filter(x => x === bk).length
+  const norm = byName?.trim().toLowerCase()
+  if (!norm) return baseHits
+  const namedHits = list.filter(x => x === `${bk}::${norm}`).length
+  return Math.max(baseHits, namedHits)
 }
 
 function sortSongs(list: SongWish[]): SongWish[] {
   return [...list]
-    .sort((a, b) => a.at - b.at)
+    .sort((a, b) => Number(Boolean(b.vip)) - Number(Boolean(a.vip)) || a.at - b.at)
     .slice(0, 60)
 }
 
@@ -171,6 +181,7 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
       kind: 'music',
       day: cur.day || incoming.day,
       at: cur.at && incoming.at ? Math.min(cur.at, incoming.at) : (cur.at || incoming.at),
+      vip: Boolean(cur.vip || incoming.vip),
     }
     const next = [...list]
     next[idx] = updated
@@ -183,7 +194,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
   const [pendingSongs, setPendingSongs] = useState<SongWish[]>([])
   const [ghosts, setGhosts] = useState<SongWish[]>([])
-  const [submitted, setSubmitted] = useState<Set<string>>(() => loadSubmittedSet(day))
+  const [submitted, setSubmitted] = useState<string[]>(() => loadSubmittedList(day))
+  const [isVip, setIsVip] = useState<boolean>(() => loadVipStatus().active)
   const [discordChannels, setDiscordChannels] = useState<{ music: string }>({
     music: '#🎵-zenekérés-ötletek',
   })
@@ -197,26 +209,43 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
   pendingRef.current = pendingSongs
 
   useEffect(() => {
+    const syncVip = () => setIsVip(loadVipStatus().active)
+    const onVipStorage = (e: StorageEvent) => {
+      if (!e.key || e.key === 'sulibell_vip_status_v1') syncVip()
+    }
+    window.addEventListener('sulibell:vip-change', syncVip)
+    window.addEventListener('storage', onVipStorage)
+    return () => {
+      window.removeEventListener('sulibell:vip-change', syncVip)
+      window.removeEventListener('storage', onVipStorage)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return
     pruneOldJukeboxDays(day)
     setSongs(loadLocalSongs(day))
     setPendingSongs([])
     setGhosts([])
-    setSubmitted(loadSubmittedSet(day))
+    setSubmitted(loadSubmittedList(day))
     const onStorage = (e: StorageEvent) => {
-      if (e.key === SUB_PREFIX + day) setSubmitted(loadSubmittedSet(day))
+      if (e.key === SUB_PREFIX + day) setSubmitted(loadSubmittedList(day))
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
   }, [day])
 
+  const maxSongsPerBreak = isVip ? 2 : 1
+
+  const submittedCountInBreak = useCallback((byName?: string) => {
+    if (!breakKey) return 0
+    return countSubmittedEntries(submitted, breakKey, byName)
+  }, [breakKey, submitted])
+
   const hasSubmittedInBreak = useCallback((byName?: string) => {
     if (!breakKey) return false
-    if (submitted.has(breakKey)) return true
-    const norm = byName?.trim().toLowerCase()
-    if (norm && submitted.has(`${breakKey}::${norm}`)) return true
-    return false
-  }, [breakKey, submitted])
+    return submittedCountInBreak(byName) >= maxSongsPerBreak
+  }, [breakKey, submittedCountInBreak, maxSongsPerBreak])
 
   const applyDeleteLocal = useCallback((songId: string, targetDay?: string) => {
     const d = targetDay || day
@@ -333,6 +362,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
           at: isApproved ? approvedMs : createdMs,
           approved: isApproved,
           approvedAt: r.approved_at ? approvedMs : undefined,
+          vip: Boolean(r.is_vip),
         }
         if (isApproved) dbActive.push(item)
         else dbPending.push(item)
@@ -407,6 +437,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
             votes: ds.votes,
             at: ds.at,
             approved: true,
+            vip: Boolean(ds.vip) || ds.by.includes('💎'),
           }
           if (del.has(ds.id)) {
             if (ds.ytId) dcGhosts.push(item)
@@ -656,14 +687,12 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     if (!ytId) return { ok: false, reason: 'invalid' }
 
     if (breakKey) {
-      const latestSub = loadSubmittedSet(day)
-      const normBy = cleanBy.toLowerCase()
-      if (
-        submitted.has(breakKey) ||
-        latestSub.has(breakKey) ||
-        submitted.has(`${breakKey}::${normBy}`) ||
-        latestSub.has(`${breakKey}::${normBy}`)
-      ) {
+      const latestSub = loadSubmittedList(day)
+      const count = Math.max(
+        countSubmittedEntries(submitted, breakKey, cleanBy),
+        countSubmittedEntries(latestSub, breakKey, cleanBy)
+      )
+      if (count >= maxSongsPerBreak) {
         return { ok: false, reason: 'break_limit' }
       }
     }
@@ -685,6 +714,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       votes: 1,
       at: Date.now(),
       approved: false,
+      vip: isVip,
     }
 
     const del = loadDeletedSet(day)
@@ -695,10 +725,10 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
 
     if (breakKey) {
       setSubmitted(prev => {
-        const next = new Set([...loadSubmittedSet(day), ...prev])
-        next.add(breakKey)
-        next.add(`${breakKey}::${cleanBy.toLowerCase()}`)
-        saveSubmittedSet(day, next)
+        const latest = loadSubmittedList(day)
+        const base = latest.length >= prev.length ? latest : prev
+        const next = [...base, breakKey, `${breakKey}::${cleanBy.toLowerCase()}`]
+        saveSubmittedList(day, next)
         return next
       })
     }
@@ -729,10 +759,11 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         p_media: null,
         p_kind: 'music',
         p_voter: voterId(),
+        p_vip: isVip,
       }).then(() => {})
     }
     return { ok: true }
-  }, [schoolId, day, breakKey, songs, pendingSongs, submitted])
+  }, [schoolId, day, breakKey, songs, pendingSongs, submitted, isVip, maxSongsPerBreak])
 
   const approveSong = useCallback(async (songId: string, targetDay?: string): Promise<{ error?: string }> => {
     const d = targetDay || day
@@ -845,7 +876,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     return {}
   }, [schoolId, day])
 
-  return { songs, pendingSongs, ghosts, channels: discordChannels, hasSubmittedInBreak, addSong, approveSong, removeSong, finishSong, clearAllSongs }
+  return { songs, pendingSongs, ghosts, channels: discordChannels, isVip, maxSongsPerBreak, submittedCountInBreak, hasSubmittedInBreak, addSong, approveSong, removeSong, finishSong, clearAllSongs }
 }
 
 export default memo(function Jukebox({
@@ -867,7 +898,7 @@ export default memo(function Jukebox({
   playedIds?: Set<string>
   nowPlayingId?: string
 }) {
-  const { songs, pendingSongs, channels, hasSubmittedInBreak, addSong } = useJukebox(schoolId, day, sound, breakKey)
+  const { songs, pendingSongs, channels, isVip, maxSongsPerBreak, submittedCountInBreak, hasSubmittedInBreak, addSong } = useJukebox(schoolId, day, sound, breakKey)
   const queue = songs.filter(s => !playedIds?.has(s.id) || s.id === nowPlayingId)
   const weekend = isJukeboxWeekend(day)
   const profile = usePlayerProfile(schoolId)
@@ -882,6 +913,7 @@ export default memo(function Jukebox({
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const alreadySubmittedBreak = hasSubmittedInBreak(by)
+  const leftInBreak = Math.max(0, maxSongsPerBreak - submittedCountInBreak(by))
   const detectedYtId = pickedYtId || (ytUrl.trim() ? parseYouTubeId(ytUrl.trim()) : null) || undefined
 
   useEffect(() => {
@@ -971,7 +1003,7 @@ export default memo(function Jukebox({
       const res = addSong(check.cleanTitle || resolvedTitle, cleanBy, ytUrl, finalYtId)
       if (!res.ok) {
         if (res.reason === 'break_limit') {
-          setErr('Ebben a szünetben már küldtél be zenét! Egy ember egy szünetben csak 1 kívánságot küldhet be.')
+          setErr(`Ebben a szünetben már elérted a limitet (${maxSongsPerBreak} kívánság/szünet).`)
         } else if (res.reason === 'duplicate') {
           setErr('Ez a szám már szerepel a mai várólistán!')
         } else {
@@ -1001,13 +1033,14 @@ export default memo(function Jukebox({
         </div>
         <ol className="jb-list tv-jb">
           {top3.map((s, i) => (
-            <li key={s.id} className={i === 0 ? 'lead' : ''}>
+            <li key={s.id} className={`${i === 0 ? 'lead' : ''}${s.vip ? ' vip' : ''}`}>
               <span className="jb-rk">{i === 0 ? '▶' : `${i + 1}.`}</span>
-            <div className="jb-info">
+              <div className="jb-info">
                 <b>{cleanSongTitle(s.title)}</b>
                 {s.by && <small>küldi: {s.by}</small>}
               </div>
               <span className="jb-votes">
+                {s.vip ? '👑 VIP • ' : ''}
                 {s.id === nowPlayingId ? '▶ Most szól' : i === 0 ? '▶ Következő' : `#${i + 1}`}
               </span>
             </li>
@@ -1103,6 +1136,11 @@ export default memo(function Jukebox({
           </div>
 
           <div className="jb-inputs">
+            {isVip && (
+              <p className="jb-vip-hint">
+                👑 VIP elsőbbség aktív: ebben a szünetben még <b>{leftInBreak} / {maxSongsPerBreak}</b> zenét kérhetsz, és elfogadás után soron kívül szólal meg!
+              </p>
+            )}
             <input
               type="url"
               placeholder="Illeszd be a YouTube-linket (watch, youtu.be, shorts) *"
@@ -1164,12 +1202,12 @@ export default memo(function Jukebox({
             </div>
             {alreadySubmittedBreak && (
               <small style={{ color: '#facc15', fontWeight: 600 }}>
-                ⏸️ Ebben a szünetben már küldtél be zenét! Egy ember egy szünetben csak 1 kívánságot küldhet be.
+                ⏸️ Ebben a szünetben már elérted a keretedet ({maxSongsPerBreak} kívánság / szünet).
               </small>
             )}
             {err && <small style={{ color: 'var(--warn)', fontWeight: 600 }}>{err}</small>}
             <small style={{ color: 'var(--mut)', fontSize: '0.8rem', marginTop: 4, display: 'block' }}>
-              🛡️ Szabályok: Elég bemásolnod a YouTube-linket — a szám címét automatikusan letisztítva kérjük le és ellenőrizzük. Egy ember egy szünetben csak 1 számot küldhet be. A beküldött zenék admin jóváhagyás után kerülnek be a szüneti sorba; ha nincs jóváhagyott kívánság, a 📻 SuliRádió szól!
+              🛡️ Szabályok: Elég bemásolnod a YouTube-linket — a szám címét automatikusan letisztítva kérjük le és ellenőrizzük. Szünetenként {maxSongsPerBreak} számot küldhetsz be ({isVip ? '👑 VIP: 2/szünet + soron kívüli lejátszás' : 'VIP ranggal: 2/szünet + soron kívüli lejátszás'}). A beküldött zenék admin jóváhagyás után kerülnek be a szüneti sorba; ha nincs jóváhagyott kívánság, a 📻 SuliRádió szól!
             </small>
           </div>
         </form>
@@ -1189,7 +1227,7 @@ export default memo(function Jukebox({
               : `https://www.youtube.com/results?search_query=${encodeURIComponent(s.title)}`
             const displayTitle = cleanSongTitle(s.title)
             return (
-              <li key={s.id} className={`jb-item ${i === 0 ? 'lead' : ''}`}>
+              <li key={s.id} className={`jb-item ${i === 0 ? 'lead' : ''}${s.vip ? ' vip' : ''}`}>
                 <div className="jb-main">
                   <span className="jb-rk">
                     {i === 0 ? (
@@ -1204,6 +1242,11 @@ export default memo(function Jukebox({
                     <b>{displayTitle}</b>
                     <div className="jb-sub">
                       {s.by && <small>Küldi: {s.by}</small>}
+                      {s.vip && (
+                        <span className="pill jb-vip-pill" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                          👑 VIP
+                        </span>
+                      )}
                       <span
                         className="pill"
                         style={{
@@ -1246,6 +1289,7 @@ export default memo(function Jukebox({
               <li key={s.id} className="jb-pending-item">
                 <span className="jb-pending-title">🎵 {cleanSongTitle(s.title)}</span>
                 <span className="jb-pending-meta">
+                  {s.vip && <span className="pill jb-vip-pill" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>👑 VIP</span>}
                   {s.by && <small>Küldi: {s.by}</small>}
                   <span className="pill jb-pending-pill">⏳ Adminra vár</span>
                 </span>

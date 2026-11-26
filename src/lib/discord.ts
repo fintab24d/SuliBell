@@ -9,6 +9,7 @@ export interface DiscordSongItem {
   by: string
   ytId?: string
   votes: number
+  vip?: boolean
   at: number
 }
 

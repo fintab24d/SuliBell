@@ -203,7 +203,8 @@ export function VipModal({
               <div className="vip-unlock-card">
                 <p className="vip-intro">
                   Támogasd a SuliBell működését Ko-fi-n, és a kapott VIP kóddal oldj fel <b>extra színtémákat</b>,{' '}
-                  <b>„Utolsó 1 perc” pulzáló fényeffektet</b> és <b>egyedi csengőhangokat</b>!
+                  <b>„Utolsó 1 perc” pulzáló fényeffektet</b>, <b>egyedi csengőhangokat</b> és{' '}
+                  <b>👑 VIP Zenegép elsőbbséget</b> (2 kérés/szünet + soron kívüli lejátszás)!
                   <br />
                   <small style={{ display: 'inline-block', marginTop: 6 }}>
                     💡 A Ko-fi üzenetbe írd bele a <b>Discord nevedet</b> és az <b>osztályodat</b> (pl.{' '}
@@ -355,6 +356,19 @@ export function VipModal({
                     )
                   })}
                 </div>
+              </section>
+
+              {/* 4. VIP Zenegép Elsőbbség */}
+              <section className="vip-sec">
+                <div className="vip-sec-head">
+                  <h3>👑 VIP Zenegép Elsőbbség</h3>
+                  <small>{vipStatus.active ? 'Aktív ✓' : 'VIP kóddal feloldható'}</small>
+                </div>
+                <ul className="vip-music-perk">
+                  <li><b>2 zenekérés / szünet</b> (a normál 1 helyett)</li>
+                  <li><b>Soron kívüli előresorolás</b> admin jóváhagyás után a szüneti sorban</li>
+                  <li><b>👑 VIP KÍVÁNSÁG</b> arany jelvény a zenegépben és a folyosói TV-n</li>
+                </ul>
               </section>
             </div>
           </div>

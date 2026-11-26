@@ -5466,3 +5466,52 @@ iframe {
   border: 1px solid rgba(251, 191, 36, 0.4);
   font-weight: 700;
 }
+
+/* 👑 VIP Zenegép Elsőbbség */
+.music-viz.is-vip {
+  border-color: rgba(250, 204, 21, 0.58);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42), inset 0 0 28px rgba(250, 204, 21, 0.1);
+}
+
+.viz-vip-pill,
+.jb-vip-pill {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.25), rgba(245, 158, 11, 0.18));
+  color: #fde047;
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  font-weight: 800;
+}
+
+:root[data-theme="light"] .jb-vip-pill {
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.24);
+}
+
+.jb-item.vip {
+  border-color: rgba(250, 204, 21, 0.42);
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.08), transparent 75%);
+}
+
+.jb-vip-hint {
+  margin: 0 0 6px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(250, 204, 21, 0.11);
+  color: #fde047;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+:root[data-theme="light"] .jb-vip-hint {
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.2);
+}
+
+.vip-music-perk {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}

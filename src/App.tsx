@@ -730,7 +730,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         <span className="kofi-vip-pill">💎 Discord VIP</span>
       </div>
       <p className="kofi-sub">
-        Tetszik a SuliBell? Támogasd az oldal fejlesztését Ko-fi-n! A támogatók felkerülnek a <b>🏆 Támogatói Toplistára</b>, és ha az üzenetbe beírod a Discord nevedet, automatikusan megkapod a <b>💎 VIP Támogató</b> rangot és a privát VIP szobákat (<b>#💎-vip-társalgó</b>, <b>#👑-vip-zenekérés +2 szavazattal</b>)!
+        Tetszik a SuliBell? Támogasd az oldal fejlesztését Ko-fi-n! A támogatók felkerülnek a <b>🏆 Támogatói Toplistára</b>, és ha az üzenetbe beírod a Discord nevedet, automatikusan megkapod a <b>💎 VIP Támogató</b> rangot, a privát VIP szobákat (<b>#💎-vip-társalgó</b>, <b>#👑-vip-zenekérés</b> — <b>2 zene/szünet</b>, soron kívüli lejátszás és 👑 VIP jelvény)!
       </p>
       <div className="kofi-actions">
         <a href={kofiHref} target="_blank" rel="noopener noreferrer" className="kofi-cta">

@@ -209,6 +209,7 @@ function Panel() {
           at: isApproved ? approvedMs : createdMs,
           approved: isApproved,
           approvedAt: r.approved_at ? approvedMs : undefined,
+          vip: Boolean(r.is_vip),
         }
       }))
     })
@@ -1239,6 +1240,7 @@ function Panel() {
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <b>⏳ {displayTitle}</b>
+                        {w.vip && <span className="pill jb-vip-pill" style={{ marginLeft: 6 }}>👑 VIP</span>}
                         {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
                         {' '}• <small>{w.day}</small>
                         {mediaLink && (
@@ -1307,6 +1309,7 @@ function Panel() {
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <b>🎵 Zene: {displayTitle}</b>
+                        {w.vip && <span className="pill jb-vip-pill" style={{ marginLeft: 6 }}>👑 VIP</span>}
                         {w.by ? ` — küldte: ${w.by}` : ' — (névtelen)'}
                         {' '}• <small>{w.day}</small>
                         {mediaLink && (

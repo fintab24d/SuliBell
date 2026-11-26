@@ -230,4 +230,17 @@ for (const [raw, expected] of titleCases) {
   }
 }
 
+const vipTimeline = computeMusicTimeline({
+  windows: [{ key: 'b1', start: 9 * 3600, end: 9 * 3600 + 600 }],
+  wishes: [
+    { id: 'norm-1', title: 'Sima Zene', ytId: 'aaaaaaaaaaa', atSec: 9 * 3600 - 120, dur: 180 },
+    { id: 'vip-1', title: 'VIP Zene', ytId: 'bbbbbbbbbbb', atSec: 9 * 3600 - 30, dur: 180, vip: true },
+  ],
+  radio: [{ id: 'r-1', title: 'Rádió', ytId: 'ccccccccccc', dur: 180 }],
+  nowSec: 9 * 3600 + 10,
+})
+if (vipTimeline.current?.wishId !== 'vip-1') {
+  throw new Error(`computeMusicTimeline VIP elsőbbség hibás: ${vipTimeline.current?.wishId}`)
+}
+
 console.log(`TZ=${process.env.TZ ?? '(rendszer)'}: ${n} teszt OK`)

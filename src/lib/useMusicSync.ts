@@ -61,6 +61,7 @@ export function useMusicSync(params: {
         ytId: w.ytId,
         by: w.by || undefined,
         atSec,
+        ...(w.vip ? { vip: true } : {}),
         ...(removed ? { removed: true } : {}),
       }
     }
