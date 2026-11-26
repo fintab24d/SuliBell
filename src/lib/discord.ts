@@ -29,6 +29,7 @@ export interface DiscordSyncData {
 }
 
 let lastSyncAt = 0
+let hasFetchedOnce = false
 let cachedSync: DiscordSyncData = {
   songs: [],
   announcements: [],
@@ -43,7 +44,7 @@ let pendingSync: Promise<DiscordSyncData> | null = null
  */
 export async function fetchDiscordSync(force = false): Promise<DiscordSyncData> {
   const now = Date.now()
-  if (!force && now - lastSyncAt < 10_000 && cachedSync.songs.length + cachedSync.announcements.length > 0) {
+  if (hasFetchedOnce && (!force ? now - lastSyncAt < 15_000 : now - lastSyncAt < 1_500)) {
     return cachedSync
   }
   if (pendingSync) return pendingSync
@@ -61,6 +62,7 @@ export async function fetchDiscordSync(force = false): Promise<DiscordSyncData> 
             music: typeof data.channels?.music === 'string' && data.channels.music ? data.channels.music : cachedSync.channels?.music,
           },
         }
+        hasFetchedOnce = true
         lastSyncAt = Date.now()
       }
     } catch {

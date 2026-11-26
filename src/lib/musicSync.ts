@@ -79,11 +79,12 @@ export function computeMusicTimeline(params: {
   wishes: SyncWish[]
   radio: SyncTrack[]
   nowSec: number
-}): { current?: MusicSlot; startedWishIds: Set<string> } {
+}): { current?: MusicSlot; upcoming: MusicSlot[]; startedWishIds: Set<string> } {
   const { windows, radio, nowSec } = params
   const startedWishIds = new Set<string>()
+  const upcoming: MusicSlot[] = []
   const len = radio.length
-  if (!len) return { startedWishIds }
+  if (!len) return { upcoming, startedWishIds }
 
   const pending = params.wishes
     .filter(w => !!w.ytId)
@@ -93,10 +94,12 @@ export function computeMusicTimeline(params: {
 
   const wins = [...windows].sort((a, b) => a.start - b.start)
   for (const w of wins) {
-    if (w.start > nowSec) break
+    if (w.start > nowSec && upcoming.length >= 3) break
     let cursor = w.start
     let guard = 0
-    while (cursor < w.end && cursor <= nowSec && guard++ < 500) {
+    while (cursor < w.end && guard++ < 500) {
+      if (cursor > nowSec && upcoming.length >= 3) break
+      const isPastOrCurrent = cursor <= nowSec
       let idx = pending.findIndex(p => Boolean(p.vip) && p.atSec <= cursor && w.end - cursor >= Math.min(MIN_WISH_START_SEC, slotLen(p)))
       if (idx < 0) {
         idx = pending.findIndex(p => p.atSec <= cursor && w.end - cursor >= Math.min(MIN_WISH_START_SEC, slotLen(p)))
@@ -104,7 +107,7 @@ export function computeMusicTimeline(params: {
       let slot: Omit<MusicSlot, 'offset' | 'end'> & { len: number }
       if (idx >= 0) {
         const wish = pending.splice(idx, 1)[0]
-        startedWishIds.add(wish.id)
+        if (isPastOrCurrent) startedWishIds.add(wish.id)
         const len0 = slotLen(wish)
         if (wish.removed) {
           slot = { kind: 'filler', track: radio[(k + Math.floor(len / 2)) % len], start: cursor, windowKey: w.key, wishId: wish.id, len: len0 }
@@ -120,11 +123,14 @@ export function computeMusicTimeline(params: {
       if (nowSec >= cursor && nowSec < end) {
         const { len: _l, ...rest } = slot
         current = { ...rest, end, offset: nowSec - cursor }
+      } else if (cursor > nowSec && upcoming.length < 3) {
+        const { len: _l, ...rest } = slot
+        upcoming.push({ ...rest, end, offset: 0 })
       }
       cursor = end
     }
   }
-  return { current, startedWishIds }
+  return { current, upcoming, startedWishIds }
 }
 
 /** Tartalék: abszolút óra 07:45-től, a rádiólistát a hosszak alapján körbeforgatva. */
@@ -143,4 +149,33 @@ export function fallbackRadioAt(radio: SyncTrack[], nowSec: number): MusicSlot |
     acc += l
   }
   return undefined
+}
+
+/** Tartalék következő N rádiószám, ha nincs aktív csengetési ablak. */
+export function fallbackUpcomingRadio(radio: SyncTrack[], nowSec: number, count = 3): MusicSlot[] {
+  if (!radio.length || count <= 0) return []
+  const total = radio.reduce((s, t) => s + slotLen(t), 0)
+  const base = MUSIC_MORNING_START
+  const rel = ((nowSec - base) % total + total) % total
+  let acc = 0
+  let curIdx = 0
+  let curStart = nowSec
+  for (let i = 0; i < radio.length; i++) {
+    const l = slotLen(radio[i])
+    if (rel < acc + l) {
+      curIdx = i
+      curStart = nowSec - (rel - acc)
+      break
+    }
+    acc += l
+  }
+  const out: MusicSlot[] = []
+  let cursor = curStart + slotLen(radio[curIdx])
+  for (let step = 1; step <= count; step++) {
+    const t = radio[(curIdx + step) % radio.length]
+    const len = slotLen(t)
+    out.push({ kind: 'radio', track: t, start: cursor, end: cursor + len, offset: 0, windowKey: 'fallback' })
+    cursor += len
+  }
+  return out
 }

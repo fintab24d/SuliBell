@@ -103,25 +103,41 @@ export function useVibe(schoolId: string | undefined, day: string, sound?: boole
   useEffect(() => {
     if (!schoolId || !day) return
     let alive = true
+    let inflight: Promise<void> | null = null
+    let lastWakeAt = 0
 
-    // Napi összesítés lekérése induláskor, 25 mp-enként és ablakváltáskor
+    // Napi összesítés lekérése induláskor, 40 mp-enként és ablakváltáskor (a Realtime csatorna élőben szinkronizál)
     const loadDb = async (force = false) => {
       if (!force && document.hidden) return
-      const { data, error } = await supabase.rpc('get_vibe_counts', { p_school: schoolId, p_day: day })
-      if (!alive || error || !data) return
-      const dbMap: Record<string, number> = {}
-      for (const row of data as { vibe: string; cnt: number }[]) dbMap[row.vibe] = row.cnt
-      setCounts(prev => {
-        const merged = { ...prev }
-        for (const k of Object.keys(dbMap)) merged[k] = Math.max(merged[k] ?? 0, dbMap[k])
-        saveLocalCounts(day, merged)
-        return merged
-      })
+      if (inflight) return inflight
+      inflight = (async () => {
+        try {
+          const { data, error } = await supabase.rpc('get_vibe_counts', { p_school: schoolId, p_day: day })
+          if (!alive || error || !data) return
+          const dbMap: Record<string, number> = {}
+          for (const row of data as { vibe: string; cnt: number }[]) dbMap[row.vibe] = row.cnt
+          setCounts(prev => {
+            const merged = { ...prev }
+            for (const k of Object.keys(dbMap)) merged[k] = Math.max(merged[k] ?? 0, dbMap[k])
+            saveLocalCounts(day, merged)
+            return merged
+          })
+        } finally {
+          inflight = null
+        }
+      })()
+      return inflight
     }
-    loadDb(true)
-    const pollTimer = window.setInterval(() => loadDb(false), 25_000)
-    const onWake = () => { if (!document.hidden) loadDb(true) }
-    const onRefresh = () => { loadDb(true) }
+    void loadDb(true)
+    const pollTimer = window.setInterval(() => { void loadDb(false) }, 40_000)
+    const onWake = () => {
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastWakeAt < 2500) return
+      lastWakeAt = now
+      void loadDb(true)
+    }
+    const onRefresh = () => { void loadDb(true) }
     window.addEventListener('sulibell:refresh', onRefresh)
     document.addEventListener('visibilitychange', onWake)
     document.addEventListener('resume', onWake)

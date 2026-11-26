@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from '
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
 import { parseYouTubeId, cleanSongTitle } from './lib/video'
-import { voterId } from './Poll'
+import { voterId } from './lib/voter'
 import { DISCORD_INVITE_URL, fetchDiscordSync, postToDiscord } from './lib/discord'
 import { weekdayOf } from './lib/engine'
 import { fetchYouTubeTitle, validateMediaSubmission } from './lib/moderation'
@@ -31,12 +31,14 @@ export interface SongWish {
 }
 
 const QUICK_SONGS: { title: string; ytId: string }[] = [
+  { title: 'Azahriah – 3korty', ytId: 'rPDhFKvTO7o' },
+  { title: 'DESH – Kukásautó', ytId: 'NT1wMengxQc' },
+  { title: 'VALMAR ft. Szikora Robi – Úristen', ytId: 'HOF3PYjKxm0' },
+  { title: 'Carson Coma – Pók', ytId: '1CLqEgTHrDM' },
+  { title: 'Punnany Massif – Élvezd', ytId: 'UrGS9EARHRc' },
   { title: 'Cartoon – On & On (NCS)', ytId: 'K4DyBUG242c' },
-  { title: 'Elektronomia – Sky High', ytId: 'TW9d8vYrVFQ' },
-  { title: 'Deaf Kev – Invincible', ytId: 'J2X5mJ3HDYE' },
-  { title: 'Alan Walker – Fade', ytId: 'bM7SZ5SBzyY' },
-  { title: 'Azahriah – 3korty', ytId: 'mR8_ld2wccU' },
-  { title: 'DESH – Kukásautó', ytId: 'k7N-rC7c8H0' },
+  { title: 'Alan Walker – Faded', ytId: '60ItHLz5WEA' },
+  { title: 'The Weeknd – Blinding Lights', ytId: 'fHI8X4OXluQ' },
 ]
 
 const XMAS_QUICK_SONGS: { title: string; ytId: string }[] = [
@@ -190,6 +192,48 @@ function mergeSong(list: SongWish[], incoming: SongWish, deleted?: Set<string>):
   return sortSongs([...list, incoming])
 }
 
+type JukeboxRpcResult =
+  | { mode: 'state'; rows: any[] }
+  | { mode: 'legacy'; rows: any[] }
+  | null
+
+const jukeboxRpcCache = new Map<string, { res: JukeboxRpcResult; at: number }>()
+const jukeboxRpcInflight = new Map<string, Promise<JukeboxRpcResult>>()
+const JUKEBOX_RPC_TTL_MS = 2_500
+
+async function fetchJukeboxRpcShared(schoolId: string, day: string, force = false): Promise<JukeboxRpcResult> {
+  const key = `${schoolId}:${day}`
+  const cached = jukeboxRpcCache.get(key)
+  if (cached && (!force ? Date.now() - cached.at < JUKEBOX_RPC_TTL_MS : Date.now() - cached.at < 900)) {
+    return cached.res
+  }
+  const existing = jukeboxRpcInflight.get(key)
+  if (existing) return existing
+
+  const promise = (async (): Promise<JukeboxRpcResult> => {
+    try {
+      const { data, error }: any = await supabase.rpc('get_jukebox_state', { p_school: schoolId, p_day: day })
+      if (!error && Array.isArray(data)) {
+        const res: JukeboxRpcResult = { mode: 'state', rows: data }
+        jukeboxRpcCache.set(key, { res, at: Date.now() })
+        return res
+      }
+      const fallback: any = await supabase.rpc('get_jukebox_songs', { p_school: schoolId, p_day: day })
+      if (!fallback.error && Array.isArray(fallback.data)) {
+        const res: JukeboxRpcResult = { mode: 'legacy', rows: fallback.data }
+        jukeboxRpcCache.set(key, { res, at: Date.now() })
+        return res
+      }
+      return null
+    } finally {
+      jukeboxRpcInflight.delete(key)
+    }
+  })()
+
+  jukeboxRpcInflight.set(key, promise)
+  return promise
+}
+
 export function useJukebox(schoolId: string | undefined, day: string, sound?: boolean, breakKey?: string) {
   const [songs, setSongs] = useState<SongWish[]>(() => loadLocalSongs(day))
   const [pendingSongs, setPendingSongs] = useState<SongWish[]>([])
@@ -272,17 +316,16 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
     let alive = true
     const recentCreatedAt = new Map<string, number>()
 
-    const syncFromDb = async () => {
-      const { data, error }: any = await supabase.rpc('get_jukebox_state', { p_school: schoolId, p_day: day })
-      if (!alive) return
-      if (error || !Array.isArray(data)) {
-        // Régebbi DB migráció esetén visszaesünk get_jukebox_songs-ra
-        const fallback: any = await supabase.rpc('get_jukebox_songs', { p_school: schoolId, p_day: day })
-        if (!alive || fallback.error || !Array.isArray(fallback.data)) return
+    let lastResumeAt = 0
+
+    const syncFromDb = async (force = false) => {
+      const rpcRes = await fetchJukeboxRpcShared(schoolId, day, force)
+      if (!alive || !rpcRes) return
+      if (rpcRes.mode === 'legacy') {
         const del = loadDeletedSet(day)
         const dbIds = new Set<string>()
         const fbSongs: SongWish[] = []
-        for (const r of fallback.data) {
+        for (const r of rpcRes.rows) {
           if (r.kind === 'video') continue
           const sid = String(r.song_id)
           if (del.has(sid)) continue
@@ -317,6 +360,8 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
         })
         return
       }
+
+      const data = rpcRes.rows
 
       const del = loadDeletedSet(day)
       const dbActive: SongWish[] = []
@@ -459,23 +504,29 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       }
     }
 
-    const syncAll = async () => {
-      await syncFromDb()
+    const syncAll = async (force = false) => {
+      await syncFromDb(force)
       await syncFromDiscord()
     }
 
-    syncAll()
+    void syncAll(false)
     const pollTimer = setInterval(() => {
-      if (!document.hidden) syncAll()
-    }, 10_000)
+      if (!document.hidden) void syncAll(false)
+    }, 20_000)
 
     const onResume = () => {
-      if (!document.hidden) syncAll()
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastResumeAt < 2500) return
+      lastResumeAt = now
+      void syncAll(false)
     }
+    const onRefresh = () => { void syncAll(true) }
     document.addEventListener('visibilitychange', onResume)
+    document.addEventListener('resume', onResume)
     window.addEventListener('focus', onResume)
     window.addEventListener('pageshow', onResume)
-    window.addEventListener('sulibell:refresh', onResume)
+    window.addEventListener('sulibell:refresh', onRefresh)
 
     // Realtime csatorna (Broadcast) + egyedi DB postgres_changes csatorna
     const ch = supabase.channel(`sulibell-jukebox-${schoolId}`, {
@@ -485,7 +536,7 @@ export function useJukebox(schoolId: string | undefined, day: string, sound?: bo
       .channel(`sulibell-jukebox-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jukebox_songs', filter: `school_id=eq.${schoolId}` }, () => {
         if (!alive) return
-        syncFromDb()
+        void syncFromDb(true)
       })
       .subscribe()
     ch.on('broadcast', { event: 'song' }, (msg: any) => {
@@ -1154,7 +1205,7 @@ export default memo(function Jukebox({
             />
             {detectedYtId && (
               <div className="jb-yt-preview">
-                <img src={`https://i.ytimg.com/vi/${detectedYtId}/mqdefault.jpg`} alt="" />
+                <img src={`https://i.ytimg.com/vi/${detectedYtId}/mqdefault.jpg`} alt="" loading="lazy" decoding="async" />
                 <div>
                   {fetchingTitle ? (
                     <small>⏳ Szám címének lekérése a YouTube-ról…</small>

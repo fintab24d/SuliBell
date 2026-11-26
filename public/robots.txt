@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /teszt
+
+Sitemap: https://sulibell.com/sitemap.xml

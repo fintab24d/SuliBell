@@ -1,6 +1,7 @@
 // Csengő: ha az admin feltöltött hangfájlt, az szól; különben a beépített, szintetizált csengő.
 let ctx: AudioContext | null = null
 let cached: { url: string; data: AudioBuffer } | null = null
+let loadingAudio: { url: string; promise: Promise<AudioBuffer> } | null = null
 export const audioReady = () => ctx?.state === 'running'
 
 /** Csak felhasználói kattintásból hívd: a böngésző autoplay-szabályait nem kerüljük meg. */
@@ -12,10 +13,19 @@ export async function enableAudio() {
 
 async function load(url: string) {
   if (cached?.url === url) return cached.data
-  const r = await fetch(url)
-  const data = await ctx!.decodeAudioData(await r.arrayBuffer())
-  cached = { url, data }
-  return data
+  if (loadingAudio?.url === url) return loadingAudio.promise
+  const promise = (async () => {
+    try {
+      const r = await fetch(url)
+      const data = await ctx!.decodeAudioData(await r.arrayBuffer())
+      cached = { url, data }
+      return data
+    } finally {
+      if (loadingAudio?.url === url) loadingAudio = null
+    }
+  })()
+  loadingAudio = { url, promise }
+  return promise
 }
 /** Előre betölti a saját hangot, hogy csengetéskor ne legyen késés. */
 export function preload(url?: string | null) { if (url && ctx && ctx.state === 'running') load(url).catch(() => {}) }

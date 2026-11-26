@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
-import { voterId } from '../Poll'
+import { voterId } from './voter'
 import { checkProfanity, isAnonymousName } from './moderation'
 import {
   championsFromRpcRows,
@@ -60,69 +60,112 @@ export function getChampionBadge(champions: ChampionsState, playerId: string): C
   return null
 }
 
+const champCache = new Map<string, { state: ChampionsState; at: number }>()
+const champInflight = new Map<string, Promise<ChampionsState>>()
+const CHAMP_TTL_MS = 4_000
+
+async function loadChampionsShared(schoolId: string, day: string, force = false): Promise<ChampionsState> {
+  const key = `${schoolId}:${day}`
+  const cached = champCache.get(key)
+  if (cached && (!force ? Date.now() - cached.at < CHAMP_TTL_MS : Date.now() - cached.at < 1500)) {
+    return cached.state
+  }
+  const existing = champInflight.get(key)
+  if (existing) return existing
+
+  const promise = (async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_arena_champions', {
+        p_school: schoolId,
+        p_day: day,
+      })
+      if (!error && Array.isArray(data)) {
+        const next = championsFromRpcRows(data as any[], day)
+        champCache.set(key, { state: next, at: Date.now() })
+        return next
+      }
+
+      // Tartalék régi DB migráció esetén (az update26.sql előtti állapotban)
+      const b = getChampionBounds(day)
+      const { data: rowsData } = await supabase
+        .from('arena_scores')
+        .select('day,mode,player_id,player_name,score,created_at')
+        .eq('school_id', schoolId)
+        .gte('day', b.minStart)
+        .lte('day', day)
+      const combined: ChampionScoreRow[] = readLocalAllScores(b.minStart, day)
+      if (Array.isArray(rowsData)) {
+        for (const r of rowsData as any[]) {
+          if (!r.player_name || isAnonymousName(r.player_name) || !checkProfanity(r.player_name).clean) continue
+          combined.push({
+            day: String(r.day),
+            mode: String(r.mode || 'reflex'),
+            playerId: String(r.player_id),
+            name: String(r.player_name),
+            score: Number(r.score) || 0,
+            at: Date.parse(r.created_at) || 0,
+          })
+        }
+      }
+      const next = computeChampions(combined, day)
+      champCache.set(key, { state: next, at: Date.now() })
+      return next
+    } finally {
+      champInflight.delete(key)
+    }
+  })()
+
+  champInflight.set(key, promise)
+  return promise
+}
+
 export function useChampions(schoolId: string | undefined, day: string, syncDom = false) {
-  const [champions, setChampions] = useState<ChampionsState>(() => emptyChampionsState(day || '2026-01-01'))
+  const [champions, setChampions] = useState<ChampionsState>(() => {
+    const cached = schoolId && day ? champCache.get(`${schoolId}:${day}`) : undefined
+    return cached ? cached.state : emptyChampionsState(day || '2026-01-01')
+  })
   const [frameEnabled, setFrameEnabled] = useState<boolean>(readFrameEnabled)
   const [justWon, setJustWon] = useState(false)
 
   useEffect(() => {
-    setChampions(emptyChampionsState(day || '2026-01-01'))
-  }, [day])
+    const cached = schoolId && day ? champCache.get(`${schoolId}:${day}`) : undefined
+    setChampions(cached ? cached.state : emptyChampionsState(day || '2026-01-01'))
+  }, [schoolId, day])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
     if (!schoolId || !day) return
-    const { data, error } = await supabase.rpc('get_arena_champions', {
-      p_school: schoolId,
-      p_day: day,
-    })
-    if (!error && Array.isArray(data)) {
-      setChampions(championsFromRpcRows(data as any[], day))
-      return
-    }
-
-    // Tartalék régi DB migráció esetén (az update26.sql előtti állapotban)
-    const b = getChampionBounds(day)
-    const { data: rowsData } = await supabase
-      .from('arena_scores')
-      .select('day,mode,player_id,player_name,score,created_at')
-      .eq('school_id', schoolId)
-      .gte('day', b.minStart)
-      .lte('day', day)
-    const combined: ChampionScoreRow[] = readLocalAllScores(b.minStart, day)
-    if (Array.isArray(rowsData)) {
-      for (const r of rowsData as any[]) {
-        if (!r.player_name || isAnonymousName(r.player_name) || !checkProfanity(r.player_name).clean) continue
-        combined.push({
-          day: String(r.day),
-          mode: String(r.mode || 'reflex'),
-          playerId: String(r.player_id),
-          name: String(r.player_name),
-          score: Number(r.score) || 0,
-          at: Date.parse(r.created_at) || 0,
-        })
-      }
-    }
-    setChampions(computeChampions(combined, day))
+    const next = await loadChampionsShared(schoolId, day, force)
+    setChampions(next)
   }, [schoolId, day])
 
   useEffect(() => {
-    void refresh()
+    if (!schoolId || !day) return
+    let alive = true
+    let lastWakeAt = 0
+    void loadChampionsShared(schoolId, day, false).then(next => {
+      if (alive) setChampions(next)
+    })
     const onWake = () => {
-      if (!document.hidden) void refresh()
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastWakeAt < 2500) return
+      lastWakeAt = now
+      void refresh(false)
     }
-    const onRefresh = () => void refresh()
+    const onRefresh = () => { void refresh(true) }
     const timer = window.setInterval(() => {
-      if (!document.hidden) void refresh()
+      if (!document.hidden) void refresh(false)
     }, 60_000)
 
     window.addEventListener('sulibell:refresh', onRefresh)
     document.addEventListener('visibilitychange', onWake)
     return () => {
+      alive = false
       window.clearInterval(timer)
       window.removeEventListener('sulibell:refresh', onRefresh)
       document.removeEventListener('visibilitychange', onWake)
     }
-  }, [refresh])
+  }, [schoolId, day, refresh])
 
   useEffect(() => {
     const syncFrame = () => setFrameEnabled(readFrameEnabled())

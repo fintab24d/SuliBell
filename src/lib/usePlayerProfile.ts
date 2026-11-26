@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { resetVoterId, setVoterId, voterId } from '../Poll'
+import { resetVoterId, setVoterId, voterId } from './voter'
 import { PLAYER_NAME_KEY, validatePlayerName } from './moderation'
 import { isNameTakenByOther, isValidPin, normalizePlayerNameKey, sanitizePinInput } from './playerProfile'
 import { supabase } from './supabase'

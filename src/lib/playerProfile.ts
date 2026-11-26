@@ -52,3 +52,61 @@ export function sanitizePinInput(raw: string): string {
 export function isValidPin(pin: string): boolean {
   return /^\d{4}$/.test(pin.trim())
 }
+
+function isSubsequence(needle: string, haystack: string): boolean {
+  let j = 0
+  for (let i = 0; i < haystack.length && j < needle.length; i++) {
+    if (haystack[i] === needle[j]) j++
+  }
+  return j === needle.length
+}
+
+/**
+ * Hasonlóság szerint rangsorolja a már létező játékosneveket PIN-es belépésnél.
+ */
+export function rankProfileSuggestions(
+  query: string,
+  names: readonly string[],
+  limit = 5,
+): string[] {
+  const q = normalizePlayerNameKey(query)
+  if (!q) return []
+
+  const qTokens = q.split(' ').filter(Boolean)
+  const seen = new Set<string>()
+  const scored: { name: string; score: number; lenDiff: number }[] = []
+
+  for (const raw of names) {
+    const clean = raw.trim()
+    const key = normalizePlayerNameKey(clean)
+    if (!clean || !key || seen.has(key)) continue
+    seen.add(key)
+
+    let score = 0
+    if (key === q) {
+      score = 100
+    } else if (key.startsWith(q)) {
+      score = 85
+    } else {
+      const words = key.split(/[\s./-]+/).filter(Boolean)
+      if (words.some(w => w.startsWith(q))) {
+        score = 75
+      } else if (key.includes(q)) {
+        score = 60
+      } else if (qTokens.length > 1 && qTokens.every(t => key.includes(t))) {
+        score = 50
+      } else if (q.length >= 2 && isSubsequence(q.replace(/\s+/g, ''), key.replace(/\s+/g, ''))) {
+        score = 30
+      }
+    }
+
+    if (score > 0) {
+      scored.push({ name: clean, score, lenDiff: Math.abs(key.length - q.length) })
+    }
+  }
+
+  return scored
+    .sort((a, b) => b.score - a.score || a.lenDiff - b.lenDiff || a.name.localeCompare(b.name, 'hu'))
+    .slice(0, limit)
+    .map(x => x.name)
+}

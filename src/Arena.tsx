@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { fxSound } from './lib/sound'
-import { voterId } from './Poll'
+import { voterId } from './lib/voter'
 import { checkProfanity, isAnonymousName, validatePlayerName } from './lib/moderation'
 import SnakeGame from './SnakeGame'
 import { getChampionBadge, useChampions } from './lib/useChampions'
@@ -243,27 +243,37 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
   useEffect(() => {
     if (!schoolId || !day) return
     let alive = true
+    let inflight: Promise<void> | null = null
+    let lastWakeAt = 0
 
     const loadBoard = async (force = false) => {
       if (!force && document.hidden) return
-      const { data, error } = await supabase.rpc('get_arena_leaderboard', { p_school: schoolId, p_day: day })
-      if (!alive || error || !Array.isArray(data)) return
-      let next: LeaderEntry[] = []
-      for (const r of data as any[]) {
-        next = mergeLeaderboard(next, {
-          playerId: r.player_id,
-          name: r.player_name,
-          mode: r.mode === 'quiz' ? 'quiz' : r.mode === 'snake' ? 'snake' : 'reflex',
-          score: r.score,
-          at: Date.parse(r.created_at) || Date.now(),
-        })
-      }
-      setBoard(next)
-      saveLocalLb(day, next)
+      if (inflight) return inflight
+      inflight = (async () => {
+        try {
+          const { data, error } = await supabase.rpc('get_arena_leaderboard', { p_school: schoolId, p_day: day })
+          if (!alive || error || !Array.isArray(data)) return
+          let next: LeaderEntry[] = []
+          for (const r of data as any[]) {
+            next = mergeLeaderboard(next, {
+              playerId: r.player_id,
+              name: r.player_name,
+              mode: r.mode === 'quiz' ? 'quiz' : r.mode === 'snake' ? 'snake' : 'reflex',
+              score: r.score,
+              at: Date.parse(r.created_at) || Date.now(),
+            })
+          }
+          setBoard(next)
+          saveLocalLb(day, next)
+        } finally {
+          inflight = null
+        }
+      })()
+      return inflight
     }
 
-    loadBoard(true)
-    const pollTimer = window.setInterval(() => loadBoard(false), 20_000)
+    void loadBoard(true)
+    const pollTimer = window.setInterval(() => { void loadBoard(false) }, 30_000)
 
     // Realtime csatorna + egyedi DB postgres_changes csatorna
     const ch = supabase.channel(`sulibell-arena-${schoolId}`, {
@@ -340,8 +350,14 @@ export function useArenaLeaderboard(schoolId: string | undefined, day: string) {
       bcRef.current = bc
     } catch { /* ignore */ }
 
-    const onWake = () => { if (!document.hidden) loadBoard(true) }
-    const onRefresh = () => { loadBoard(true) }
+    const onWake = () => {
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastWakeAt < 2500) return
+      lastWakeAt = now
+      void loadBoard(true)
+    }
+    const onRefresh = () => { void loadBoard(true) }
     window.addEventListener('sulibell:refresh', onRefresh)
     document.addEventListener('visibilitychange', onWake)
     document.addEventListener('resume', onWake)

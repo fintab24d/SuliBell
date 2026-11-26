@@ -7,7 +7,7 @@ import './index.css'
 const Admin = lazy(() => import('./Admin'))
 const TestLab = lazy(() => import('./TestLab'))
 const Install = lazy(() => import('./Install'))
-const Vote = lazy(() => import('./Poll'))
+const Vote = lazy(() => import('./VotePage'))
 
 const page = location.pathname.startsWith('/admin')
   ? <Admin />

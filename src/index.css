@@ -5515,3 +5515,146 @@ iframe {
   font-size: 0.86rem;
   line-height: 1.4;
 }
+
+/* Belépési névajánló legördülő menü */
+.profile-name-ac {
+  position: relative;
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
+.profile-name-ac input {
+  width: 100%;
+}
+
+.profile-suggest-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--line));
+  background: var(--card, #11152b);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.profile-suggest-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: background 0.12s ease;
+}
+
+.profile-suggest-item small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--mut);
+}
+
+.profile-suggest-item:hover,
+.profile-suggest-item.active {
+  background: color-mix(in srgb, var(--accent, #38bdf8) 18%, transparent);
+  color: #fff;
+}
+
+:root[data-theme="light"] .profile-suggest-item:hover,
+:root[data-theme="light"] .profile-suggest-item.active {
+  color: var(--fg);
+}
+
+/* Következő 3 szám a zenelejátszóban */
+.viz-upnext {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(4, 6, 16, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.viz-upnext-head {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--n-cyan, #22d3ee);
+  opacity: 0.9;
+}
+
+.viz-upnext-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.viz-upnext-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.81rem;
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.viz-upnext-item.vip {
+  background: rgba(250, 204, 21, 0.1);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+}
+
+.viz-upnext-idx {
+  font-weight: 700;
+  color: var(--mut);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-upnext-title {
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-upnext-src {
+  font-size: 0.72rem;
+  color: var(--mut);
+  white-space: nowrap;
+}
+
+.music-viz.compact .viz-upnext-src {
+  display: none;
+}
+
+.tv .viz-upnext {
+  padding: 0.9vh 1.1vw;
+  gap: 0.5vh;
+}
+
+.tv .viz-upnext-head {
+  font-size: 1.35vh;
+}
+
+.tv .viz-upnext-item {
+  font-size: 1.65vh;
+  padding: 0.35vh 0.7vw;
+}
+
+.tv .viz-upnext-src {
+  font-size: 1.35vh;
+}

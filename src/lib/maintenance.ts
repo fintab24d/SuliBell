@@ -117,20 +117,38 @@ export function useMaintenance(
   useEffect(() => {
     if (!schoolId) return
     let alive = true
+    let inflight: Promise<void> | null = null
+    let lastFetchAt = 0
+    let lastWakeAt = 0
 
     const fetchLatest = async (force = false) => {
       if (!force && document.hidden) return
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('id, text')
-        .eq('school_id', schoolId)
-        .like('text', `${MAINT_PREFIX}%`)
-      if (!alive || error) return
-      apply(parseMaintFromAnnouncements(data as any) ?? DEFAULT_MAINT)
+      if (!force && Date.now() - lastFetchAt < 2500) return
+      if (inflight) return inflight
+      inflight = (async () => {
+        try {
+          lastFetchAt = Date.now()
+          const { data, error } = await supabase
+            .from('announcements')
+            .select('id, text')
+            .eq('school_id', schoolId)
+            .like('text', `${MAINT_PREFIX}%`)
+          if (!alive || error) return
+          apply(parseMaintFromAnnouncements(data as any) ?? DEFAULT_MAINT)
+        } finally {
+          inflight = null
+        }
+      })()
+      return inflight
     }
 
-    fetchLatest(true)
-    const timer = setInterval(() => fetchLatest(false), 4_000)
+    if (!Array.isArray(initAnnRef.current)) {
+      void fetchLatest(true)
+    } else {
+      lastFetchAt = Date.now()
+    }
+    // A Realtime broadcast + postgres_changes azonnal jelez, a 60 mp-es lekérés csak tartalék
+    const timer = setInterval(() => { void fetchLatest(false) }, 60_000)
 
     const ch = supabase.channel(`sulibell-maint-${schoolId}`, {
       config: { broadcast: { self: false } },
@@ -142,7 +160,7 @@ export function useMaintenance(
     const pgCh = supabase
       .channel(`sulibell-maint-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements', filter: `school_id=eq.${schoolId}` }, () => {
-        fetchLatest(true)
+        void fetchLatest(true)
       })
       .subscribe()
     chanRef.current = ch
@@ -157,8 +175,14 @@ export function useMaintenance(
       bcRef.current = bc
     } catch { /* ignore */ }
 
-    const onWake = () => { if (!document.hidden) fetchLatest(true) }
-    const onRefresh = () => { fetchLatest(true) }
+    const onWake = () => {
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastWakeAt < 2500) return
+      lastWakeAt = now
+      void fetchLatest(false)
+    }
+    const onRefresh = () => { void fetchLatest(false) }
     window.addEventListener('sulibell:refresh', onRefresh)
     document.addEventListener('visibilitychange', onWake)
     document.addEventListener('resume', onWake)

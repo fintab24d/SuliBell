@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { FxEngine, type CelebrateKind } from './lib/fx'
+import type { CelebrateKind, FxEngine } from './lib/fx'
 import { fxSound } from './lib/sound'
 import { canTriggerEasterEgg, claimLiveBellEvent } from './lib/animGuard'
 import { serverNowMs } from './lib/serverTime'
@@ -18,18 +18,42 @@ const Fx = memo(function Fx({ phase, bellKey, elapsed, day, tv, wx, night, sound
   elapsedRef.current = elapsed
   const phaseRef = useRef(phase)
   phaseRef.current = phase
+  const nightRef = useRef(!!night)
+  nightRef.current = !!night
+  const snowRef = useRef(!!festiveSnow)
+  snowRef.current = !!festiveSnow
+  const wxRef = useRef(wx)
+  wxRef.current = wx
+  const soundRef = useRef(sound)
+  soundRef.current = sound
 
-  // Csak a releváns propok változásakor induljon újra az engine
+  // Aszinkron betöltés, hogy a ~90 kB-os részecskemotor ne blokkolja az első oldalrenderelést
   useEffect(() => {
     if (off || !refBg.current || !refFg.current) return
-    let e: FxEngine
-    try { e = new FxEngine(refBg.current, refFg.current, tv) } catch { return }
-    eng.current = e
-    e.setPhase(phase)
-    e.setNight(!!night)
-    e.setFestiveSnow(!!festiveSnow)
-    e.start()
-    return () => { e.stop(); eng.current = null }
+    let cancelled = false
+    let instance: FxEngine | null = null
+    import('./lib/fx')
+      .then(({ FxEngine: EngineCtor }) => {
+        if (cancelled || !refBg.current || !refFg.current) return
+        try {
+          instance = new EngineCtor(refBg.current, refFg.current, tv)
+        } catch {
+          return
+        }
+        eng.current = instance
+        instance.setPhase(phaseRef.current)
+        instance.setNight(nightRef.current)
+        instance.setFestiveSnow(snowRef.current)
+        instance.setWeather(wxRef.current)
+        instance.onSound = soundRef.current ? fxSound : undefined
+        instance.start()
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      instance?.stop()
+      if (eng.current === instance) eng.current = null
+    }
   }, [off, tv])
 
   useEffect(() => { eng.current?.setPhase(phase) }, [phase])

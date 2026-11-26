@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react'
 import type { Lesson } from './lib/engine'
+import {
+  formatMyLesson,
+  loadMySchedule,
+  saveMySchedule,
+  useMySchedule,
+  type MyLessonEntry,
+  type MyScheduleMap,
+} from './lib/mySchedule'
 import { supabase } from './lib/supabase'
 
-export interface MyLessonEntry {
-  subject: string
-  room: string
+export {
+  formatMyLesson,
+  loadMySchedule,
+  saveMySchedule,
+  useMySchedule,
+  type MyLessonEntry,
+  type MyScheduleMap,
 }
-
-/** Map: weekday ("1".."5") -> lesson position (number) -> { subject, room } */
-export type MyScheduleMap = Record<string, Record<number, MyLessonEntry>>
-
-const STORAGE_KEY = 'csengeto-my-schedule-v1'
 
 const DAYS: { id: number; name: string; short: string }[] = [
   { id: 1, name: 'Hétfő', short: 'H' },
@@ -46,73 +53,6 @@ function compressImage(file: File): Promise<{ mime: string; data: string }> {
     img.onerror = reject
     img.src = URL.createObjectURL(file)
   })
-}
-
-export function loadMySchedule(): MyScheduleMap {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') || {}
-  } catch {
-    return {}
-  }
-}
-
-export function saveMySchedule(map: MyScheduleMap) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
-    window.dispatchEvent(new Event('sulibell:myschedule'))
-  } catch { /* ignore */ }
-}
-
-export function useMySchedule() {
-  const [map, setMap] = useState<MyScheduleMap>(loadMySchedule)
-
-  useEffect(() => {
-    const sync = () => setMap(loadMySchedule())
-    window.addEventListener('sulibell:myschedule', sync)
-    window.addEventListener('storage', sync)
-    return () => {
-      window.removeEventListener('sulibell:myschedule', sync)
-      window.removeEventListener('storage', sync)
-    }
-  }, [])
-
-  const update = (next: MyScheduleMap) => {
-    setMap(next)
-    saveMySchedule(next)
-  }
-
-  const getEntry = (weekday: number, pos?: number): MyLessonEntry | undefined => {
-    if (!pos) return undefined
-    const e = map[String(weekday)]?.[pos]
-    if (!e || (!e.subject.trim() && !e.room.trim())) return undefined
-    return { subject: e.subject.trim(), room: e.room.trim() }
-  }
-
-  const hasAny = Object.values(map).some(d =>
-    Object.values(d ?? {}).some(e => e?.subject?.trim() || e?.room?.trim())
-  )
-
-  return { map, update, getEntry, hasAny }
-}
-
-/** Formázott cím a saját órarenddel kiegészítve */
-export function formatMyLesson(lesson: Lesson | undefined, entry: MyLessonEntry | undefined): {
-  title: string
-  sub?: string
-  room?: string
-  isFree?: boolean
-} {
-  if (!lesson) return { title: '' }
-  if (!entry || !entry.subject) {
-    return { title: lesson.label, room: entry?.room || undefined }
-  }
-  const isFree = /(lyukas|elmarad|nincs\s*óra|szabad)/i.test(entry.subject)
-  return {
-    title: entry.subject,
-    sub: lesson.label,
-    room: entry.room || undefined,
-    isFree,
-  }
 }
 
 export function MyScheduleModal({
@@ -375,3 +315,5 @@ export function MyScheduleModal({
     </div>
   )
 }
+
+export default MyScheduleModal

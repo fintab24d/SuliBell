@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { sanitizePinInput } from './lib/playerProfile'
+import { memo, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { rankProfileSuggestions, sanitizePinInput } from './lib/playerProfile'
+import { supabase } from './lib/supabase'
 import { FOCUS_PROFILE_EVENT, usePlayerProfile } from './lib/usePlayerProfile'
 
 interface PlayerProfileCardProps {
@@ -11,17 +12,65 @@ interface PlayerProfileCardProps {
 
 type CardMode = 'view' | 'edit' | 'login'
 
-export function PlayerProfileCard({ schoolId, compact = false, modal = false, onSaved }: PlayerProfileCardProps) {
+const knownNamesCache = new Map<string, { names: string[]; at: number }>()
+const KNOWN_NAMES_TTL_MS = 30_000
+
+export const PlayerProfileCard = memo(function PlayerProfileCard({ schoolId, compact = false, modal = false, onSaved }: PlayerProfileCardProps) {
   const { cleanName, valid, hasPin, saving, saveError, clearSaveError, saveName, loginWithPin, logout } = usePlayerProfile(schoolId)
   const [mode, setMode] = useState<CardMode>(() => (!valid || !hasPin || modal ? 'edit' : 'view'))
   const [draft, setDraft] = useState(cleanName)
   const [pin, setPin] = useState('')
   const [showPin, setShowPin] = useState(false)
   const [loginHint, setLoginHint] = useState('')
+  const [knownNames, setKnownNames] = useState<string[]>(() => (schoolId ? knownNamesCache.get(schoolId)?.names ?? [] : []))
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [activeSuggest, setActiveSuggest] = useState(0)
   const [pulse, setPulse] = useState(false)
   const cardRef = useRef<HTMLElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const pinInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (mode !== 'login' || !schoolId) return
+    const hit = knownNamesCache.get(schoolId)
+    if (hit && Date.now() - hit.at < KNOWN_NAMES_TTL_MS) {
+      setKnownNames(hit.names)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('player_profiles')
+          .select('player_name')
+          .eq('school_id', schoolId)
+          .order('updated_at', { ascending: false })
+          .limit(200)
+        if (!cancelled && !error && Array.isArray(data)) {
+          const names = data.map((r: any) => String(r.player_name ?? '').trim()).filter(Boolean)
+          knownNamesCache.set(schoolId, { names, at: Date.now() })
+          setKnownNames(names)
+        }
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [mode, schoolId])
+
+  const suggestions = useMemo(
+    () => (mode === 'login' ? rankProfileSuggestions(draft, knownNames, 5) : []),
+    [mode, draft, knownNames],
+  )
+
+  useEffect(() => {
+    setActiveSuggest(0)
+  }, [draft, mode])
+
+  const pickSuggestion = (picked: string) => {
+    setDraft(picked)
+    setShowSuggest(false)
+    if (saveError) clearSaveError()
+    window.setTimeout(() => pinInputRef.current?.focus(), 20)
+  }
 
   useEffect(() => {
     if (!valid && mode === 'view') {
@@ -150,18 +199,61 @@ export function PlayerProfileCard({ schoolId, compact = false, modal = false, on
             </p>
           )}
           <div className="profile-row">
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Osztály + név (pl. 10.A Dani) *"
-              maxLength={24}
-              value={draft}
-              onChange={e => {
-                setDraft(e.target.value)
-                if (saveError) clearSaveError()
-              }}
-              disabled={saving}
-            />
+            <div className="profile-name-ac">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Osztály + név (pl. 10.A Dani) *"
+                maxLength={24}
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={showSuggest && suggestions.length > 0}
+                aria-autocomplete="list"
+                value={draft}
+                onFocus={() => setShowSuggest(true)}
+                onBlur={() => window.setTimeout(() => setShowSuggest(false), 140)}
+                onChange={e => {
+                  setDraft(e.target.value)
+                  setShowSuggest(true)
+                  if (saveError) clearSaveError()
+                }}
+                onKeyDown={e => {
+                  if (!showSuggest || suggestions.length === 0) return
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setActiveSuggest(i => (i + 1) % suggestions.length)
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setActiveSuggest(i => (i - 1 + suggestions.length) % suggestions.length)
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    pickSuggestion(suggestions[activeSuggest] ?? suggestions[0])
+                  } else if (e.key === 'Escape') {
+                    setShowSuggest(false)
+                  }
+                }}
+                disabled={saving}
+              />
+              {showSuggest && suggestions.length > 0 && (
+                <ul className="profile-suggest-menu" role="listbox" aria-label="Meglévő játékosnevek">
+                  {suggestions.map((sug, idx) => (
+                    <li
+                      key={sug}
+                      role="option"
+                      aria-selected={idx === activeSuggest}
+                      className={`profile-suggest-item${idx === activeSuggest ? ' active' : ''}`}
+                      onMouseDown={e => {
+                        e.preventDefault()
+                        pickSuggestion(sug)
+                      }}
+                    >
+                      <span>👤 {sug}</span>
+                      <small>Kattints a kiválasztáshoz</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="profile-pin-wrap">
               <input
                 ref={pinInputRef}
@@ -301,4 +393,4 @@ export function PlayerProfileCard({ schoolId, compact = false, modal = false, on
       )}
     </section>
   )
-}
+})

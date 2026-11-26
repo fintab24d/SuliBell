@@ -62,18 +62,41 @@ function normalizeRow(row: any): SchoolData {
   }
 }
 
+const SCHOOL_TABLES = new Set([
+  'schools',
+  'settings',
+  'schedules',
+  'lessons',
+  'closed_days',
+  'countdowns',
+  'announcements',
+  'schedule_dates',
+  'changes',
+  'menus',
+])
+
+let inflightSchoolFetch: Promise<SchoolData | null> | null = null
+
 async function fetchFreshSchool(): Promise<SchoolData | null> {
-  const { data: row, error } = await supabase
-    .from('schools')
-    .select('id, name, settings(*), schedules(*, lessons(*)), closed_days(day, reason), countdowns(*), announcements(*), schedule_dates(*), changes(*), menus(*)')
-    .eq('slug', SCHOOL_SLUG)
-    .single()
-  if (error || !row) return null
-  const d = normalizeRow(row)
-  try {
-    localStorage.setItem(KEY, JSON.stringify(d))
-  } catch { /* ignore */ }
-  return d
+  if (inflightSchoolFetch) return inflightSchoolFetch
+  inflightSchoolFetch = (async () => {
+    try {
+      const { data: row, error } = await supabase
+        .from('schools')
+        .select('id, name, settings(*), schedules(*, lessons(*)), closed_days(day, reason), countdowns(*), announcements(*), schedule_dates(*), changes(*), menus(*)')
+        .eq('slug', SCHOOL_SLUG)
+        .single()
+      if (error || !row) return null
+      const d = normalizeRow(row)
+      try {
+        localStorage.setItem(KEY, JSON.stringify(d))
+      } catch { /* ignore */ }
+      return d
+    } finally {
+      inflightSchoolFetch = null
+    }
+  })()
+  return inflightSchoolFetch
 }
 
 /**
@@ -184,20 +207,27 @@ export function useSchool() {
       }
     }
 
+    let pgDebounceTimer = 0
+    let lastResumeAt = 0
+
     load(true, true)
 
-    // 10 másodpercenként háttér-ellenőrzés (csak ha az ablak látható, így kíméli a hálózatot és a CPU-t)
+    // 30 másodpercenként háttér-ellenőrzés (a Realtime csatornák azonnal szinkronizálnak, ez csak biztonsági tartalék)
     const t = setInterval(() => {
-      if (!document.hidden) load(false)
-    }, 10_000)
+      if (!document.hidden) void load(false)
+    }, 30_000)
 
     const onResume = () => {
-      if (!document.hidden) load(true, true)
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastResumeAt < 2500) return
+      lastResumeAt = now
+      void load(true, true)
     }
-    const onOnline = () => load(true, true)
+    const onOnline = () => { void load(true, true) }
     const onStorage = (e: StorageEvent) => {
       if (e.key === REV_KEY && e.newValue) {
-        load(true)
+        void load(true)
       }
     }
 
@@ -214,15 +244,19 @@ export function useSchool() {
     })
     ch.on('broadcast', { event: 'admin_change' }, () => {
       if (!alive) return
-      load(true)
+      void load(true)
     })
     ch.subscribe()
 
     const pgCh = supabase
       .channel(`sulibell-global-pg-${SCHOOL_SLUG}-${Math.random().toString(36).slice(2, 8)}`)
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload: any) => {
         if (!alive) return
-        load(false)
+        if (payload?.table && !SCHOOL_TABLES.has(payload.table)) return
+        clearTimeout(pgDebounceTimer)
+        pgDebounceTimer = window.setTimeout(() => {
+          if (alive) void load(false)
+        }, 350)
       })
       .subscribe()
 
@@ -232,7 +266,7 @@ export function useSchool() {
       bc.onmessage = ev => {
         if (!alive) return
         if (ev.data?.type === 'admin_change') {
-          load(true)
+          void load(true)
         }
       }
     } catch { /* ignore */ }
@@ -241,6 +275,7 @@ export function useSchool() {
       alive = false
       clearInterval(t)
       clearTimeout(retryTimer)
+      clearTimeout(pgDebounceTimer)
       window.removeEventListener('online', onOnline)
       window.removeEventListener('focus', onResume)
       window.removeEventListener('pageshow', onResume)

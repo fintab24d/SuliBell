@@ -195,7 +195,7 @@ ok('champions: napi több játékmód győzelem összegzése + holtverseny össz
   assert.equal(st.weeklyChampion?.totalScore, 800)
 })
 
-const { normalizePlayerNameKey, isNameTakenByOther, sanitizePinInput, isValidPin } = await import('../src/lib/playerProfile.ts')
+const { normalizePlayerNameKey, isNameTakenByOther, sanitizePinInput, isValidPin, rankProfileSuggestions } = await import('../src/lib/playerProfile.ts')
 if (normalizePlayerNameKey('  10.A   Dániel ') !== '10.a daniel') {
   throw new Error('normalizePlayerNameKey hibás normalizálás')
 }
@@ -241,6 +241,35 @@ const vipTimeline = computeMusicTimeline({
 })
 if (vipTimeline.current?.wishId !== 'vip-1') {
   throw new Error(`computeMusicTimeline VIP elsőbbség hibás: ${vipTimeline.current?.wishId}`)
+}
+if (vipTimeline.upcoming.length !== 3) {
+  throw new Error(`computeMusicTimeline upcoming hossza várt 3, kapott: ${vipTimeline.upcoming.length}`)
+}
+if (vipTimeline.startedWishIds.has('norm-1')) {
+  throw new Error('computeMusicTimeline a jövőbeli upcoming kívánságot started-nek jelölte')
+}
+
+const sug = rankProfileSuggestions('dani', ['10.B Márk', '10.A Dániel', '11.A Daniella', '9.C Bence'])
+if (sug[0] !== '10.A Dániel' || !sug.includes('11.A Daniella') || sug.includes('10.B Márk')) {
+  throw new Error(`rankProfileSuggestions váratlan eredmény: ${JSON.stringify(sug)}`)
+}
+
+const { readFileSync } = await import('node:fs')
+const radioSrc = readFileSync(new URL('../src/lib/radio.ts', import.meta.url), 'utf8')
+const radioEntries = [...radioSrc.matchAll(/\{\s*id:\s*'([^']+)',\s*title:\s*(?:'[^']*'|"[^"]*"),\s*ytId:\s*'([^']+)'[^}]*dur:\s*(\d+)\s*\}/g)]
+if (radioEntries.length < 90) {
+  throw new Error(`Túl kevés rádió szám a katalógusban: ${radioEntries.length}`)
+}
+const seenRadioIds = new Set<string>()
+const seenRadioYt = new Set<string>()
+for (const [, rid, ryt, rdur] of radioEntries) {
+  if (seenRadioIds.has(rid)) throw new Error(`Duplikált rádió id: ${rid}`)
+  if (seenRadioYt.has(ryt)) throw new Error(`Duplikált rádió ytId: ${ryt}`)
+  if (!/^[\w-]{11}$/.test(ryt) || Number(rdur) < 90) {
+    throw new Error(`Érvénytelen rádió szám metaadat: ${rid}`)
+  }
+  seenRadioIds.add(rid)
+  seenRadioYt.add(ryt)
 }
 
 console.log(`TZ=${process.env.TZ ?? '(rendszer)'}: ${n} teszt OK`)

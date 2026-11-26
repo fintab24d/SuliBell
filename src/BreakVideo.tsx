@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
 import { serverNowMs } from './lib/serverTime'
+import type { MusicSlot } from './lib/musicSync'
 import type { MusicSyncResult } from './lib/useMusicSync'
 import { cleanSongTitle } from './lib/video'
 
@@ -16,7 +17,7 @@ const VIZ_BARS = Array.from({ length: 28 }, (_, i) => {
  * A YouTube lejátszó 240x200px méretben a visualizer réteg mögött fut (így a YouTube és a böngésző
  * nem tiltja le a hangot), miközben a felhasználó csak a Neon Visualizert látja.
  */
-export function MusicVisualizer({
+export const MusicVisualizer = memo(function MusicVisualizer({
   title,
   by,
   ytId,
@@ -26,6 +27,7 @@ export function MusicVisualizer({
   compact = false,
   slotStartMs,
   slotEndMs,
+  upcoming,
   onClose,
 }: {
   title: string
@@ -37,6 +39,7 @@ export function MusicVisualizer({
   compact?: boolean
   slotStartMs?: number
   slotEndMs?: number
+  upcoming?: MusicSlot[]
   onClose?: () => void
 }) {
   const [playing, setPlaying] = useState(true)
@@ -357,17 +360,44 @@ export function MusicVisualizer({
             />
           ))}
         </div>
+
+        {/* Következő 3 szám előnézet */}
+        {upcoming && upcoming.length > 0 && (
+          <div className="viz-upnext" aria-label="Következő számok">
+            <span className="viz-upnext-head">⏭️ Következő számok</span>
+            <ol className="viz-upnext-list">
+              {upcoming.slice(0, 3).map((slot, idx) => {
+                const upTitle = cleanSongTitle(slot.track.title)
+                const srcLabel =
+                  slot.kind === 'wish'
+                    ? slot.track.vip
+                      ? `👑 VIP${slot.track.by ? ` • ${slot.track.by}` : ''}`
+                      : `🎵 ${slot.track.by || 'Kívánság'}`
+                    : slot.track.by
+                      ? `📻 ${slot.track.by}`
+                      : '📻 SuliRádió'
+                return (
+                  <li key={`${slot.track.id}-${slot.start}-${idx}`} className={`viz-upnext-item${slot.track.vip ? ' vip' : ''}`}>
+                    <span className="viz-upnext-idx">{idx + 1}.</span>
+                    <span className="viz-upnext-title" title={upTitle}>{upTitle}</span>
+                    <small className="viz-upnext-src">{srcLabel}</small>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        )}
       </div>
     </div>
   )
-}
+})
 
 /**
  * Szünetben szóló központi zenelejátszó:
  * Szerveridőhöz szinkronizált idővonalon játssza le a diák-kívánságokat és a SuliRádiót,
  * így minden kijelzőn és telefonon ugyanaz a dal, ugyanannál a másodpercnél szól.
  */
-export default function BreakVideo({
+export default memo(function BreakVideo({
   sync,
   tv: _tv = false,
   soundOn: _soundOn,
@@ -393,7 +423,8 @@ export default function BreakVideo({
         initialMuted={userMuted}
         slotStartMs={sync.slotStartMs}
         slotEndMs={sync.slotEndMs}
+        upcoming={sync.upcoming}
       />
     </section>
   )
-}
+})

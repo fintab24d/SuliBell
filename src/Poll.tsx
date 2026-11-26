@@ -1,38 +1,13 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import { supabase, SCHOOL_SLUG } from './lib/supabase'
-import { APP_NAME } from './lib/brand'
+import { supabase } from './lib/supabase'
+import { voterId, setVoterId, resetVoterId } from './lib/voter'
+
+export { voterId, setVoterId, resetVoterId }
 
 export type PollT = { id: string; question: string; options: string[] }
 const COL = ['var(--n-pink)', 'var(--n-cyan)', 'var(--n-amber)', 'var(--n-green)', 'var(--n-pink)', 'var(--n-cyan)']
 
-/** Névtelen szavazó-azonosító (központi profillal PIN-nel hordozható több eszköz között). */
-export const voterId = () => {
-  try {
-    let v = localStorage.getItem('voter')
-    if (!v) { v = crypto.randomUUID(); localStorage.setItem('voter', v) }
-    return v
-  } catch { return 'anon-' + Math.random().toString(36).slice(2, 12) }
-}
-
-/** Átállítja a helyi játékos/szavazó azonosítót (PIN-es belépéshez). */
-export const setVoterId = (id: string) => {
-  if (!id) return
-  try {
-    localStorage.setItem('voter', id)
-  } catch { /* ignore */ }
-}
-
-/** Új névtelen azonosítót generál (kijelentkezéshez közös gépen). */
-export const resetVoterId = (): string => {
-  let next = 'anon-' + Math.random().toString(36).slice(2, 12)
-  try {
-    next = crypto.randomUUID()
-    localStorage.setItem('voter', next)
-  } catch { /* ignore */ }
-  return next
-}
-
-/** Az aktív szavazás és az állása (valós időben + 5 mp-enként + fókuszváltáskor frissül). */
+/** Az aktív szavazás és az állása (valós időben + 30 mp-enként + fókuszváltáskor frissül). */
 export function usePoll(schoolId?: string) {
   const [poll, setPoll] = useState<PollT | null>(null)
   const [counts, setCounts] = useState<number[]>([])
@@ -45,16 +20,22 @@ export function usePoll(schoolId?: string) {
     else setCounts([])
   }, [schoolId])
   useEffect(() => {
-    refresh()
-    const onWake = () => { if (!document.hidden) refresh() }
-    const onRefresh = () => { refresh() }
-    const t = setInterval(() => { if (!document.hidden) refresh() }, 15000)
-    const ch = schoolId
-      ? supabase
-          .channel(`sulibell-polls-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'polls', filter: `school_id=eq.${schoolId}` }, () => refresh())
-          .subscribe()
-      : null
+    if (!schoolId) return
+    let lastWakeAt = 0
+    void refresh()
+    const onWake = () => {
+      if (document.hidden) return
+      const now = Date.now()
+      if (now - lastWakeAt < 2500) return
+      lastWakeAt = now
+      void refresh()
+    }
+    const onRefresh = () => { void refresh() }
+    const t = setInterval(() => { if (!document.hidden) void refresh() }, 30_000)
+    const ch = supabase
+      .channel(`sulibell-polls-pg-${schoolId}-${Math.random().toString(36).slice(2, 8)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'polls', filter: `school_id=eq.${schoolId}` }, () => { void refresh() })
+      .subscribe()
     window.addEventListener('sulibell:refresh', onRefresh)
     document.addEventListener('visibilitychange', onWake)
     document.addEventListener('resume', onWake)
@@ -62,12 +43,12 @@ export function usePoll(schoolId?: string) {
     window.addEventListener('pageshow', onWake)
     return () => {
       clearInterval(t)
-      if (ch) supabase.removeChannel(ch)
+      supabase.removeChannel(ch)
       window.removeEventListener('sulibell:refresh', onRefresh)
       document.removeEventListener('visibilitychange', onWake)
       document.removeEventListener('resume', onWake)
       window.removeEventListener('focus', onWake)
-      window.removeEventListener('pageshow', onWake)
+      document.removeEventListener('pageshow', onWake)
     }
   }, [refresh, schoolId])
   return { poll, counts, refresh }
@@ -99,25 +80,6 @@ export const PollCard = memo(function PollCard({ poll, counts, tv, qr, onVoted }
     </div>
     {err && <p className="meta">{err}</p>}
     {showBars && <p className="meta">{total} szavazat{mine != null && !tv ? ', köszönjük!' : ''}</p>}
-    {qr && <div className="pollqr"><img src={qr} alt="QR-kód a szavazáshoz" /><span>Szavazz telefonon</span></div>}
+    {qr && <div className="pollqr"><img src={qr} alt="QR-kód a szavazáshoz" loading="lazy" decoding="async" /><span>Szavazz telefonon</span></div>}
   </section>
 })
-
-/** /szavazas: a TV-n lévő QR-kód ide visz; egyetlen kérdés, nagy gombok. */
-export default function Vote() {
-  const [sid, setSid] = useState<string>()
-  const [state, setState] = useState<'load' | 'ok' | 'err'>('load')
-  useEffect(() => {
-    document.documentElement.dataset.theme = localStorage.getItem('theme') ?? 'dark'
-    document.documentElement.dataset.style = localStorage.getItem('style') ?? 'neon'
-    document.title = `Szavazás – ${APP_NAME}`
-    supabase.from('schools').select('id').eq('slug', SCHOOL_SLUG).single().then(({ data }) => { if (data) { setSid(data.id); setState('ok') } else setState('err') })
-  }, [])
-  const { poll, counts, refresh } = usePoll(sid)
-  return <main className="install">
-    {state === 'err' ? <section className="panel"><p>Az oldal most nem érhető el.</p></section>
-      : poll ? <PollCard poll={poll} counts={counts} onVoted={refresh} />
-      : <section className="panel"><h1>{APP_NAME}</h1><p>{state === 'load' ? 'Betöltés…' : 'Most nincs aktív szavazás.'}</p></section>}
-    <a className="btn" href="/">Tovább az oldalra</a>
-  </main>
-}

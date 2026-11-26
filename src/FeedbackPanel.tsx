@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { memo, useState, type FormEvent } from 'react'
 import { DISCORD_INVITE_URL, submitFeedbackToDiscord } from './lib/discord'
 import { checkProfanity } from './lib/moderation'
 
@@ -25,7 +25,7 @@ function saveLastSent(ts: number) {
 }
 
 /** Főoldali Hibajelentés & Ötletek kártya: beépített azonnali küldés a Discord fórumra + Discord szobák leírása. */
-export default function FeedbackPanel() {
+export default memo(function FeedbackPanel() {
   const [mode, setMode] = useState<FeedbackKind | null>(null)
   const [title, setTitle] = useState('')
   const [details, setDetails] = useState('')
@@ -215,4 +215,4 @@ export default function FeedbackPanel() {
       )}
     </section>
   )
-}
+})
