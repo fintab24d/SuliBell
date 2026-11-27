@@ -102,18 +102,31 @@ function Panel() {
   const { songs: jbSongs, pendingSongs: jbPending, approveSong, removeSong, clearAllSongs } = useJukebox(d?.id, todayStr, false)
   const { board: arenaBoard, removeLeaderEntry, clearLeaderboard } = useArenaLeaderboard(d?.id, todayStr)
   const [playerProfiles, setPlayerProfiles] = useState<{ player_id: string; player_name: string; has_pin: boolean; updated_at: string }[]>([])
+  const [pinResetRequests, setPinResetRequests] = useState<{ id: string; player_id: string; player_name: string; note: string; created_at: string }[]>([])
   const [profileFilter, setProfileFilter] = useState('')
   const [profileBusy, setProfileBusy] = useState(false)
   const loadProfiles = useCallback(async () => {
     if (!d?.id) return
-    const { data, error } = await supabase
-      .from('player_profiles')
-      .select('player_id, player_name, has_pin, updated_at')
-      .eq('school_id', d.id)
-      .order('updated_at', { ascending: false })
-      .limit(200)
-    if (!error && Array.isArray(data)) {
-      setPlayerProfiles(data as any[])
+    const [profRes, reqRes] = await Promise.all([
+      supabase
+        .from('player_profiles')
+        .select('player_id, player_name, has_pin, updated_at')
+        .eq('school_id', d.id)
+        .order('updated_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('pin_reset_requests')
+        .select('id, player_id, player_name, note, created_at')
+        .eq('school_id', d.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(50),
+    ])
+    if (!profRes.error && Array.isArray(profRes.data)) {
+      setPlayerProfiles(profRes.data as any[])
+    }
+    if (!reqRes.error && Array.isArray(reqRes.data)) {
+      setPinResetRequests(reqRes.data as any[])
     }
   }, [d?.id])
   useEffect(() => { void loadProfiles() }, [loadProfiles])
@@ -484,7 +497,8 @@ function Panel() {
       <div className="row"><label><input type="checkbox" checked={d.settings.sound_enabled} onChange={e => setS({ sound_enabled: e.target.checked })} /> Csengetési hang</label>
         <label><input type="checkbox" checked={!!d.settings.ask_enabled} onChange={e => setS({ ask_enabled: e.target.checked })} /> AI-asszisztens ("Kérdezz" gomb az oldalon)</label>
         <label><input type="checkbox" checked={d.settings.rest_mode !== false} onChange={e => setS({ rest_mode: e.target.checked })} /> Pihenő mód (játék és visszaszámláló, ha nincs tanítás)</label>
-        <button onClick={async () => { await enableAudio(); ring(d.settings.bell_sound_url) }}>Hang kipróbálása</button></div>
+        <button onClick={async () => { await enableAudio(); ring(d.settings.bell_sound_url, 'default', 'in') }}>🔔 Becsengő próba</button>
+        <button onClick={async () => { await enableAudio(); ring(d.settings.bell_sound_url, 'default', 'out') }}>🎉 Kicsengő próba</button></div>
       <div className="row">Csengőhang: <b>{d.settings.bell_sound_url ? 'saját fájl' : 'alapértelmezett'}</b>
         <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm,.mp3,.ogg,.wav,.m4a" onChange={e => e.target.files?.[0] && uploadSound(e.target.files[0])} />
         {d.settings.bell_sound_url && <button onClick={() => { dropOldSound(); setS({ bell_sound_url: null }) }}>↺ Alapértelmezett hang visszaállítása</button>}</div>
@@ -1647,7 +1661,22 @@ function Panel() {
     {(can('videos') || can('settings')) && (
       <section>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <h2>👤 Játékosprofilok &amp; PIN-kódok kezelése</h2>
+          <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>👤 Játékosprofilok &amp; PIN-kódok kezelése</h2>
+            {pinResetRequests.length > 0 && (
+              <span
+                className="pill"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#fca5a5',
+                  border: '1px solid rgba(239, 68, 68, 0.45)',
+                  fontWeight: 700,
+                }}
+              >
+                🆘 {pinResetRequests.length} PIN-kérelem
+              </span>
+            )}
+          </div>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" onClick={() => void loadProfiles()} disabled={profileBusy}>
               🔄 Frissítés
@@ -1682,6 +1711,93 @@ function Panel() {
         <p>
           Ha egy diák elfelejtette a 4 jegyű PIN-kódját, itt nullázhatod (utána ugyanazzal a névvel új PIN-t tud beállítani), vagy szükség esetén törölheted is a profilját pontszámaival együtt.
         </p>
+
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 10,
+            borderRadius: 10,
+            border: pinResetRequests.length > 0 ? '1px solid rgba(239,68,68,0.45)' : '1px solid var(--line)',
+            background: pinResetRequests.length > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.02)',
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            🆘 Elfelejtett PIN-kód kérelmek ({pinResetRequests.length} db)
+          </div>
+          {pinResetRequests.length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>Nincs függőben lévő PIN-nullázási kérelem.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {pinResetRequests.map(req => (
+                <div
+                  className="row"
+                  key={req.id}
+                  style={{
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: '1px solid var(--line)',
+                    paddingBottom: 6,
+                    gap: 8,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <b>{req.player_name}</b>
+                    {' '}• <small>{new Date(req.created_at).toLocaleString('hu-HU')}</small>
+                    {req.note && (
+                      <div style={{ fontSize: '0.85rem', opacity: 0.85, marginTop: 2 }}>
+                        💬 „{req.note}”
+                      </div>
+                    )}
+                  </div>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button
+                      type="button"
+                      className="cta"
+                      disabled={profileBusy}
+                      onClick={async () => {
+                        setProfileBusy(true)
+                        try {
+                          const { data, error } = await supabase.rpc('admin_reset_player_pin', { p_school: d.id, p_player: req.player_id })
+                          if (error || (data as any)?.ok === false) {
+                            setMsg('Hiba a PIN nullázásakor: ' + (error?.message || (data as any)?.error || 'ismeretlen'))
+                            return
+                          }
+                          await loadProfiles()
+                          setMsg(`PIN nullázva (kérelem teljesítve): ${req.player_name}`)
+                        } finally {
+                          setProfileBusy(false)
+                        }
+                      }}
+                    >
+                      🔑 PIN nullázása
+                    </button>
+                    <button
+                      type="button"
+                      disabled={profileBusy}
+                      onClick={async () => {
+                        setProfileBusy(true)
+                        try {
+                          const { data, error } = await supabase.rpc('admin_dismiss_pin_reset', { p_school: d.id, p_request_id: req.id })
+                          if (error || (data as any)?.ok === false) {
+                            setMsg('Hiba a kérelem elutasításakor: ' + (error?.message || (data as any)?.error || 'ismeretlen'))
+                            return
+                          }
+                          await loadProfiles()
+                          setMsg(`PIN-kérelem elutasítva: ${req.player_name}`)
+                        } finally {
+                          setProfileBusy(false)
+                        }
+                      }}
+                    >
+                      ✕ Elutasítás
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="row" style={{ marginBottom: 10 }}>
           <input

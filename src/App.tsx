@@ -1,5 +1,5 @@
 import { Fragment, Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { audioReady, enableAudio, preload, ring, type BellSoundStyle } from './lib/sound'
+import { audioReady, enableAudio, isBellRinging, preload, ring, subscribeBellRinging, type BellKind, type BellSoundStyle } from './lib/sound'
 import { useSupporters, useVip, type VipPrefs } from './lib/vip'
 import { SupporterTicker, type VipModalTab } from './SupporterTicker'
 import { applyHolidayDom, isAfterDec5, useAdvent, WINTER_BREAK_DATE, type HolidayThemeMode } from './lib/advent'
@@ -655,11 +655,18 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const openSupporterWall = useCallback(() => setVipModal({ open: true, tab: 'supporters' }), [])
   const bellStyleRef = useRef<BellSoundStyle>('default')
   bellStyleRef.current = advent.effectiveBell ?? (vip.status.active ? vip.prefs.bellSound : 'default')
+  const [bellRinging, setBellRinging] = useState(() => isBellRinging())
+  useEffect(() => subscribeBellRinging(setBellRinging), [])
   const key = state ? `${state.phase}-${state.current?.id ?? state.next?.id}` : ''
   const prev = useRef('')
+  const liveBell = typeof state?.elapsed === 'number' && state.elapsed >= 0 && state.elapsed <= 3
+  const bellPendingTransition = Boolean(prev.current && key !== prev.current && state?.phase !== 'closed' && liveBell && data?.settings.sound_enabled && audioOn)
   useEffect(() => {
-    const liveBell = typeof state?.elapsed === 'number' && state.elapsed >= 0 && state.elapsed <= 3
-    if (prev.current && key !== prev.current && state?.phase !== 'closed' && liveBell && data?.settings.sound_enabled && !muted) ring(data.settings.bell_sound_url, bellStyleRef.current)
+    const isLiveBell = typeof state?.elapsed === 'number' && state.elapsed >= 0 && state.elapsed <= 3
+    if (prev.current && key !== prev.current && state?.phase !== 'closed' && isLiveBell && data?.settings.sound_enabled && !muted) {
+      const bellKind: BellKind = state?.phase === 'lesson' || state?.phase === 'before' ? 'in' : 'out'
+      ring(data.settings.bell_sound_url, bellStyleRef.current, bellKind)
+    }
     prev.current = key
   }, [key])
   // TV-mód méretezése az admin beállítása szerint.
@@ -1077,7 +1084,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
   const curJukeboxBreakKey = `${z.date}-${s.phase}-${s.current?.id ?? s.next?.id ?? '0'}`
   const breakTotalSec = s.phase === 'break' ? s.total : undefined
   const vid = musicEnabled && (
-    <BreakVideo sync={musicSync} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} />
+    <BreakVideo sync={musicSync} tv={tv} soundOn={!!data.settings.sound_enabled && audioOn} userMuted={muted} waitForBell={bellRinging || bellPendingTransition} />
   )
   const e0 = events[0]
   const restEv = pv && first && until > 0

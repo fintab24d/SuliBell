@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { currentLyricIndex, useLyrics } from './lib/lyrics'
 import { serverNowMs } from './lib/serverTime'
+import { isBellRinging, subscribeBellRinging } from './lib/sound'
 import type { MusicSlot } from './lib/musicSync'
 import type { MusicSyncResult } from './lib/useMusicSync'
 import { cleanSongTitle } from './lib/video'
@@ -25,6 +26,8 @@ export const MusicVisualizer = memo(function MusicVisualizer({
   radioMode = false,
   initialMuted = false,
   compact = false,
+  tv = false,
+  waitForBell = false,
   slotStartMs,
   slotEndMs,
   upcoming,
@@ -37,6 +40,8 @@ export const MusicVisualizer = memo(function MusicVisualizer({
   radioMode?: boolean
   initialMuted?: boolean
   compact?: boolean
+  tv?: boolean
+  waitForBell?: boolean
   slotStartMs?: number
   slotEndMs?: number
   upcoming?: MusicSlot[]
@@ -44,6 +49,9 @@ export const MusicVisualizer = memo(function MusicVisualizer({
 }) {
   const [playing, setPlaying] = useState(true)
   const [muted, setMuted] = useState(initialMuted)
+  const [soundBellActive, setSoundBellActive] = useState(() => isBellRinging())
+  useEffect(() => subscribeBellRinging(setSoundBellActive), [])
+  const holdingForBell = Boolean(waitForBell || soundBellActive)
   const [volume, setVolume] = useState(50)
   const volumeRef = useRef(50)
   volumeRef.current = volume
@@ -68,6 +76,17 @@ export const MusicVisualizer = memo(function MusicVisualizer({
       sendYtCmd('playVideo')
     }
   }, [ytId, sendYtCmd])
+
+  // Fejléc-némítás (különösen TV nézetben, ahol nincs saját gomb a zenelejátszón) szinkronizálása
+  useEffect(() => {
+    setMuted(initialMuted)
+    if (!ytId || holdingForBell) return
+    if (initialMuted) {
+      sendYtCmd('mute')
+    } else {
+      forceUnmuteAndPlay()
+    }
+  }, [initialMuted, ytId, holdingForBell, sendYtCmd, forceUnmuteAndPlay])
 
   // Amikor az iframe betöltődik, feliratkozunk az időadatokra, és többször is elküldjük az unMute + setVolume + playVideo parancsot
   const handleIframeLoad = useCallback(() => {
@@ -144,7 +163,7 @@ export const MusicVisualizer = memo(function MusicVisualizer({
 
   // Ha a böngésző az első kattintásig visszafogná a hangot, az oldal bárhol történő első érintésére felhangosítjuk
   useEffect(() => {
-    if (muted || !playing || waitingNext) return
+    if (muted || !playing || waitingNext || holdingForBell) return
     const unlock = () => {
       forceUnmuteAndPlay()
     }
@@ -154,7 +173,7 @@ export const MusicVisualizer = memo(function MusicVisualizer({
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
     }
-  }, [muted, playing, waitingNext, forceUnmuteAndPlay])
+  }, [muted, playing, waitingNext, holdingForBell, forceUnmuteAndPlay])
 
   const togglePlay = () => {
     const next = !playing
@@ -189,11 +208,11 @@ export const MusicVisualizer = memo(function MusicVisualizer({
     }
   }
 
-  // Indítási másodperc: kizárólag váltáskor / újracsatoláskor számolódik újra
+  // Indítási másodperc: kizárólag váltáskor / újracsatoláskor / csengő lecsengése után számolódik újra
   const startSec = useMemo(() => {
-    if (!playing || slotStartMs === undefined) return 0
+    if (!playing || holdingForBell || slotStartMs === undefined) return 0
     return Math.max(0, Math.floor((serverNowMs() - slotStartMs) / 1000))
-  }, [ytId, reloadNonce, playing, slotStartMs])
+  }, [ytId, reloadNonce, playing, holdingForBell, slotStartMs])
 
   const origin = typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
   const startParam = startSec > 0 ? `&start=${startSec}` : ''
@@ -202,15 +221,15 @@ export const MusicVisualizer = memo(function MusicVisualizer({
     : undefined
 
   const thumbUrl = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : undefined
-  const active = playing && !muted && !waitingNext
+  const active = playing && !muted && !waitingNext && !holdingForBell
 
   const vipWish = vip && !radioMode
 
   return (
-    <div className={`music-viz ${compact ? 'compact' : ''} ${playing && !waitingNext ? 'is-playing' : 'is-paused'} ${vipWish ? 'is-vip' : ''}`}>
+    <div className={`music-viz ${compact ? 'compact' : ''} ${tv ? 'is-tv' : ''} ${playing && !waitingNext && !holdingForBell ? 'is-playing' : 'is-paused'} ${vipWish ? 'is-vip' : ''}`}>
       {/* Háttérben futó 240x200px-es audio motor a visualizer réteg mögött (YouTube >=200x200px előírás miatt) */}
       <div className="bg-audio-engine" aria-hidden="true">
-        {ytSrc && playing && !waitingNext && (
+        {ytSrc && playing && !waitingNext && !holdingForBell && (
             <iframe
             ref={iframeRef}
             key={`${ytId}-${slotStartMs ?? 0}-${reloadNonce}`}
@@ -230,7 +249,7 @@ export const MusicVisualizer = memo(function MusicVisualizer({
           <div className="viz-disc-wrap">
             <div className="viz-ring r1" />
             <div className="viz-ring r2" />
-            <div className={`viz-disc ${playing && !waitingNext ? 'spin' : ''}`}>
+            <div className={`viz-disc ${playing && !waitingNext && !holdingForBell ? 'spin' : ''}`}>
               {thumbUrl ? (
                 <img src={thumbUrl} alt="" className="viz-thumb" loading="lazy" />
               ) : (
@@ -245,11 +264,13 @@ export const MusicVisualizer = memo(function MusicVisualizer({
             <div className="viz-status-row">
               <span className="viz-badge">
                 <span className="eq" aria-hidden="true"><i /><i /><i /></span>
-                {waitingNext
-                  ? `⏳ Következő szám hamarosan…${waitRemSec > 0 ? ` (${waitRemSec} mp)` : ''}`
-                  : playing
-                    ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'KÖZPONTI ÉLŐ LEJÁTSZÁS')
-                    : 'SZÜNETELTETVE (HELYI)'}
+                {holdingForBell
+                  ? '🔔 CSENGŐHANG SZÓL — ZENE UTÁNA INDUL'
+                  : waitingNext
+                    ? `⏳ Következő szám hamarosan…${waitRemSec > 0 ? ` (${waitRemSec} mp)` : ''}`
+                    : playing
+                      ? (muted ? 'NÉMÍTVA MEGY A HÁTTÉRBEN' : 'KÖZPONTI ÉLŐ LEJÁTSZÁS')
+                      : 'SZÜNETELTETVE (HELYI)'}
               </span>
               {radioMode ? (
                 <span className="pill viz-radio-pill">📻 SULIRÁDIÓ • AUTO-DJ</span>
@@ -274,53 +295,55 @@ export const MusicVisualizer = memo(function MusicVisualizer({
               )}
             </div>
 
-            <div className="viz-controls">
-              <button type="button" className="viz-btn" onClick={togglePlay}>
-                {playing ? '⏸ Szünet' : '▶ Csatlakozás élőhöz'}
-              </button>
-              <button
-                type="button"
-                className={`viz-btn ${muted ? 'warn' : 'on'}`}
-                onClick={toggleMute}
-              >
-                {muted ? '🔇 Némítva' : '🔊 Hang'}
-              </button>
-              <label className="viz-vol" title="Hangerő szabályzó">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={muted ? 0 : volume}
-                  onChange={e => changeVolume(Number(e.target.value))}
-                />
-                <span>{muted ? 0 : volume}%</span>
-              </label>
-              {ytId && (
+            {!tv && (
+              <div className="viz-controls">
+                <button type="button" className="viz-btn" onClick={togglePlay}>
+                  {playing ? '⏸ Szünet' : '▶ Csatlakozás élőhöz'}
+                </button>
                 <button
                   type="button"
-                  className="viz-btn"
-                  onClick={() => {
-                    setMuted(false)
-                    setPlaying(true)
-                    setWaitingNext(false)
-                    setReloadNonce(n => n + 1)
-                  }}
-                  title="Ha a böngésző letiltotta az automatikus hangot, kattints ide a hangos újraindításhoz"
+                  className={`viz-btn ${muted ? 'warn' : 'on'}`}
+                  onClick={toggleMute}
                 >
-                  🔄 Szinkron / Hang
+                  {muted ? '🔇 Némítva' : '🔊 Hang'}
                 </button>
-              )}
-              {onClose && (
-                <button type="button" className="viz-btn" onClick={onClose}>
-                  ⏹ Bezárás
-                </button>
-              )}
-            </div>
+                <label className="viz-vol" title="Hangerő szabályzó">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={muted ? 0 : volume}
+                    onChange={e => changeVolume(Number(e.target.value))}
+                  />
+                  <span>{muted ? 0 : volume}%</span>
+                </label>
+                {ytId && (
+                  <button
+                    type="button"
+                    className="viz-btn"
+                    onClick={() => {
+                      setMuted(false)
+                      setPlaying(true)
+                      setWaitingNext(false)
+                      setReloadNonce(n => n + 1)
+                    }}
+                    title="Ha a böngésző letiltotta az automatikus hangot, kattints ide a hangos újraindításhoz"
+                  >
+                    🔄 Szinkron / Hang
+                  </button>
+                )}
+                {onClose && (
+                  <button type="button" className="viz-btn" onClick={onClose}>
+                    ⏹ Bezárás
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Időzített dalszöveg (csak ha elérhető) */}
-        {lyrics.length > 0 && !waitingNext && (
+        {lyrics.length > 0 && !waitingNext && !holdingForBell && (
           <div className="viz-lyrics" aria-live="polite">
             {lyricPrev && <p key={`p-${lyricIdx}`} className="prev">{lyricPrev}</p>}
             <p
@@ -399,14 +422,16 @@ export const MusicVisualizer = memo(function MusicVisualizer({
  */
 export default memo(function BreakVideo({
   sync,
-  tv: _tv = false,
+  tv = false,
   soundOn: _soundOn,
   userMuted = false,
+  waitForBell = false,
 }: {
   sync: MusicSyncResult
   tv?: boolean
   soundOn?: boolean
   userMuted?: boolean
+  waitForBell?: boolean
 }) {
   if (!sync.current) return null
   const { kind, track } = sync.current
@@ -421,6 +446,8 @@ export default memo(function BreakVideo({
         vip={Boolean(track.vip)}
         radioMode={radioMode}
         initialMuted={userMuted}
+        tv={tv}
+        waitForBell={waitForBell}
         slotStartMs={sync.slotStartMs}
         slotEndMs={sync.slotEndMs}
         upcoming={sync.upcoming}

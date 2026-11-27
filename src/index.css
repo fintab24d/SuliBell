@@ -870,14 +870,6 @@ main.tv{padding:clamp(6px,.9vh,14px) clamp(10px,1.2vw,20px);gap:clamp(6px,.9vh,1
 .ticker{padding:clamp(8px,1vh,15px) clamp(14px,1.5vw,22px)}
 .ticker span{font-size:clamp(.95rem,2vh,1.55rem)}
 .ticker p{font-size:clamp(1.18rem,2.75vh,2.2rem)}
-.tv .music-viz .viz-foreground{padding:clamp(10px,1.25vh,18px) clamp(12px,1.4vw,20px);gap:8px}
-.tv .viz-disc-wrap{width:clamp(60px,8.5vh,100px);height:clamp(60px,8.5vh,100px)}
-.tv .viz-title{font-size:clamp(1.18rem,2.4vh,1.95rem)}
-.tv .viz-sub{font-size:clamp(.95rem,1.85vh,1.4rem)}
-.tv .viz-badge{font-size:clamp(.82rem,1.5vh,1.15rem)}
-.tv .viz-lyrics .now{font-size:clamp(1.2rem,2.65vh,2.1rem)}
-.tv .viz-lyrics .next{font-size:clamp(.95rem,1.85vh,1.4rem)}
-.tv .viz-bars{height:clamp(44px,6vh,72px)}
 
 /* /display reszponzív töréspontok (mindig 100svh görgetésmentesen) */
 @media (max-width: 960px) {
@@ -947,9 +939,6 @@ main.tv{padding:clamp(6px,.9vh,14px) clamp(10px,1.2vw,20px);gap:clamp(6px,.9vh,1
 @keyframes vizLyricGlow{from{text-shadow:0 0 12px color-mix(in srgb,var(--n-cyan,#22d3ee) 60%,transparent)}to{text-shadow:0 0 20px color-mix(in srgb,var(--n-cyan,#22d3ee) 85%,transparent),0 0 32px color-mix(in srgb,var(--n-pink,#f472b6) 55%,transparent)}}
 @keyframes vizLyricSweep{from{transform:scaleX(0);opacity:.95}90%{opacity:.95}to{transform:scaleX(1);opacity:.35}}
 .music-viz.compact .viz-lyrics .now{font-size:1rem}
-.tv .viz-lyrics .now{font-size:3.4vh}
-.tv .viz-lyrics .prev{font-size:1.75vh}
-.tv .viz-lyrics .next{font-size:2.1vh}
 .viz-top{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px}
 .music-viz.compact .viz-top{gap:12px}
 .viz-disc-wrap{position:relative;width:84px;height:84px;display:grid;place-items:center;flex-shrink:0}
@@ -975,6 +964,15 @@ main.tv{padding:clamp(6px,.9vh,14px) clamp(10px,1.2vw,20px);gap:clamp(6px,.9vh,1
 .viz-sub{font-size:.85rem;color:var(--mut);animation:vizSubIn .5s .08s cubic-bezier(.22,1,.36,1) both}
 @keyframes vizSubIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 :root[data-potato="1"] .music-viz.is-playing .viz-title{background:none!important;-webkit-text-fill-color:var(--fg)!important}
+:root[data-potato="1"] .music-viz,:root[data-potato="1"] .music-viz .viz-foreground{background:#090b1a!important;color:#eef2ff!important}
+:root[data-potato="1"] .music-viz .viz-title{color:#eef2ff!important;-webkit-text-fill-color:#eef2ff!important}
+:root[data-potato="1"] .music-viz .viz-sub,:root[data-potato="1"] .music-viz .viz-sub b{color:#cbd5e1!important}
+:root[data-potato="1"] .viz-title,:root[data-potato="1"] .viz-sub,:root[data-potato="1"] .viz-lyrics .prev,:root[data-potato="1"] .viz-lyrics .now,:root[data-potato="1"] .viz-lyrics .now .lword,:root[data-potato="1"] .viz-lyrics .next{animation:none!important;transform:none!important;filter:none!important}
+:root[data-potato="1"] .viz-title,:root[data-potato="1"] .viz-sub,:root[data-potato="1"] .viz-lyrics .now,:root[data-potato="1"] .viz-lyrics .now .lword{opacity:1!important}
+:root[data-potato="1"] .viz-lyrics .now{color:#ffffff!important}
+:root[data-potato="1"] .viz-lyrics .prev{opacity:.65!important;color:#cbd5e1!important}
+:root[data-potato="1"] .viz-lyrics .next{opacity:.85!important;color:#cbd5e1!important}
+:root[data-potato="1"] .viz-lyric-bar{display:none!important}
 @media(prefers-reduced-motion:reduce){.viz-title,.viz-sub,.viz-lyrics .prev,.viz-lyrics .now,.viz-lyrics .now .lword,.viz-lyrics .next,.viz-lyric-bar{animation:none!important;opacity:1!important;transform:none!important;filter:none!important}.music-viz.is-playing .viz-title{background:none!important;-webkit-text-fill-color:var(--fg)!important}}
 .viz-sub b{color:var(--fg)}
 .viz-controls{display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
@@ -990,12 +988,6 @@ main.tv{padding:clamp(6px,.9vh,14px) clamp(10px,1.2vw,20px);gap:clamp(6px,.9vh,1
 .viz-bars.soft .viz-bar{opacity:.55;animation-duration:calc(var(--s,.6s) * 1.6)}
 .viz-bars.idle .viz-bar{animation:none;transform:scaleY(.18);opacity:.35}
 @keyframes vizDance{0%{transform:scaleY(.16)}50%{transform:scaleY(.62)}100%{transform:scaleY(1)}}
-.tv .music-viz .viz-foreground{padding:1.4vh 1.6vw;gap:1.2vh}
-.tv .viz-disc-wrap{width:9vh;height:9vh}
-.tv .viz-title{font-size:2.6vh}
-.tv .viz-sub{font-size:1.8vh}
-.tv .viz-badge{font-size:1.5vh}
-.tv .viz-bars{height:6.5vh}
 
 /* ==================== TÁRSOLDALAK (PARTNER LINKEK) ==================== */
 .partners-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
@@ -5574,6 +5566,38 @@ iframe {
   color: var(--fg);
 }
 
+.profile-note-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.profile-forgot-btn {
+  color: var(--n-pink, #f472b6);
+}
+
+.profile-ok {
+  margin: 4px 0 0;
+  padding: 8px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.14);
+  color: #4ade80;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+:root[data-theme="light"] .profile-ok {
+  color: #15803d;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.profile-err-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Következő 3 szám a zenelejátszóban */
 .viz-upnext {
   display: grid;
@@ -5641,20 +5665,122 @@ iframe {
   display: none;
 }
 
+/* ==================== /DISPLAY (TV) ZENELEJÁTSZÓ TELJES LÁTHATÓSÁG ==================== */
+.tv-vid-row {
+  flex: 1.9 1 0;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 0.85fr);
+  align-items: stretch;
+  min-height: 0;
+}
+.tv-vid-row > * {
+  height: 100%;
+  min-height: 0;
+}
+.tvside:has(.tv-vid-row) .tv-subgrid {
+  flex: 1.1 1 0;
+}
+@media (max-width: 720px), (orientation: portrait) and (max-width: 960px) {
+  .tv-vid-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.tv .music-panel {
+  padding: 0 !important;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tv .music-viz {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tv .music-viz .viz-foreground {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(7px, 1vh, 14px) clamp(10px, 1.15vw, 18px);
+  gap: clamp(4px, 0.6vh, 10px);
+}
+.tv .viz-controls {
+  display: none !important;
+}
+.tv .viz-top {
+  gap: clamp(8px, 1vw, 14px);
+  flex-shrink: 0;
+}
+.tv .viz-disc-wrap {
+  width: clamp(46px, 6.2vh, 80px);
+  height: clamp(46px, 6.2vh, 80px);
+}
+.tv .viz-meta {
+  gap: clamp(2px, 0.3vh, 4px);
+}
+.tv .viz-badge {
+  font-size: clamp(0.68rem, 1.25vh, 0.98rem);
+  padding: 2px 8px;
+}
+.tv .music-viz .pill {
+  font-size: clamp(0.68rem, 1.25vh, 0.95rem);
+  padding: 2px 8px;
+}
+.tv .viz-title {
+  font-size: clamp(0.95rem, 1.95vh, 1.55rem);
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+.tv .viz-sub {
+  font-size: clamp(0.76rem, 1.45vh, 1.15rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv .viz-lyrics {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: clamp(4px, 0.55vh, 8px) clamp(8px, 0.9vw, 14px) clamp(6px, 0.7vh, 10px);
+  gap: clamp(1px, 0.25vh, 4px);
+  align-content: center;
+}
+.tv .viz-lyrics .prev {
+  font-size: clamp(0.72rem, 1.3vh, 1rem);
+}
+.tv .viz-lyrics .now {
+  font-size: clamp(0.95rem, 2.05vh, 1.6rem);
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+.tv .viz-lyrics .next {
+  font-size: clamp(0.78rem, 1.45vh, 1.15rem);
+}
+.tv .viz-bars {
+  height: clamp(22px, 3.6vh, 44px);
+  padding: 4px 8px 3px;
+  gap: 3px;
+  flex-shrink: 0;
+}
 .tv .viz-upnext {
-  padding: 0.9vh 1.1vw;
-  gap: 0.5vh;
+  padding: clamp(5px, 0.65vh, 9px) clamp(8px, 0.9vw, 12px);
+  gap: clamp(2px, 0.35vh, 5px);
+  flex-shrink: 0;
 }
-
 .tv .viz-upnext-head {
-  font-size: 1.35vh;
+  font-size: clamp(0.66rem, 1.15vh, 0.9rem);
 }
-
+.tv .viz-upnext-list {
+  gap: clamp(2px, 0.3vh, 4px);
+}
 .tv .viz-upnext-item {
-  font-size: 1.65vh;
-  padding: 0.35vh 0.7vw;
+  font-size: clamp(0.72rem, 1.38vh, 1.08rem);
+  padding: clamp(2px, 0.3vh, 5px) clamp(6px, 0.65vw, 10px);
 }
-
 .tv .viz-upnext-src {
-  font-size: 1.35vh;
+  font-size: clamp(0.64rem, 1.15vh, 0.9rem);
 }

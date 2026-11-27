@@ -86,6 +86,14 @@ export interface SaveProfileResult {
   existingName?: string
 }
 
+export interface PinResetRequestResult {
+  ok: boolean
+  alreadyPending?: boolean
+  name?: string
+  error?: string
+  code?: 'not_found' | 'already_reset' | 'cooldown' | 'network'
+}
+
 export interface PlayerProfileState {
   name: string
   cleanName: string
@@ -98,6 +106,7 @@ export interface PlayerProfileState {
   clearSaveError: () => void
   saveName: (rawName: string, pin?: string) => Promise<SaveProfileResult>
   loginWithPin: (rawName: string, pin: string) => Promise<SaveProfileResult>
+  requestPinReset: (rawName: string, note?: string) => Promise<PinResetRequestResult>
   logout: () => void
 }
 
@@ -367,6 +376,81 @@ export function usePlayerProfile(schoolId?: string): PlayerProfileState {
     }
   }, [schoolId])
 
+  const requestPinReset = useCallback(async (rawName: string, note = ''): Promise<PinResetRequestResult> => {
+    const res = validatePlayerName(rawName, true)
+    if (!res.valid || !res.cleanName) {
+      const msg = res.error ?? 'Add meg vagy válaszd ki a neved!'
+      setSaveError(msg)
+      return { ok: false, code: 'not_found', error: msg }
+    }
+    if (!schoolId) {
+      const msg = 'A jelzés küldéséhez élő szerverkapcsolat szükséges.'
+      setSaveError(msg)
+      return { ok: false, code: 'network', error: msg }
+    }
+
+    const nKey = normalizePlayerNameKey(res.cleanName)
+    const cdKey = `sulibell-pin-reset-ts-${nKey}`
+    try {
+      const lastTs = Number(localStorage.getItem(cdKey) || '0')
+      if (lastTs > 0 && Date.now() - lastTs < 60_000) {
+        const msg = 'Nemrég már küldtél jelzést ehhez a névhez, várj egy picit!'
+        setSaveError(msg)
+        return { ok: false, code: 'cooldown', error: msg }
+      }
+    } catch { /* ignore */ }
+
+    setSaving(true)
+    setSaveError('')
+    try {
+      const { data, error } = await supabase.rpc('request_pin_reset', {
+        p_school: schoolId,
+        p_name: res.cleanName,
+        p_note: note.trim().slice(0, 140),
+      })
+
+      if (error || !data || typeof data !== 'object') {
+        const msg = 'Nem sikerült elküldeni a jelzést az adminnak. Próbáld meg újra!'
+        setSaveError(msg)
+        return { ok: false, code: 'network', error: msg }
+      }
+
+      const payload = data as {
+        ok?: boolean
+        error?: string
+        already_pending?: boolean
+        name?: string
+      }
+
+      if (payload.ok === false) {
+        if (payload.error === 'already_reset') {
+          const msg = 'Ennek a profilnak már nullázva van a PIN-kódja! Lépj vissza és adj meg egy új 4 jegyű PIN-t.'
+          setSaveError(msg)
+          return { ok: false, code: 'already_reset', name: payload.name || res.cleanName, error: msg }
+        }
+        const msg = 'Nem található ilyen nevű mentett profil. Válaszd ki a pontos neved a listából!'
+        setSaveError(msg)
+        return { ok: false, code: 'not_found', error: msg }
+      }
+
+      try {
+        localStorage.setItem(cdKey, String(Date.now()))
+      } catch { /* ignore */ }
+
+      return {
+        ok: true,
+        alreadyPending: Boolean(payload.already_pending),
+        name: String(payload.name || res.cleanName),
+      }
+    } catch {
+      const msg = 'Hálózati hiba történt a jelzés küldésekor.'
+      setSaveError(msg)
+      return { ok: false, code: 'network', error: msg }
+    } finally {
+      setSaving(false)
+    }
+  }, [schoolId])
+
   const logout = useCallback(() => {
     syncedKeys.clear()
     const freshId = resetVoterId()
@@ -390,6 +474,7 @@ export function usePlayerProfile(schoolId?: string): PlayerProfileState {
     clearSaveError,
     saveName,
     loginWithPin,
+    requestPinReset,
     logout,
   }
 }

@@ -332,10 +332,19 @@ function SandboxWorkspace() {
                   type="button"
                   onClick={async () => {
                     await enableAudio()
-                    ring( null)
+                    ring(null, 'default', 'in')
                   }}
                 >
-                  🔔 Csengőhang teszt
+                  🔔 Becsengő teszt
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await enableAudio()
+                    ring(null, 'default', 'out')
+                  }}
+                >
+                  🎉 Kicsengő teszt
                 </button>
               </div>
               <div className="testlab-btns" style={{ marginTop: '0.35rem' }}>
