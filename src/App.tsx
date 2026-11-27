@@ -64,7 +64,7 @@ import { DISCORD_INVITE_URL, fetchDiscordSync, type DiscordAnnouncementItem } fr
 import { updateSandbox, useSandbox, type SandboxConfig } from './lib/sandbox'
 import { useSchool } from './lib/useSchool'
 import { serverNowMs, startServerTimeSync, subscribeServerTime } from './lib/serverTime'
-import { KIND } from './lib/kinds'
+import { resolveEventStyle } from './lib/kinds'
 import { APP_NAME } from './lib/brand'
 import { computeState, fmtCount, fmtHM, addDays, instantOf, isLessonCancelled, nextSchoolDay, scheduleFor, schoolDaysBetween, toSec, zoned, type BellState, type Lesson } from './lib/engine'
 
@@ -931,21 +931,47 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     hoursLeft: winterStarted ? 0 : Math.max(0, Math.ceil((winterEndMs - nowMs) / 3600000)),
   }
   const evCard = (e: any, i: number) => {
-    const k = KIND[e.kind] ?? KIND.other
+    const st = resolveEventStyle(e.title, e.kind)
     const d = Math.floor(e.left / 86400), h = Math.floor((e.left % 86400) / 3600), m = Math.floor((e.left % 3600) / 60), sec = e.left % 60
     const nd = e.nd ?? 0
-    return <article key={e.id} className={`ev ${i === 0 ? 'big' : ''}`} style={{ '--k': k.color } as CSSProperties}>
-      <div className="ev-top"><span className="ico" aria-hidden="true">{k.icon}</span><h3>{e.title}</h3></div>
-      {i === 0
-        ? <div className="units">{([[d, 'nap'], [h, 'óra'], [m, 'perc'], [sec, 'mp']] as [number, string][]).map(([v, l]) => <div key={l}><Digits text={pad(v)} /><span>{l}</span></div>)}</div>
-        : <div className="days"><b>{d}</b><span>nap{h > 0 || d === 0 ? `, ${h} óra` : ''}</span></div>}
-      <div className="ev-date">{e.dateLabel}{nd > 0 ? `, még ${nd} tanítási nap` : ''}</div>
-    </article>
+    return (
+      <article
+        key={e.id}
+        className={`ev ${i === 0 ? 'big' : ''} ${st.isHoliday ? `ev-holiday ${st.themeClass}` : ''}`}
+        style={{ '--k': st.color, '--k2': st.color2 } as CSSProperties}
+      >
+        {st.isHoliday && <div className="ev-hol-sparkles" aria-hidden="true"><i /><i /><i /></div>}
+        <div className="ev-top">
+          <span className="ico" aria-hidden="true">{st.icon}</span>
+          <h3>{e.title}</h3>
+          {st.isHoliday && st.badge && <span className="ev-hol-badge">{st.badge}</span>}
+        </div>
+        {i === 0
+          ? <div className="units">{([[d, 'nap'], [h, 'óra'], [m, 'perc'], [sec, 'mp']] as [number, string][]).map(([v, l]) => <div key={l}><Digits text={pad(v)} /><span>{l}</span></div>)}</div>
+          : <div className="days"><b>{d}</b><span>nap{h > 0 || d === 0 ? `, ${h} óra` : ''}</span></div>}
+        <div className="ev-date">{e.dateLabel}{nd > 0 ? `, még ${nd} tanítási nap` : ''}</div>
+      </article>
+    )
   }
   const offCard = upcoming.length > 0 && <article key="off" className="ev" style={{ '--k': 'var(--mut)' } as CSSProperties}>
     <div className="ev-top"><span className="ico" aria-hidden="true">📅</span><h3>Tanítás nélküli napok</h3></div>
-    <ul className="offl">{upcoming.map(c => <li key={c.day}><b>{dayName(c.day, { month: 'long', day: 'numeric' })}</b>
-      <span>{dayName(c.day, { weekday: 'long' })}, {c.reason}</span></li>)}</ul>
+    <ul className="offl">{upcoming.map(c => {
+      const st = resolveEventStyle(c.reason, 'other')
+      return (
+        <li
+          key={c.day}
+          className={st.isHoliday ? `offl-holiday ${st.themeClass}` : undefined}
+          style={st.isHoliday ? ({ '--k': st.color, '--k2': st.color2 } as CSSProperties) : undefined}
+        >
+          <b>
+            {st.isHoliday && <span className="offl-ico" aria-hidden="true">{st.icon}</span>}
+            {dayName(c.day, { month: 'long', day: 'numeric' })}
+            {st.isHoliday && st.badge && <em className="offl-badge">{st.badge}</em>}
+          </b>
+          <span>{dayName(c.day, { weekday: 'long' })}, {c.reason}</span>
+        </li>
+      )
+    })}</ul>
   </article>
 
   // ---- Mai változások, ebéd, tanév haladása, kiemelt közlemény ----
@@ -963,12 +989,16 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
       {events.length > 0 ? (
         <ul className="tv-info-list">
           {events.slice(0, 2).map((e: any) => {
-            const k = KIND[e.kind] ?? KIND.other
+            const st = resolveEventStyle(e.title, e.kind)
             const d = Math.floor(e.left / 86400)
             const h = Math.floor((e.left % 86400) / 3600)
             return (
-              <li key={e.id}>
-                <span aria-hidden="true">{k.icon}</span>
+              <li
+                key={e.id}
+                className={st.isHoliday ? `tv-info-holiday ${st.themeClass}` : undefined}
+                style={st.isHoliday ? ({ '--k': st.color, '--k2': st.color2 } as CSSProperties) : undefined}
+              >
+                <span aria-hidden="true">{st.icon}</span>
                 <b>{e.title}</b>
                 <small>{d > 0 ? `${d} nap` : `${Math.max(1, h)} óra`}</small>
               </li>
@@ -977,13 +1007,20 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
         </ul>
       ) : upcoming.length > 0 ? (
         <ul className="tv-info-list">
-          {upcoming.slice(0, 2).map((c: { day: string; reason: string }) => (
-            <li key={c.day}>
-              <span aria-hidden="true">🗓️</span>
-              <b>{c.reason}</b>
-              <small>{dayName(c.day, { month: 'short', day: 'numeric' })}</small>
-            </li>
-          ))}
+          {upcoming.slice(0, 2).map((c: { day: string; reason: string }) => {
+            const st = resolveEventStyle(c.reason, 'other')
+            return (
+              <li
+                key={c.day}
+                className={st.isHoliday ? `tv-info-holiday ${st.themeClass}` : undefined}
+                style={st.isHoliday ? ({ '--k': st.color, '--k2': st.color2 } as CSSProperties) : undefined}
+              >
+                <span aria-hidden="true">{st.isHoliday ? st.icon : '🗓️'}</span>
+                <b>{c.reason}</b>
+                <small>{dayName(c.day, { month: 'short', day: 'numeric' })}</small>
+              </li>
+            )
+          })}
         </ul>
       ) : (
         <p className="tv-info-fallback">
@@ -1091,7 +1128,7 @@ export default function App({ sandbox }: { sandbox?: boolean } = {}) {
     ? { icon: /ősz/i.test(s.reason ?? '') ? '🍂' : /tél/i.test(s.reason ?? '') ? '❄️' : /nyár/i.test(s.reason ?? '') ? '☀️' : /tavasz/i.test(s.reason ?? '') ? '🌷' : '😴',
         days: Math.floor(until / 86400), hours: Math.floor((until % 86400) / 3600), mins: Math.floor((until % 3600) / 60),
         note: `Ennyi van még hátra a pihenésből! Tanítás újra: ${pvWeekdayLabel}, ${fmtHM(first.start_time)}` }
-    : e0 ? { icon: (KIND[e0.kind] ?? KIND.other).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined
+    : e0 ? { icon: resolveEventStyle(e0.title, e0.kind).icon, days: Math.floor(e0.left / 86400), hours: Math.floor((e0.left % 86400) / 3600), mins: Math.floor((e0.left % 3600) / 60), note: e0.title } : undefined
   const restBox = (tv || layoutMode === 'classic') && s.phase === 'closed' && data.settings.rest_mode !== false && <Suspense fallback={null}><RestMode tv={tv} schoolId={data.id} reason={s.reason} day={z.date} ev={restEv} sound={!!data.settings.sound_enabled && audioOn} /></Suspense>
   const pollCard = poll && <PollCard poll={poll} counts={counts} tv={tv} qr={tv ? pollQr : undefined} />
   const brandLogoContent = (

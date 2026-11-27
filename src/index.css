@@ -5798,3 +5798,191 @@ iframe {
 .tv .viz-upnext-src {
   font-size: clamp(0.64rem, 1.15vh, 0.9rem);
 }
+
+/* ==================== ÜNNEPI VISSZASZÁMLÁLÓ KÁRTYÁK ==================== */
+@keyframes evHolShimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+@keyframes evHolTwinkle {
+  0%, 100% { opacity: 0.32; transform: scale(0.85) rotate(0deg); }
+  50% { opacity: 0.95; transform: scale(1.18) rotate(22deg); }
+}
+
+.ev.ev-holiday {
+  --k2: #ffd166;
+  background:
+    radial-gradient(circle at 92% 10%, color-mix(in srgb, var(--k2) 20%, transparent), transparent 46%),
+    radial-gradient(circle at 8% 95%, color-mix(in srgb, var(--k) 16%, transparent), transparent 48%),
+    linear-gradient(145deg, color-mix(in srgb, var(--k) 15%, var(--panel)), color-mix(in srgb, var(--k2) 11%, var(--panel)));
+  border: 1px solid color-mix(in srgb, var(--k) 45%, color-mix(in srgb, var(--k2) 32%, var(--line)));
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--k) 15%, rgba(0, 0, 0, 0.22)),
+    inset 0 1px 0 color-mix(in srgb, var(--k2) 34%, transparent);
+}
+.ev.ev-holiday::before {
+  height: 5px;
+  background: linear-gradient(90deg, var(--k), var(--k2), var(--k));
+  background-size: 200% 100%;
+  animation: evHolShimmer 6s ease-in-out infinite;
+}
+.ev.ev-holiday.ev-h-national::before {
+  background: linear-gradient(90deg, #ce2939 0%, #ce2939 33.3%, #f8fafc 33.3%, #f8fafc 66.6%, #477050 66.6%, #477050 100%);
+  background-size: 100% 100%;
+  animation: none;
+}
+.ev.ev-holiday::after {
+  width: 210px;
+  height: 210px;
+  right: -64px;
+  top: -64px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--k2) 26%, transparent) 0%, color-mix(in srgb, var(--k) 14%, transparent) 48%, transparent 72%);
+}
+
+.ev.ev-holiday .ev-top {
+  gap: 10px;
+}
+.ev.ev-holiday .ico {
+  width: 2.45rem;
+  height: 2.45rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 13px;
+  font-size: 1.35rem;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--k) 24%, transparent), color-mix(in srgb, var(--k2) 20%, transparent));
+  border: 1px solid color-mix(in srgb, var(--k2) 42%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--k) 22%, transparent);
+}
+.ev.ev-holiday h3 {
+  flex: 1;
+  min-width: 0;
+  letter-spacing: -0.01em;
+}
+.ev-hol-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--k) 24%, transparent), color-mix(in srgb, var(--k2) 22%, transparent));
+  border: 1px solid color-mix(in srgb, var(--k2) 48%, transparent);
+  color: color-mix(in srgb, var(--k2) 78%, #ffffff);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--k2) 16%, transparent);
+}
+.ev.ev-holiday.ev-h-national .ev-hol-badge {
+  background: linear-gradient(90deg, rgba(206, 41, 57, 0.24), rgba(248, 250, 252, 0.14), rgba(71, 112, 80, 0.26));
+  border-color: rgba(248, 250, 252, 0.34);
+  color: #f8fafc;
+}
+
+.ev-hol-sparkles {
+  position: absolute !important;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0 !important;
+}
+.ev-hol-sparkles i {
+  position: absolute;
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: radial-gradient(circle, #ffffff 0%, var(--k2) 60%, transparent 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--k2) 70%, transparent);
+  animation: evHolTwinkle 3.4s ease-in-out infinite;
+}
+.ev-hol-sparkles i:nth-child(1) { top: 14px; right: 16px; }
+.ev-hol-sparkles i:nth-child(2) { top: 36px; right: 44px; width: 5px; height: 5px; animation-delay: 1.1s; }
+.ev-hol-sparkles i:nth-child(3) { bottom: 14px; right: 20px; width: 6px; height: 6px; animation-delay: 2.2s; }
+
+.ev.ev-holiday .units div {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--k) 19%, transparent), color-mix(in srgb, var(--k2) 12%, transparent));
+  border: 1px solid color-mix(in srgb, var(--k2) 28%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.ev.ev-holiday .days b {
+  color: color-mix(in srgb, var(--k) 58%, var(--k2));
+  text-shadow: 0 2px 16px color-mix(in srgb, var(--k) 35%, transparent);
+}
+.ev.ev-holiday .ev-date {
+  color: color-mix(in srgb, var(--fg) 76%, var(--mut));
+}
+
+.offl li.offl-holiday {
+  --k2: #ffd166;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border-left: 3px solid var(--k2);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 15%, transparent), color-mix(in srgb, var(--k2) 7%, transparent));
+}
+.offl li.offl-holiday b {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.offl-ico {
+  font-size: 1rem;
+  line-height: 1;
+}
+.offl-badge {
+  font-style: normal;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--k2) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--k2) 40%, transparent);
+  color: color-mix(in srgb, var(--k2) 75%, #ffffff);
+}
+
+.tv-info-list li.tv-info-holiday {
+  border-left: 3px solid var(--k2, #ffd166);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--k, #ffd166) 16%, transparent), color-mix(in srgb, var(--k2, #ffd166) 8%, transparent));
+}
+
+[data-theme="light"] .ev.ev-holiday {
+  background:
+    radial-gradient(circle at 92% 10%, color-mix(in srgb, var(--k2) 22%, transparent), transparent 48%),
+    radial-gradient(circle at 8% 95%, color-mix(in srgb, var(--k) 14%, transparent), transparent 50%),
+    linear-gradient(145deg, color-mix(in srgb, var(--k) 11%, rgba(255, 255, 255, 0.9)), color-mix(in srgb, var(--k2) 10%, rgba(255, 255, 255, 0.88)));
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--k) 16%, rgba(20, 18, 46, 0.08)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+[data-theme="light"] .ev-hol-badge,
+[data-theme="light"] .offl-badge {
+  color: color-mix(in srgb, var(--k) 68%, #1e1b4b);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--k) 20%, rgba(255, 255, 255, 0.72)), color-mix(in srgb, var(--k2) 24%, rgba(255, 255, 255, 0.72)));
+}
+[data-theme="light"] .ev.ev-holiday.ev-h-national .ev-hol-badge {
+  background: linear-gradient(90deg, rgba(206, 41, 57, 0.16), rgba(255, 255, 255, 0.82), rgba(71, 112, 80, 0.18));
+  border-color: rgba(20, 18, 46, 0.22);
+  color: #14122e;
+}
+[data-theme="light"] .ev.ev-holiday .days b {
+  color: color-mix(in srgb, var(--k) 65%, #14122e);
+  text-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ev.ev-holiday::before,
+  .ev-hol-sparkles i {
+    animation: none;
+  }
+}
+:root[data-potato="1"] .ev.ev-holiday::before,
+:root[data-potato="1"] .ev-hol-sparkles i {
+  animation: none !important;
+}
+:root[data-potato="1"] .ev.ev-holiday {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}

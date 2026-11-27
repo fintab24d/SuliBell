@@ -272,4 +272,24 @@ for (const [, rid, ryt, rdur] of radioEntries) {
   seenRadioYt.add(ryt)
 }
 
+const { resolveEventStyle } = await import('../src/lib/kinds.ts')
+if (!resolveEventStyle('Március 15.', 'other').isHoliday || resolveEventStyle('Március 15.', 'other').themeClass !== 'ev-h-national') {
+  throw new Error('resolveEventStyle Március 15. nemzeti ünnep felismerés hibás')
+}
+if (!resolveEventStyle('Karácsony', 'winter').isHoliday || resolveEventStyle('Karácsony', 'winter').icon !== '🎄') {
+  throw new Error('resolveEventStyle Karácsony felismerés hibás')
+}
+if (resolveEventStyle('Téli szünet', 'winter').isHoliday) {
+  throw new Error('resolveEventStyle Téli szünet tévesen ünnepnek lett jelölve')
+}
+if (!resolveEventStyle('Különleges iskolanap', 'holiday').isHoliday || resolveEventStyle('Különleges iskolanap', 'holiday').badge !== 'Ünnep') {
+  throw new Error('resolveEventStyle explicit holiday fajta hibás')
+}
+if (resolveEventStyle('Farsangi bál', 'other').isHoliday) {
+  throw new Error('resolveEventStyle word boundary hibás')
+}
+if (!resolveEventStyle('Farsang', 'other').isHoliday) {
+  throw new Error('resolveEventStyle Farsang felismerés hibás')
+}
+
 console.log(`TZ=${process.env.TZ ?? '(rendszer)'}: ${n} teszt OK`)
