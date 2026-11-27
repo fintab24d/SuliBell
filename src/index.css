@@ -5009,7 +5009,15 @@ iframe {
 ========================================================= */
 .profile-card {
   position: relative;
+  contain: none;
+  overflow: visible;
+  z-index: 15;
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.profile-card:has(.profile-suggest-menu),
+.profile-card:focus-within {
+  z-index: 80;
 }
 
 .profile-card.compact {
@@ -5266,6 +5274,7 @@ iframe {
 .profile-modal {
   position: relative;
   width: min(460px, 100%);
+  overflow: visible;
 }
 
 .profile-modal .profile-card .panel-h {
@@ -5276,7 +5285,7 @@ iframe {
   position: absolute;
   top: 10px;
   right: 10px;
-  z-index: 2;
+  z-index: 95;
   width: 28px;
   height: 28px;
   border-radius: 999px;
@@ -5524,16 +5533,21 @@ iframe {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 40;
+  z-index: 120;
   margin: 0;
   padding: 4px;
   list-style: none;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--line));
-  background: var(--card, #11152b);
+  background: #11152b;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
   max-height: 210px;
   overflow-y: auto;
+}
+
+:root[data-theme="light"] .profile-suggest-menu {
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 }
 
 .profile-suggest-item {
